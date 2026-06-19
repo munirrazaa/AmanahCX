@@ -199,9 +199,9 @@ export class TicketingPlatformModule implements PlatformModule {
   readonly requiredPlan = 'starter' as const;
 
   readonly navItems = [
-    { path: '/tickets',        label: 'Tickets',       icon: 'LifeBuoy' },
-    { path: '/tickets/queues', label: 'Queues',        icon: 'List'     },
-    { path: '/tickets/sla',    label: 'SLA Policies',  icon: 'Clock'    },
+    { path: '/tickets',        label: 'Tickets',      icon: 'LifeBuoy', permissionKey: 'tickets:read'  },
+    { path: '/tickets/queues', label: 'Queues',       icon: 'List',     permissionKey: 'tickets:read'  },
+    { path: '/tickets/sla',    label: 'SLA Policies', icon: 'Clock',    permissionKey: 'settings:read' },
   ];
 
   private slaHandle?: ReturnType<typeof setInterval>;

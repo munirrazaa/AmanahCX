@@ -19,11 +19,11 @@ export class VoicePlatformModule implements PlatformModule {
   readonly requiredPlan = 'starter' as const;
 
   readonly navItems = [
-    { path: '/voice',              label: 'Voice Calls',    icon: 'Phone'     },
-    { path: '/voice/analytics',    label: 'Call Analytics', icon: 'BarChart2' },
-    { path: '/voice-bot',          label: 'Voice Bot',      icon: 'Bot'       },
-    { path: '/voice-bot/calls',    label: 'Bot Calls',      icon: 'List'      },
-    { path: '/voice-bot/tickets',  label: 'Bot Tickets',    icon: 'LifeBuoy'  },
+    { path: '/voice',             label: 'Voice Calls',    icon: 'Phone',    permissionKey: 'voice:read'    },
+    { path: '/voice/analytics',   label: 'Call Analytics', icon: 'BarChart2',permissionKey: 'voice:read'    },
+    { path: '/voice-bot',         label: 'Voice Bot',      icon: 'Bot',      permissionKey: 'voicebot:read' },
+    { path: '/voice-bot/calls',   label: 'Bot Calls',      icon: 'List',     permissionKey: 'voicebot:read' },
+    { path: '/voice-bot/tickets', label: 'Bot Tickets',    icon: 'LifeBuoy', permissionKey: 'voicebot:read' },
   ];
 
   async onLoad(_ctx: ModuleContext): Promise<void> {

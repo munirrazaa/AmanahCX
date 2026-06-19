@@ -18,13 +18,12 @@ export class CRMPlatformModule implements PlatformModule {
   readonly requiredPlan = 'free' as const;
 
   readonly navItems = [
-    { path: '/dashboard',  label: 'Dashboard',  icon: 'LayoutDashboard' },
-    { path: '/contacts',   label: 'Contacts',   icon: 'Users' },
-    { path: '/companies',  label: 'Companies',  icon: 'Building2' },
-    { path: '/deals',      label: 'Deals',      icon: 'TrendingUp' },
-    { path: '/activities', label: 'Activities', icon: 'CheckSquare' },
-    { path: '/emails',     label: 'Emails',     icon: 'Mail' },
-    { path: '/analytics',  label: 'Analytics',  icon: 'BarChart3' },
+    { path: '/contacts',   label: 'Contacts',   icon: 'Users',        permissionKey: 'contacts:read'   },
+    { path: '/companies',  label: 'Companies',  icon: 'Building2',    permissionKey: 'companies:read'  },
+    { path: '/deals',      label: 'Deals',      icon: 'TrendingUp',   permissionKey: 'deals:read'      },
+    { path: '/activities', label: 'Activities', icon: 'CheckSquare',  permissionKey: 'activities:read' },
+    { path: '/emails',     label: 'Emails',     icon: 'Mail',         permissionKey: 'emails:read'     },
+    { path: '/analytics',  label: 'Analytics',  icon: 'BarChart3',    permissionKey: 'analytics:read'  },
   ];
 
   async onLoad(_ctx: ModuleContext): Promise<void> {
