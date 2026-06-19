@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import type { DatabaseClient } from '@crm/core';
 import { requireScope } from '../../middlewares/auth.middleware';
+import { EmailService } from '../../services/email.service';
 
 const LineItemSchema = z.object({
   description: z.string().min(1),
@@ -47,6 +48,8 @@ const ListQuerySchema = z.object({
 });
 
 export function invoiceRoutes(db: DatabaseClient) {
+  const emailSvc = new EmailService(db);
+
   return async function (fastify: FastifyInstance) {
 
     // LIST
@@ -62,7 +65,7 @@ export function invoiceRoutes(db: DatabaseClient) {
       if (q.search) { conditions.push(`(i.number ILIKE $${vals.length + 1} OR bc.name ILIKE $${vals.length + 1})`); vals.push(`%${q.search}%`); }
 
       const where = conditions.join(' AND ');
-      const rows = await db.withTenant(tenantId, (client) =>
+      const { rows } = await db.withTenant(tenantId, (client) =>
         client.query(
           `SELECT i.*, bc.name as contact_name, bc.email as contact_email, bc.company as contact_company,
                   bc.billing_address as contact_billing_address, bc.currency as contact_currency
@@ -74,7 +77,7 @@ export function invoiceRoutes(db: DatabaseClient) {
           [...vals, q.pageSize, offset]
         )
       );
-      const [{ count }] = await db.withTenant(tenantId, (client) =>
+      const { rows: [{ count }] } = await db.withTenant(tenantId, (client) =>
         client.query(`SELECT COUNT(*) FROM invoices i LEFT JOIN billing_contacts bc ON bc.id = i.billing_contact_id WHERE ${where}`, vals)
       );
       return reply.send({ success: true, data: rows, total: Number(count), page: q.page, pageSize: q.pageSize });
@@ -216,6 +219,127 @@ export function invoiceRoutes(db: DatabaseClient) {
         return result.rows;
       });
       return reply.status(201).send({ success: true, data: payment });
+    });
+
+    // EMAIL INVOICE TO BILLING CONTACT
+    // POST /api/v1/sales/invoices/:id/send
+    fastify.post('/:id/send', { preHandler: requireScope('billing:manage') }, async (req, reply) => {
+      const { id } = req.params as { id: string };
+      const tenantId = req.tenant.id;
+
+      // Optionally override recipient from body; defaults to billing contact on the invoice
+      const body = z.object({
+        to:      z.string().email().optional(),
+        toName:  z.string().optional(),
+        subject: z.string().optional(),
+        message: z.string().optional(),  // prepended note above the invoice summary
+      }).parse(req.body ?? {});
+
+      // Fetch invoice + billing contact in one query
+      const [inv] = await db.withTenant(tenantId, async (client) => {
+        const result = await client.query(
+          `SELECT i.*,
+                  bc.email  AS contact_email,
+                  bc.name   AS contact_name,
+                  bc.company AS contact_company,
+                  ws.name   AS workspace_name,
+                  ws.email  AS workspace_email,
+                  ws.address AS workspace_address
+           FROM invoices i
+           LEFT JOIN billing_contacts bc ON i.billing_contact_id = bc.id
+           LEFT JOIN workspace_settings ws ON ws.tenant_id = $1
+           WHERE i.tenant_id=$1 AND i.id=$2`,
+          [tenantId, id],
+        );
+        return result.rows;
+      });
+
+      if (!inv) return reply.status(404).send({ success: false, error: 'Invoice not found' });
+
+      const toEmail  = body.to     ?? inv.contact_email;
+      const toName   = body.toName ?? inv.contact_name  ?? undefined;
+
+      if (!toEmail) {
+        return reply.status(422).send({
+          success: false,
+          error: 'No recipient email address. Either supply `to` in the request body or ensure the billing contact has an email.',
+        });
+      }
+
+      const subject = body.subject ?? `Invoice ${inv.invoice_number} from ${inv.workspace_name ?? 'Us'}`;
+
+      const formattedTotal  = new Intl.NumberFormat('en-US', { style: 'currency', currency: inv.currency ?? 'USD' }).format(inv.total ?? 0);
+      const formattedDue    = inv.due_date ? new Date(inv.due_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A';
+      const customNote      = body.message ? `<p style="color:#1e293b;font-size:15px;line-height:1.6;margin-bottom:20px;">${body.message}</p>` : '';
+
+      const bodyHtml = `
+<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;color:#1e293b;">
+  <div style="background:#0f172a;padding:24px 28px;border-radius:8px 8px 0 0;">
+    <h1 style="margin:0;color:#ffffff;font-size:20px;">${inv.workspace_name ?? 'Invoice'}</h1>
+  </div>
+  <div style="background:#f8fafc;padding:24px 28px;border-radius:0 0 8px 8px;border:1px solid #e2e8f0;border-top:none;">
+    ${customNote}
+    <p style="font-size:15px;line-height:1.6;">Hi ${toName ?? 'there'},</p>
+    <p style="font-size:15px;line-height:1.6;">Please find your invoice details below.</p>
+    <table style="width:100%;border-collapse:collapse;margin:20px 0;font-size:14px;">
+      <tr style="background:#e2e8f0;">
+        <td style="padding:10px 14px;font-weight:bold;">Invoice Number</td>
+        <td style="padding:10px 14px;">${inv.invoice_number}</td>
+      </tr>
+      <tr>
+        <td style="padding:10px 14px;font-weight:bold;background:#f8fafc;">Issue Date</td>
+        <td style="padding:10px 14px;background:#f8fafc;">${inv.issue_date ? new Date(inv.issue_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A'}</td>
+      </tr>
+      <tr style="background:#e2e8f0;">
+        <td style="padding:10px 14px;font-weight:bold;">Due Date</td>
+        <td style="padding:10px 14px;">${formattedDue}</td>
+      </tr>
+      <tr>
+        <td style="padding:10px 14px;font-weight:bold;background:#fff3cd;">Amount Due</td>
+        <td style="padding:10px 14px;font-weight:bold;font-size:16px;background:#fff3cd;color:#92400e;">${formattedTotal}</td>
+      </tr>
+    </table>
+    ${inv.notes ? `<p style="font-size:13px;color:#64748b;margin-top:16px;"><strong>Notes:</strong> ${inv.notes}</p>` : ''}
+    ${inv.terms ? `<p style="font-size:13px;color:#64748b;"><strong>Terms:</strong> ${inv.terms}</p>` : ''}
+    <hr style="border:none;border-top:1px solid #e2e8f0;margin:24px 0;"/>
+    <p style="font-size:12px;color:#94a3b8;">
+      ${inv.workspace_name ?? ''}${inv.workspace_address ? ' · ' + inv.workspace_address : ''}
+      ${inv.workspace_email ? ' · ' + inv.workspace_email : ''}
+    </p>
+  </div>
+</div>`.trim();
+
+      const bodyText = [
+        `Invoice ${inv.invoice_number}`,
+        body.message ?? '',
+        `Amount Due: ${formattedTotal}`,
+        `Due Date: ${formattedDue}`,
+        inv.notes  ? `Notes: ${inv.notes}`  : '',
+        inv.terms  ? `Terms: ${inv.terms}`  : '',
+      ].filter(Boolean).join('\n\n');
+
+      const result = await emailSvc.send(tenantId, {
+        to: toEmail,
+        toName,
+        subject,
+        bodyHtml,
+        bodyText,
+        sentBy: req.user.id,
+      });
+
+      // Update invoice status to 'sent' if it was still a draft
+      if (result.status === 'delivered') {
+        await db.withTenant(tenantId, (client) =>
+          client.query(
+            `UPDATE invoices SET status = CASE WHEN status='draft' THEN 'sent' ELSE status END,
+                                 updated_at = NOW()
+             WHERE tenant_id=$1 AND id=$2`,
+            [tenantId, id],
+          ),
+        );
+      }
+
+      return reply.send({ success: result.status === 'delivered', data: result });
     });
   };
 }

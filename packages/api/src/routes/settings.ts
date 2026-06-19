@@ -267,12 +267,38 @@ export function settingsRoutes(db: DatabaseClient) {
     fastify.get('/team', { preHandler: requireRole('super_admin', 'tenant_admin', 'manager') }, async (req, reply) => {
       const members = await db.withTenant(req.tenant.id, async (client) => {
         const result = await client.query(
-          `SELECT id, name, email, role, permissions, is_active, created_at, last_login_at
-           FROM users WHERE role != 'super_admin' ORDER BY name ASC`,
+          `SELECT u.id, u.name, u.email, u.role, u.permissions, u.is_active, u.created_at,
+                  u.last_login_at, u.custom_role_id, u.manager_id,
+                  m.name AS manager_name,
+                  r.name AS role_name, r.color AS role_color
+           FROM users u
+           LEFT JOIN users m ON m.id = u.manager_id
+           LEFT JOIN roles r ON r.id = u.custom_role_id
+           WHERE u.role != 'super_admin'
+           ORDER BY u.name ASC`,
         );
         return result.rows;
       });
       return reply.send({ success: true, data: members });
+    });
+
+    // Get direct reportees of the current user (or any user id for tenant_admin)
+    fastify.get('/team/reportees', { preHandler: requireRole('super_admin', 'tenant_admin', 'manager') }, async (req, reply) => {
+      const { userId } = req.query as { userId?: string };
+      const targetId = userId ?? req.user.sub;
+      const reportees = await db.withTenant(req.tenant.id, async (client) => {
+        const result = await client.query(
+          `SELECT u.id, u.name, u.email, u.role, u.custom_role_id,
+                  r.name AS role_name, r.color AS role_color
+           FROM users u
+           LEFT JOIN roles r ON r.id = u.custom_role_id
+           WHERE u.manager_id = $1 AND u.role != 'super_admin'
+           ORDER BY u.name ASC`,
+          [targetId],
+        );
+        return result.rows;
+      });
+      return reply.send({ success: true, data: reportees });
     });
 
     // Get module definitions (for permissions matrix UI)
@@ -413,12 +439,13 @@ export function settingsRoutes(db: DatabaseClient) {
         department:      z.string().max(100).optional(),
         // Gap 8: explicit dept type — prevents fragile keyword matching on ambiguous dept names
         departmentType:  z.enum(DEPT_TYPES).optional(),
+        manager_id:      z.string().uuid().nullable().optional(),
       });
       const parsed = InviteSchema.safeParse(req.body);
       if (!parsed.success) {
         return reply.code(400).send({ success: false, error: { code: 'INVALID_INPUT', message: parsed.error.issues[0]?.message ?? 'Invalid input' } });
       }
-      const { email, name, role, custom_role_id, permissions: customPermissions, department, departmentType } = parsed.data;
+      const { email, name, role, custom_role_id, permissions: customPermissions, department, departmentType, manager_id } = parsed.data;
 
       const displayName  = name?.trim() || email.split('@')[0];
       const assignedRole = role ?? 'agent';
@@ -430,14 +457,15 @@ export function settingsRoutes(db: DatabaseClient) {
       // 1. Create (or update) user account with role + permissions + department
       const [user] = await db.withTenant(req.tenant.id, async (client) => {
         const result = await client.query(
-          `INSERT INTO users (tenant_id, email, name, role, password_hash, permissions, custom_role_id, department, department_type)
-           VALUES ($1, $2, $3, $4, 'INVITE_PENDING', $5, $6, $7, $8)
+          `INSERT INTO users (tenant_id, email, name, role, password_hash, permissions, custom_role_id, department, department_type, manager_id)
+           VALUES ($1, $2, $3, $4, 'INVITE_PENDING', $5, $6, $7, $8, $9)
            ON CONFLICT (tenant_id, email) DO UPDATE
              SET role = EXCLUDED.role, name = EXCLUDED.name,
                  permissions = EXCLUDED.permissions, custom_role_id = EXCLUDED.custom_role_id,
-                 department = EXCLUDED.department, department_type = EXCLUDED.department_type
-           RETURNING id, email, name, role, permissions, custom_role_id, department, department_type`,
-          [req.tenant.id, email, displayName, assignedRole, JSON.stringify(perms), custom_role_id ?? null, department ?? null, departmentType ?? null],
+                 department = EXCLUDED.department, department_type = EXCLUDED.department_type,
+                 manager_id = EXCLUDED.manager_id
+           RETURNING id, email, name, role, permissions, custom_role_id, department, department_type, manager_id`,
+          [req.tenant.id, email, displayName, assignedRole, JSON.stringify(perms), custom_role_id ?? null, department ?? null, departmentType ?? null, manager_id ?? null],
         );
         return result.rows;
       });
@@ -542,12 +570,14 @@ export function settingsRoutes(db: DatabaseClient) {
         department:     z.string().max(100).nullable().optional(),
         departmentType: z.enum(DEPT_TYPES).nullable().optional(), // Gap 8
         permissions:    z.record(z.string()).optional(),
+        manager_id:     z.string().uuid().nullable().optional(),
+        custom_role_id: z.string().uuid().nullable().optional(),
       });
       const parsed = PatchSchema.safeParse(req.body);
       if (!parsed.success) {
         return reply.code(400).send({ success: false, error: { code: 'INVALID_INPUT', message: parsed.error.issues[0]?.message ?? 'Invalid input' } });
       }
-      const { role, department, departmentType, permissions: customPermissions } = parsed.data;
+      const { role, department, departmentType, permissions: customPermissions, manager_id, custom_role_id } = parsed.data;
 
       const [user] = await db.withTenant(req.tenant.id, async (client) => {
         // Build dynamic update
@@ -585,13 +615,21 @@ export function settingsRoutes(db: DatabaseClient) {
           updates.push(`permissions = $${i++}`);
           vals.push(JSON.stringify(enforcedPerms));
         }
+        if (manager_id !== undefined) {
+          updates.push(`manager_id = $${i++}`);
+          vals.push(manager_id);
+        }
+        if (custom_role_id !== undefined) {
+          updates.push(`custom_role_id = $${i++}`);
+          vals.push(custom_role_id);
+        }
 
         if (updates.length === 0) return [null];
 
         vals.push(userId);
         const result = await client.query(
           `UPDATE users SET ${updates.join(', ')}, updated_at = NOW()
-           WHERE id = $${i} RETURNING id, name, email, role, department, department_type, permissions`,
+           WHERE id = $${i} RETURNING id, name, email, role, department, department_type, permissions, manager_id, custom_role_id`,
           vals,
         );
         return result.rows;
@@ -677,6 +715,21 @@ export function settingsRoutes(db: DatabaseClient) {
       await db.withTenant(req.tenant.id, async (client) => {
         await client.query('UPDATE users SET password_hash = $1 WHERE id = $2', [hash, req.user.sub]);
       });
+      return reply.send({ success: true });
+    });
+
+    // PATCH /api/v1/settings/tenant — update arbitrary tenant settings flags (e.g. dismiss banners)
+    fastify.patch('/tenant', { preHandler: requireRole('super_admin', 'tenant_admin') }, async (req, reply) => {
+      const body = req.body as Record<string, unknown>;
+      for (const [key, value] of Object.entries(body)) {
+        const jsonVal = JSON.stringify(value);
+        await db.withSuperAdmin(async (client) => {
+          await client.query(
+            `UPDATE tenants SET settings = jsonb_set(COALESCE(settings,'{}'), $1, $2::jsonb) WHERE id = $3`,
+            [`{${key}}`, jsonVal, req.tenant.id],
+          );
+        });
+      }
       return reply.send({ success: true });
     });
   };

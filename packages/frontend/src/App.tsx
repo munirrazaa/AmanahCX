@@ -36,7 +36,8 @@ import { VoiceBotTickets } from './pages/VoiceBotTickets';
 import { ContactDetail }   from './pages/ContactDetail';
 import { ForgotPassword }  from './pages/ForgotPassword';
 import { ResetPassword }   from './pages/ResetPassword';
-import { RolesPage }       from './pages/Roles';
+import { RolesPage }          from './pages/Roles';
+import { PersonalSettings }   from './pages/PersonalSettings';
 // Sales & Invoicing module
 import { SalesDashboard }    from './pages/sales/SalesDashboard';
 import { InvoiceList }       from './pages/sales/InvoiceList';
@@ -48,6 +49,7 @@ import { SalesReports }      from './pages/sales/SalesReports';
 import { SalesTemplates }    from './pages/sales/SalesTemplates';
 import { SalesBuilder }      from './pages/sales/SalesBuilder';
 import { SalesSettingsPage } from './pages/sales/SalesSettings';
+import { TeamReports }       from './pages/TeamReports';
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 30_000, retry: 1 } },
@@ -78,11 +80,6 @@ interface ActiveModule {
   navItems: NavItem[];
 }
 
-// ── Static bottom nav items (always visible) ──────────────────────────────
-const BOTTOM_NAV = [
-  { to: '/integrations', label: 'Integrations', icon: 'Zap' },
-  { to: '/billing',      label: 'Billing',      icon: 'CreditCard' },
-];
 
 function Sidebar() {
   const { user, tenant, logout } = useAuthStore();
@@ -168,35 +165,47 @@ function Sidebar() {
           </div>
         ))}
 
-        {modules.length > 0 && <div className="border-t border-white/10 mx-1" />}
-
-        <div className="space-y-0.5">
-          {BOTTOM_NAV.map(({ to, label, icon }) => {
-            const Icon = resolveIcon(icon);
-            return (
-              <NavLink
-                key={to}
-                to={to}
-                className={({ isActive }) =>
-                  `flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm transition-all ${
-                    isActive ? 'text-white font-semibold' : 'text-white/60 hover:text-white hover:bg-white/10'
-                  }`
-                }
-                style={({ isActive }) => isActive ? {
-                  background: 'linear-gradient(135deg, rgba(41,171,226,0.25) 0%, rgba(77,139,60,0.15) 100%)',
-                  borderLeft: '2px solid #29ABE2',
-                } : {}}
-              >
-                <Icon className="w-4 h-4 shrink-0" />
-                {label}
-              </NavLink>
-            );
-          })}
-        </div>
+        {/* Billing and Integrations — gated by user permissions */}
+        {(() => {
+          const perms = (user as any)?.permissions ?? {};
+          const gatedLinks = [
+            { to: '/integrations', label: 'Integrations', icon: 'Zap',        key: 'integrations:read' },
+            { to: '/billing',      label: 'Billing',      icon: 'CreditCard', key: 'billing:read'      },
+          ].filter((l) => isAdmin || perms[l.key] === true);
+          if (gatedLinks.length === 0) return null;
+          return (
+            <>
+              {modules.length > 0 && <div className="border-t border-white/10 mx-1" />}
+              <div className="space-y-0.5">
+                {gatedLinks.map(({ to, label, icon }) => {
+                  const Icon = resolveIcon(icon);
+                  return (
+                    <NavLink key={to} to={to}
+                      className={({ isActive }) =>
+                        `flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm transition-all ${
+                          isActive ? 'text-white font-semibold' : 'text-white/60 hover:text-white hover:bg-white/10'
+                        }`
+                      }
+                      style={({ isActive }) => isActive ? {
+                        background: 'linear-gradient(135deg, rgba(41,171,226,0.25) 0%, rgba(77,139,60,0.15) 100%)',
+                        borderLeft: '2px solid #29ABE2',
+                      } : {}}
+                    >
+                      <Icon className="w-4 h-4 shrink-0" />
+                      {label}
+                    </NavLink>
+                  );
+                })}
+              </div>
+            </>
+          );
+        })()}
       </nav>
 
-      {/* ── Footer: Super Admin + Settings + User ─────────────────── */}
+      {/* ── Footer: gated admin links + user chip ─────────────────── */}
       <div className="px-2 py-3 border-t border-white/10 space-y-0.5">
+
+        {/* Super Admin — only for super_admin role */}
         {isSuperAdmin && (
           <NavLink to="/super-admin"
             className={({ isActive }) =>
@@ -212,6 +221,26 @@ function Sidebar() {
             Super Admin
           </NavLink>
         )}
+
+        {/* Team Reports — managers and above */}
+        {isAdmin && (
+          <NavLink to="/team-reports"
+            className={({ isActive }) =>
+              `flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm transition-all ${
+                isActive ? 'text-white font-semibold' : 'text-white/60 hover:text-white hover:bg-white/10'
+              }`
+            }
+            style={({ isActive }) => isActive ? {
+              background: 'linear-gradient(135deg, rgba(41,171,226,0.25) 0%, rgba(77,139,60,0.15) 100%)',
+              borderLeft: '2px solid #29ABE2',
+            } : {}}
+          >
+            <BarChart3 className="w-4 h-4" />
+            Team Reports
+          </NavLink>
+        )}
+
+        {/* Roles — admins only */}
         {isAdmin && (
           <NavLink to="/roles"
             className={({ isActive }) =>
@@ -228,30 +257,35 @@ function Sidebar() {
             Roles
           </NavLink>
         )}
-        <NavLink to="/settings"
-          className={({ isActive }) =>
-            `flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm transition-all ${
-              isActive ? 'text-white font-semibold' : 'text-white/60 hover:text-white hover:bg-white/10'
-            }`
-          }
-          style={({ isActive }) => isActive ? {
-            background: 'linear-gradient(135deg, rgba(41,171,226,0.25) 0%, rgba(77,139,60,0.15) 100%)',
-            borderLeft: '2px solid #29ABE2',
-          } : {}}
-        >
-          <SettingsIcon className="w-4 h-4" />
-          Settings
-        </NavLink>
 
-        {/* User chip */}
-        <div className="mt-2 px-3 py-2.5 rounded-xl bg-white/10 flex items-center gap-2">
-          <div className="w-7 h-7 rounded-full shrink-0 flex items-center justify-center text-xs font-bold text-white"
-               style={{ background: 'linear-gradient(135deg, #29ABE2 0%, #4D8B3C 100%)' }}>
+        {/* System Settings — only if user has settings:read permission */}
+        {(isAdmin || (user as any)?.permissions?.['settings:read']) && (
+          <NavLink to="/settings"
+            className={({ isActive }) =>
+              `flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm transition-all ${
+                isActive ? 'text-white font-semibold' : 'text-white/60 hover:text-white hover:bg-white/10'
+              }`
+            }
+            style={({ isActive }) => isActive ? {
+              background: 'linear-gradient(135deg, rgba(41,171,226,0.25) 0%, rgba(77,139,60,0.15) 100%)',
+              borderLeft: '2px solid #29ABE2',
+            } : {}}
+          >
+            <SettingsIcon className="w-4 h-4" />
+            Settings
+          </NavLink>
+        )}
+
+        {/* User chip — always visible; avatar links to Personal Settings */}
+        <div className="mt-2 px-2 py-2 rounded-xl bg-white/10 flex items-center gap-2">
+          <NavLink to="/settings/personal" title="My Settings"
+            className="w-7 h-7 rounded-full shrink-0 flex items-center justify-center text-xs font-bold text-white hover:ring-2 hover:ring-white/40 transition-all"
+            style={{ background: 'linear-gradient(135deg, #29ABE2 0%, #4D8B3C 100%)' }}>
             {user?.name?.[0]?.toUpperCase()}
-          </div>
+          </NavLink>
           <div className="flex-1 min-w-0">
             <p className="text-xs font-semibold text-white truncate">{user?.name}</p>
-            <p className="text-[10px] text-white/50 capitalize">{user?.role}</p>
+            <p className="text-[10px] text-white/50 capitalize">{user?.role?.replace('_', ' ')}</p>
           </div>
           <NotificationBell />
           <button onClick={logout} title="Log out"
@@ -290,9 +324,11 @@ function AppLayout() {
           <Route path="/contacts/:id"      element={<ContactDetail />} />
           <Route path="/activities"  element={<Activities />} />
           <Route path="/analytics"   element={<Analytics />} />
+          <Route path="/team-reports" element={<TeamReports />} />
           <Route path="/billing"     element={<Billing />} />
           <Route path="/integrations" element={<Integrations />} />
-          <Route path="/settings"     element={<Settings />} />
+          <Route path="/settings"          element={<Settings />} />
+          <Route path="/settings/personal" element={<PersonalSettings />} />
           <Route path="/roles"        element={<RolesPage />} />
           <Route path="/super-admin" element={<SuperAdmin />} />
           {/* Sales & Invoicing module */}

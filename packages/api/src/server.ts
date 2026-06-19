@@ -4,6 +4,7 @@ import FastifyJWT from '@fastify/jwt';
 import FastifyCors from '@fastify/cors';
 import FastifyHelmet from '@fastify/helmet';
 import FastifyRateLimit from '@fastify/rate-limit';
+import FastifyMultipart from '@fastify/multipart';
 import FastifySwagger from '@fastify/swagger';
 import FastifySwaggerUI from '@fastify/swagger-ui';
 import mercurius from 'mercurius';
@@ -40,7 +41,10 @@ import { invoiceRoutes } from './routes/sales/invoices';
 import { billingContactRoutes } from './routes/sales/billing-contacts';
 import { salesSettingsRoutes } from './routes/sales/sales-settings';
 import { salesDashboardRoutes } from './routes/sales/sales-dashboard';
+import { invoiceTemplateRoutes } from './routes/sales/invoice-templates';
 import { sectorRoutes } from './routes/sector';
+import { departmentRoutes } from './routes/departments';
+import { opportunityRoutes } from './routes/opportunities';
 
 // Feature modules (internal building blocks)
 import { ContactsModule } from '../../../modules/contacts/src';
@@ -57,6 +61,9 @@ import { TicketingPlatformModule } from '../../../modules/ticketing/src';
 import { SalesPlatformModule } from '../../../modules/sales/src';
 
 import { buildGraphQLSchema } from './graphql/schema';
+import { startWebhookWorker } from './lib/webhook-worker';
+import { startWebhookDispatcher } from './lib/webhook-dispatcher';
+import { startAnalyticsRefreshWorker } from './lib/analytics-refresh-worker';
 
 async function buildServer() {
   const fastify = Fastify({
@@ -76,6 +83,13 @@ async function buildServer() {
 
   await db.connect();
   logger.info('Infrastructure connected');
+
+  // Start webhook delivery worker (polls every 5 s, exponential backoff retries)
+  const stopWebhookWorker = startWebhookWorker(db);
+  // Start webhook dispatcher — BullMQ worker that fans out crm-events to tenant webhooks
+  const stopWebhookDispatcher = startWebhookDispatcher(db, redis.native);
+  // Start analytics MV refresh worker (warms up on boot, refreshes hourly)
+  const stopAnalyticsRefresh = startAnalyticsRefreshWorker(db);
 
   // ── Module registry ───────────────────────────────────────
   const moduleRegistry = new ModuleRegistry();
@@ -133,6 +147,10 @@ async function buildServer() {
   await fastify.register(FastifyJWT, {
     secret: process.env.JWT_SECRET!,
     sign: { expiresIn: '8h' },
+  });
+
+  await fastify.register(FastifyMultipart, {
+    limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB max for template uploads
   });
 
   await fastify.register(FastifyRateLimit, {
@@ -261,9 +279,12 @@ async function buildServer() {
   // Sales & Invoicing module routes
   await fastify.register(invoiceRoutes(db),        { prefix: '/api/v1/sales/invoices' });
   await fastify.register(billingContactRoutes(db), { prefix: '/api/v1/sales/billing-contacts' });
-  await fastify.register(salesSettingsRoutes(db),  { prefix: '/api/v1/sales/settings' });
-  await fastify.register(salesDashboardRoutes(db), { prefix: '/api/v1/sales/dashboard' });
+  await fastify.register(salesSettingsRoutes(db),      { prefix: '/api/v1/sales/settings' });
+  await fastify.register(salesDashboardRoutes(db),     { prefix: '/api/v1/sales/dashboard' });
+  await fastify.register(invoiceTemplateRoutes(db),    { prefix: '/api/v1/sales/templates' });
   await fastify.register(sectorRoutes(db),         { prefix: '/api/v1/sector' });
+  await fastify.register(departmentRoutes(db),     { prefix: '/api/v1/departments' });
+  await fastify.register(opportunityRoutes(db),    { prefix: '/api/v1/opportunities' });
 
   // Health check
   fastify.get('/health', async () => ({
@@ -275,6 +296,9 @@ async function buildServer() {
   // ── Graceful shutdown ─────────────────────────────────────
   const shutdown = async () => {
     logger.info('Shutting down...');
+    stopWebhookWorker();
+    stopAnalyticsRefresh();
+    await stopWebhookDispatcher();
     await moduleRegistry.unloadAll();
     await eventBus.shutdown();
     await db.end();

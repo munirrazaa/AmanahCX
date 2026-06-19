@@ -5,8 +5,9 @@ import path from 'path';
 export default defineConfig({
   plugins: [react()],
   resolve: {
+    extensions: ['.mts', '.ts', '.tsx', '.mjs', '.js', '.jsx', '.json'],
     alias: {
-      '@crm/shared': path.resolve(__dirname, '../../packages/shared/src'),
+      '@crm/shared': path.resolve(__dirname, '../../packages/shared/src/index.ts'),
     },
   },
   server: {

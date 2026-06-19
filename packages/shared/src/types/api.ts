@@ -53,7 +53,9 @@ export type ApiScope =
   | 'admin:read'
   | 'admin:write'
   | 'tickets:read'
-  | 'tickets:write';
+  | 'tickets:write'
+  | 'billing:read'
+  | 'billing:manage';
 
 export interface Webhook {
   id: string;

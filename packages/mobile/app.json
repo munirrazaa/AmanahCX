@@ -1,0 +1,48 @@
+{
+  "expo": {
+    "name": "CRM Platform",
+    "slug": "crm-platform",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0f172a"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.crm.platform",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Used for contact photo uploads.",
+        "NSMicrophoneUsageDescription": "Used for voice call recording."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0f172a"
+      },
+      "package": "com.crm.platform",
+      "permissions": ["CAMERA", "RECORD_AUDIO", "VIBRATE"]
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#29ABE2",
+          "defaultChannel": "default"
+        }
+      ]
+    ],
+    "scheme": "crm",
+    "extra": {
+      "eas": { "projectId": "YOUR_EAS_PROJECT_ID" }
+    }
+  }
+}
