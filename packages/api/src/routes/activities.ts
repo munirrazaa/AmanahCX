@@ -122,7 +122,7 @@ export function activityRoutes(db: DatabaseClient, eventBus: EventBus) {
     // Mark complete
     fastify.post('/:id/complete', { preHandler: requireScope('activities:write') }, async (req, reply) => {
       const { id } = req.params as { id: string };
-      const { outcome } = req.body as { outcome?: string };
+      const { outcome } = (req.body ?? {}) as { outcome?: string };
 
       const [activity] = await db.withTenant(req.tenant.id, async (client) => {
         const result = await client.query(
@@ -137,6 +137,38 @@ export function activityRoutes(db: DatabaseClient, eventBus: EventBus) {
       if (!activity) return reply.code(404).send({ success: false, error: { code: 'NOT_FOUND', message: 'Activity not found' } });
 
       await eventBus.publish(req.tenant.id, CRM_EVENTS.ACTIVITY_COMPLETED, { activity });
+      return reply.send({ success: true, data: activity });
+    });
+
+    // Update activity
+    fastify.patch('/:id', { preHandler: requireScope('activities:write') }, async (req, reply) => {
+      const { id } = req.params as { id: string };
+      const body = CreateActivitySchema.partial().parse(req.body);
+
+      const sets: string[] = [];
+      const vals: unknown[] = [];
+      let i = 1;
+      const map: Record<string, string> = {
+        type: 'type', subject: 'subject', body: 'body', status: 'status',
+        priority: 'priority', contactId: 'contact_id', companyId: 'company_id',
+        dealId: 'deal_id', scheduledAt: 'scheduled_at', dueAt: 'due_at',
+        duration: 'duration', outcome: 'outcome', ownerId: 'owner_id',
+      };
+      for (const [k, col] of Object.entries(map)) {
+        if (k in body) { sets.push(`${col} = $${i++}`); vals.push((body as any)[k]); }
+      }
+      if (!sets.length) return reply.send({ success: true, data: null });
+      vals.push(id);
+
+      const [activity] = await db.withTenant(req.tenant.id, async (client) => {
+        const result = await client.query(
+          `UPDATE activities SET ${sets.join(', ')} WHERE id = $${i} RETURNING *`,
+          vals,
+        );
+        return result.rows;
+      });
+
+      if (!activity) return reply.code(404).send({ success: false, error: { code: 'NOT_FOUND', message: 'Activity not found' } });
       return reply.send({ success: true, data: activity });
     });
 

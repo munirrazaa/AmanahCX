@@ -113,6 +113,36 @@ const CONNECTOR_DEFS: ConnectorDef[] = [
   },
   // ── Email ──────────────────────────────────────────────────────────────
   {
+    id: 'gmail',
+    name: 'Gmail',
+    description: 'Send emails using your Google Workspace or personal Gmail account via App Password',
+    category: 'email',
+    logo: '📨',
+    docsUrl: 'https://myaccount.google.com/apppasswords',
+    fields: [
+      { key: 'user',     label: 'Gmail Address',   placeholder: 'you@gmail.com or you@company.com', secret: false, required: true },
+      { key: 'password', label: 'App Password',     placeholder: '16-char app password from Google Account', secret: true, required: true },
+      { key: 'fromName', label: 'Display Name',     placeholder: 'Your Name or Company Name', secret: false, required: false },
+      { key: 'host',     label: 'SMTP Host (auto)', placeholder: 'smtp.gmail.com', secret: false, required: false },
+      { key: 'port',     label: 'SMTP Port (auto)', placeholder: '587', secret: false, required: false },
+    ],
+  },
+  {
+    id: 'microsoft365',
+    name: 'Microsoft 365 / Outlook (Corporate)',
+    description: 'Send emails from your corporate Microsoft 365 / Exchange Online mailbox using Azure AD — works with any private domain (you@yourcompany.com). Requires a one-time Azure AD app registration.',
+    category: 'email',
+    logo: '📩',
+    docsUrl: 'https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade',
+    fields: [
+      { key: 'tenantId',     label: 'Azure AD Tenant ID',  placeholder: 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx', secret: false, required: true },
+      { key: 'clientId',     label: 'Application (Client) ID', placeholder: 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx', secret: false, required: true },
+      { key: 'clientSecret', label: 'Client Secret Value', placeholder: '••••••••', secret: true, required: true },
+      { key: 'fromEmail',    label: 'From Email (mailbox)', placeholder: 'notifications@yourcompany.com', secret: false, required: true },
+      { key: 'fromName',     label: 'Display Name',         placeholder: 'Company Name', secret: false, required: false },
+    ],
+  },
+  {
     id: 'smtp',
     name: 'SMTP / Custom Email',
     description: 'Any SMTP server — Gmail App Password, Outlook, Mailgun, etc.',
@@ -486,7 +516,9 @@ export function connectorRoutes(db: DatabaseClient) {
             break;
           }
           case 'smtp':
-          case 'sendgrid': {
+          case 'sendgrid':
+          case 'gmail':
+          case 'microsoft365': {
             const result = await emailSvc.testConnection(req.tenant.id);
             return reply.send({ success: result.ok, message: result.message });
           }

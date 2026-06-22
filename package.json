@@ -18,10 +18,13 @@
     "docker:prod": "docker-compose -f infra/docker/docker-compose.prod.yml up -d"
   },
   "devDependencies": {
-    "turbo": "^2.0.0",
-    "typescript": "^5.4.0",
     "@types/node": "^20.0.0",
     "eslint": "^8.57.0",
-    "prettier": "^3.2.0"
+    "prettier": "^3.2.0",
+    "turbo": "^2.0.0",
+    "typescript": "^5.4.0"
+  },
+  "dependencies": {
+    "esbuild": "^0.28.1"
   }
 }

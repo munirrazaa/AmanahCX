@@ -12,11 +12,13 @@ export default defineConfig({
   },
   server: {
     port: 5173,
+    strictPort: true, // never silently move to another port — fail loudly instead
     proxy: {
-      '/api':    { target: 'http://localhost:3000', changeOrigin: true },
-      '/auth':   { target: 'http://localhost:3000', changeOrigin: true },
-      '/graphql':{ target: 'http://localhost:3000', changeOrigin: true },
-      '/docs':   { target: 'http://localhost:3000', changeOrigin: true },
+      '/api':          { target: 'http://localhost:3000', changeOrigin: true },
+      '/auth':         { target: 'http://localhost:3000', changeOrigin: true },
+      '/super-admin':  { target: 'http://localhost:3000', changeOrigin: true },
+      '/graphql':      { target: 'http://localhost:3000', changeOrigin: true },
+      '/docs':         { target: 'http://localhost:3000', changeOrigin: true },
     },
   },
   build: {

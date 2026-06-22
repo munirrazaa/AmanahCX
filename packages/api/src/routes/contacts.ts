@@ -105,7 +105,7 @@ export function contactRoutes(db: DatabaseClient, eventBus: EventBus) {
       });
 
       const customFields = body.customFields ?? {};
-      const missingFields = requiredFields.filter(
+      const missingFields = req.user.role === 'super_admin' ? [] : requiredFields.filter(
         (name: string) => customFields[name] === undefined || customFields[name] === null || customFields[name] === '',
       );
 

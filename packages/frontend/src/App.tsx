@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Users, Building2, TrendingUp, Phone,
   CheckSquare, BarChart3, Settings as SettingsIcon, Zap, Shield,
   LogOut, CreditCard, BarChart2, LifeBuoy, List, Clock, Mail, Bot,
-  FileText, Layers,
+  FileText, Layers, MessageCircle,
 } from 'lucide-react';
 import { useAuthStore } from './store/auth.store';
 import { useIsSuperAdmin, useIsAdmin } from './hooks/useRole';
@@ -50,6 +50,7 @@ import { SalesTemplates }    from './pages/sales/SalesTemplates';
 import { SalesBuilder }      from './pages/sales/SalesBuilder';
 import { SalesSettingsPage } from './pages/sales/SalesSettings';
 import { TeamReports }       from './pages/TeamReports';
+import { TeamMessaging }     from './pages/TeamMessaging';
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 30_000, retry: 1 } },
@@ -61,7 +62,7 @@ const ICON_MAP: Record<string, React.ElementType> = {
   LayoutDashboard, Users, Building2, TrendingUp, Phone,
   CheckSquare, BarChart3, BarChart2, Zap, CreditCard,
   LifeBuoy, List, Clock, Shield, Mail, Bot,
-  FileText, Layers, Settings: SettingsIcon,
+  FileText, Layers, MessageCircle, Settings: SettingsIcon,
 };
 function resolveIcon(name: string): React.ElementType {
   return ICON_MAP[name] ?? LayoutDashboard;
@@ -165,6 +166,24 @@ function Sidebar() {
           </div>
         ))}
 
+        {/* Team Messaging — available to all users */}
+        {!isSuperAdmin && (
+          <NavLink to="/messages"
+            className={({ isActive }) =>
+              `flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm transition-all ${
+                isActive ? 'text-white font-semibold' : 'text-white/60 hover:text-white hover:bg-white/10'
+              }`
+            }
+            style={({ isActive }) => isActive ? {
+              background: 'linear-gradient(135deg, rgba(41,171,226,0.25) 0%, rgba(77,139,60,0.15) 100%)',
+              borderLeft: '2px solid #29ABE2',
+            } : {}}
+          >
+            <MessageCircle className="w-4 h-4 shrink-0" />
+            Messaging
+          </NavLink>
+        )}
+
         {/* Billing and Integrations — gated by user permissions */}
         {(() => {
           const perms = (user as any)?.permissions ?? {};
@@ -207,38 +226,49 @@ function Sidebar() {
 
         {/* Super Admin — only for super_admin role */}
         {isSuperAdmin && (
-          <NavLink to="/super-admin"
-            className={({ isActive }) =>
-              `flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm transition-all ${
-                isActive ? 'text-white font-semibold' : 'text-white/60 hover:text-white hover:bg-white/10'
-              }`
-            }
-            style={({ isActive }) => isActive ? {
-              background: 'rgba(245,197,24,0.15)', borderLeft: '2px solid #F5C518',
-            } : {}}
-          >
-            <Shield className="w-4 h-4" />
-            Super Admin
-          </NavLink>
+          <>
+            <NavLink to="/super-admin"
+              className={({ isActive }) =>
+                `flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm transition-all ${
+                  isActive ? 'text-white font-semibold' : 'text-white/60 hover:text-white hover:bg-white/10'
+                }`
+              }
+              style={({ isActive }) => isActive ? {
+                background: 'rgba(245,197,24,0.15)', borderLeft: '2px solid #F5C518',
+              } : {}}
+            >
+              <Shield className="w-4 h-4" />
+              Super Admin
+            </NavLink>
+            <NavLink to="/sales/dashboard"
+              className={({ isActive }) =>
+                `flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm transition-all ${
+                  isActive ? 'text-white font-semibold' : 'text-white/60 hover:text-white hover:bg-white/10'
+                }`
+              }
+              style={({ isActive }) => isActive ? {
+                background: 'rgba(99,102,241,0.2)', borderLeft: '2px solid #818CF8',
+              } : {}}
+            >
+              <CreditCard className="w-4 h-4" />
+              Sales & Invoices
+            </NavLink>
+            <NavLink to="/sales/reports"
+              className={({ isActive }) =>
+                `flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm transition-all ${
+                  isActive ? 'text-white font-semibold' : 'text-white/60 hover:text-white hover:bg-white/10'
+                }`
+              }
+              style={({ isActive }) => isActive ? {
+                background: 'rgba(99,102,241,0.2)', borderLeft: '2px solid #818CF8',
+              } : {}}
+            >
+              <BarChart2 className="w-4 h-4" />
+              Reports
+            </NavLink>
+          </>
         )}
 
-        {/* Team Reports — managers and above */}
-        {isAdmin && (
-          <NavLink to="/team-reports"
-            className={({ isActive }) =>
-              `flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm transition-all ${
-                isActive ? 'text-white font-semibold' : 'text-white/60 hover:text-white hover:bg-white/10'
-              }`
-            }
-            style={({ isActive }) => isActive ? {
-              background: 'linear-gradient(135deg, rgba(41,171,226,0.25) 0%, rgba(77,139,60,0.15) 100%)',
-              borderLeft: '2px solid #29ABE2',
-            } : {}}
-          >
-            <BarChart3 className="w-4 h-4" />
-            Team Reports
-          </NavLink>
-        )}
 
         {/* Roles — admins only */}
         {isAdmin && (
@@ -300,15 +330,20 @@ function Sidebar() {
 
 function AppLayout() {
   const { isAuthenticated } = useAuthStore();
+  const isSuperAdmin = useIsSuperAdmin();
   useApplyAppearance();
   if (!isAuthenticated) return <Navigate to="/login" replace />;
+
+  // Super admins have no operational (ticket/voice) dashboard — their home is the
+  // platform admin console.
+  const homePath = isSuperAdmin ? '/super-admin' : '/dashboard';
 
   return (
     <div className="flex h-screen bg-gray-50 overflow-hidden">
       <Sidebar />
       <main className="flex-1 overflow-y-auto">
         <Routes>
-          <Route path="/dashboard"    element={<Dashboard />} />
+          <Route path="/dashboard"    element={isSuperAdmin ? <Navigate to="/super-admin" replace /> : <Dashboard />} />
           <Route path="/contacts"     element={<Contacts />} />
           <Route path="/companies"   element={<Companies />} />
           <Route path="/deals"       element={<Deals />} />
@@ -318,6 +353,7 @@ function AppLayout() {
           <Route path="/tickets/queues"  element={<TicketQueues />} />
           <Route path="/tickets/sla"     element={<TicketSla />} />
           <Route path="/emails"          element={<Emails />} />
+          <Route path="/messages"        element={<TeamMessaging />} />
           <Route path="/voice-bot"         element={<VoiceBotConfig />} />
           <Route path="/voice-bot/calls"   element={<VoiceBotCalls />} />
           <Route path="/voice-bot/tickets" element={<VoiceBotTickets />} />
@@ -342,7 +378,7 @@ function AppLayout() {
           <Route path="/sales/templates"  element={<SalesTemplates />} />
           <Route path="/sales/builder"    element={<SalesBuilder />} />
           <Route path="/sales/settings"   element={<SalesSettingsPage />} />
-          <Route path="*"            element={<Navigate to="/dashboard" replace />} />
+          <Route path="*"            element={<Navigate to={homePath} replace />} />
         </Routes>
       </main>
       <CallWidget />

@@ -8,6 +8,38 @@
 import type { FastifyInstance } from 'fastify';
 import type { ModuleRegistry } from '@crm/core';
 
+// Nav path → the licensed feature that unlocks it. A nav item is hidden when the
+// tenant isn't entitled to its feature. Paths not listed here are always shown
+// (overview pages like /sales/dashboard, or surfaces not gated by licensing).
+const NAV_FEATURE_MAP: Record<string, string> = {
+  '/contacts':        'crm.contacts',
+  '/companies':       'crm.companies',
+  '/deals':           'crm.deals',
+  '/activities':      'crm.activities',
+  '/sales/invoices':  'sales.invoices',
+  '/sales/contacts':  'sales.contacts',
+  '/sales/payments':  'sales.payments',
+  '/sales/reports':   'sales.reports',
+  '/sales/templates': 'sales.templates',
+  '/sales/builder':   'sales.templates',
+  '/sales/settings':  'sales.settings',
+};
+
+// Remove nav items whose licensed feature the tenant doesn't have, then drop any
+// module left with no nav items. Legacy tenants (no recorded entitlement) see all.
+function filterByEntitlement<T extends { navItems: any[] }>(modules: T[], entitled: string[]): T[] {
+  if (!Array.isArray(entitled) || entitled.length === 0) return modules;
+  return modules
+    .map((mod) => ({
+      ...mod,
+      navItems: mod.navItems.filter((item: any) => {
+        const feature = NAV_FEATURE_MAP[item.path];
+        return !feature || entitled.includes(feature);
+      }),
+    }))
+    .filter((mod) => mod.navItems.length > 0);
+}
+
 export function modulesRoute(moduleRegistry: ModuleRegistry) {
   return async function (fastify: FastifyInstance) {
     fastify.get('/', async (req, reply) => {
@@ -17,11 +49,31 @@ export function modulesRoute(moduleRegistry: ModuleRegistry) {
       const activeModuleIds: string[] =
         (tenant as any).active_modules ?? tenant.activeModules ?? ['crm'];
 
-      const allModules = moduleRegistry.getActiveModulesForTenant(activeModuleIds);
+      const entitledFeatures: string[] = (tenant as any).entitled_features ?? [];
 
-      // Super admin and tenant admin always see every nav item.
+      const allModules = filterByEntitlement(
+        moduleRegistry.getActiveModulesForTenant(activeModuleIds),
+        entitledFeatures,
+      );
+
       const role = user?.role ?? 'agent';
-      if (role === 'super_admin' || role === 'tenant_admin') {
+
+      // Super admin: exclude ticketing module and voice bot nav items
+      if (role === 'super_admin') {
+        const superAdminModules = allModules
+          .filter((mod) => mod.id !== 'ticketing')
+          .map((mod) => {
+            if (mod.id !== 'voice') return mod;
+            return {
+              ...mod,
+              navItems: mod.navItems.filter((item: any) => item.permissionKey !== 'voicebot:read'),
+            };
+          });
+        return reply.send({ success: true, data: superAdminModules });
+      }
+
+      // Tenant admin always sees every nav item for their tenant's modules
+      if (role === 'tenant_admin') {
         return reply.send({ success: true, data: allModules });
       }
 

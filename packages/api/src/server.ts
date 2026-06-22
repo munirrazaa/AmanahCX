@@ -45,6 +45,7 @@ import { invoiceTemplateRoutes } from './routes/sales/invoice-templates';
 import { sectorRoutes } from './routes/sector';
 import { departmentRoutes } from './routes/departments';
 import { opportunityRoutes } from './routes/opportunities';
+import { teamMessageRoutes } from './routes/team-messages';
 
 // Feature modules (internal building blocks)
 import { ContactsModule } from '../../../modules/contacts/src';
@@ -246,8 +247,37 @@ async function buildServer() {
     if (isPublic) return;
     await authMiddleware(req, reply);
     if (reply.sent) return;
-    // Super admin is restricted to /super-admin/* routes only — not tenant-scoped /api/v1/*
-    if (req.url.startsWith('/api/v1/') && (req.user as any)?.role === 'super_admin') {
+    // Super admin may access specific tenant-scoped routes (integrations, settings, roles, modules)
+    // but is still blocked from data-mutating tenant routes to prevent accidental cross-tenant writes.
+    const SUPER_ADMIN_ALLOWED_PREFIXES = [
+      '/api/v1/connectors',
+      '/api/v1/webhooks',
+      '/api/v1/api-keys',
+      '/api/v1/settings',
+      '/api/v1/roles',
+      '/api/v1/modules',
+      '/api/v1/billing',
+      '/api/v1/messages',
+      '/api/v1/contacts',
+      '/api/v1/companies',
+      '/api/v1/deals',
+      '/api/v1/activities',
+      '/api/v1/analytics',
+      '/api/v1/tickets',
+      '/api/v1/sector',
+      '/api/v1/notifications',
+      '/api/v1/emails',
+      '/api/v1/voice',
+      '/api/v1/voice-bot',
+      '/api/v1/departments',
+      '/api/v1/opportunities',
+      '/api/v1/sales',
+    ];
+    if (
+      req.url.startsWith('/api/v1/') &&
+      (req.user as any)?.role === 'super_admin' &&
+      !SUPER_ADMIN_ALLOWED_PREFIXES.some((p) => req.url.startsWith(p))
+    ) {
       return reply.code(403).send({ success: false, error: { code: 'FORBIDDEN', message: 'Super admin cannot access tenant-scoped routes. Use /super-admin/* endpoints.' } });
     }
     await tenantMiddleware(req, reply);
@@ -285,6 +315,7 @@ async function buildServer() {
   await fastify.register(sectorRoutes(db),         { prefix: '/api/v1/sector' });
   await fastify.register(departmentRoutes(db),     { prefix: '/api/v1/departments' });
   await fastify.register(opportunityRoutes(db),    { prefix: '/api/v1/opportunities' });
+  await fastify.register(teamMessageRoutes(db),    { prefix: '/api/v1/messages' });
 
   // Health check
   fastify.get('/health', async () => ({

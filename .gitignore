@@ -9,3 +9,9 @@ dist/
 build/
 .turbo/
 invoice/
+
+# Sensitive / local tooling — never push
+Credetials /
+**/.claude/
+*Credentials*.docx
+*Credetials*

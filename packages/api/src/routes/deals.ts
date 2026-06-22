@@ -78,7 +78,10 @@ export function dealRoutes(db: DatabaseClient, eventBus: EventBus) {
       const deals = await db.withTenant(req.tenant.id, async (client) => {
         const result = await client.query(
           `SELECT d.*, c.first_name || ' ' || COALESCE(c.last_name,'') as contact_name,
-                  comp.name as company_name, u.name as owner_name
+                  comp.name as company_name, u.name as owner_name,
+                  (SELECT elem->>'name' FROM pipelines p
+                   CROSS JOIN LATERAL jsonb_array_elements(p.stages) AS elem
+                   WHERE p.id = d.pipeline_id AND (elem->>'id') = d.stage_id::text LIMIT 1) as stage_name
            FROM deals d
            LEFT JOIN contacts c ON d.contact_id = c.id
            LEFT JOIN companies comp ON d.company_id = comp.id
@@ -173,6 +176,51 @@ export function dealRoutes(db: DatabaseClient, eventBus: EventBus) {
 
       await eventBus.publish(req.tenant.id, CRM_EVENTS.DEAL_CREATED, { deal });
       return reply.code(201).send({ success: true, data: deal });
+    });
+
+    // Update deal fields
+    fastify.patch('/:id', { preHandler: requireScope('deals:write') }, async (req, reply) => {
+      const { id } = req.params as { id: string };
+      const body = CreateDealSchema.partial().parse(req.body);
+
+      const sets: string[] = [];
+      const vals: unknown[] = [];
+      let i = 1;
+      const map: Record<string, string> = {
+        name: 'name', amount: 'amount', contactId: 'contact_id', companyId: 'company_id',
+        stageId: 'stage_id', closeDate: 'close_date', priority: 'priority',
+        source: 'source', tags: 'tags', ownerId: 'owner_id',
+      };
+      for (const [k, col] of Object.entries(map)) {
+        if (k in body) { sets.push(`${col} = $${i++}`); vals.push((body as any)[k]); }
+      }
+      if (body.customFields !== undefined) {
+        sets.push(`custom_fields = custom_fields || $${i++}::jsonb`);
+        vals.push(JSON.stringify(body.customFields));
+      }
+      if (!sets.length) return reply.send({ success: true, data: null });
+      vals.push(id);
+
+      const [deal] = await db.withTenant(req.tenant.id, async (client) => {
+        const result = await client.query(
+          `UPDATE deals SET ${sets.join(', ')} WHERE id = $${i} RETURNING *`,
+          vals,
+        );
+        return result.rows;
+      });
+
+      if (!deal) return reply.code(404).send({ success: false, error: { code: 'NOT_FOUND', message: 'Deal not found' } });
+      return reply.send({ success: true, data: deal });
+    });
+
+    // Delete deal
+    fastify.delete('/:id', { preHandler: requireScope('deals:write') }, async (req, reply) => {
+      const { id } = req.params as { id: string };
+      await db.withTenant(req.tenant.id, async (client) => {
+        await client.query('UPDATE activities SET deal_id = NULL WHERE deal_id = $1', [id]);
+        await client.query('DELETE FROM deals WHERE id = $1', [id]);
+      });
+      return reply.code(204).send();
     });
 
     // Move deal to different stage
