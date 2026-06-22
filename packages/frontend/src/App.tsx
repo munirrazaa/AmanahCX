@@ -7,7 +7,7 @@ import {
   FileText, Layers, MessageCircle,
 } from 'lucide-react';
 import { useAuthStore } from './store/auth.store';
-import { useIsSuperAdmin, useIsAdmin } from './hooks/useRole';
+import { useIsSuperAdmin, useIsAdmin, useIsTenantAdmin } from './hooks/useRole';
 import { useApplyAppearance } from './hooks/useApplyAppearance';
 import { api } from './services/api';
 import { NotificationBell } from './components/NotificationBell';
@@ -84,8 +84,9 @@ interface ActiveModule {
 
 function Sidebar() {
   const { user, tenant, logout } = useAuthStore();
-  const isSuperAdmin = useIsSuperAdmin();
-  const isAdmin      = useIsAdmin();
+  const isSuperAdmin  = useIsSuperAdmin();
+  const isAdmin       = useIsAdmin();
+  const isTenantAdmin = useIsTenantAdmin();
 
   // Fetch active modules from the API — drives the sidebar dynamically
   const { data: modulesData } = useQuery<ActiveModule[]>({
@@ -130,8 +131,9 @@ function Sidebar() {
       </div>
 
       {/* ── Dynamic module navigation ─────────────────────────────── */}
+      {/* Tenant admin is administrative-only — no operational module nav. */}
       <nav className="flex-1 px-2 py-4 space-y-4 overflow-y-auto">
-        {modules.map((mod) => (
+        {!isTenantAdmin && modules.map((mod) => (
           <div key={mod.id}>
             {modules.length > 1 && (
               <p className="px-3 mb-1 text-[10px] font-bold text-brand-300/60 uppercase tracking-widest">
@@ -166,8 +168,8 @@ function Sidebar() {
           </div>
         ))}
 
-        {/* Team Messaging — available to all users */}
-        {!isSuperAdmin && (
+        {/* Team Messaging — operational staff only (not the administrative tenant admin) */}
+        {!isSuperAdmin && !isTenantAdmin && (
           <NavLink to="/messages"
             className={({ isActive }) =>
               `flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm transition-all ${
@@ -184,13 +186,15 @@ function Sidebar() {
           </NavLink>
         )}
 
-        {/* Billing and Integrations — gated by user permissions */}
+        {/* Integrations — admin (keeps the system/network live) or permitted users.
+            Billing — Finance/Sales function only: granted by the 'billing:read'
+            permission, NOT the admin role. The tenant admin never sees billing. */}
         {(() => {
           const perms = (user as any)?.permissions ?? {};
           const gatedLinks = [
-            { to: '/integrations', label: 'Integrations', icon: 'Zap',        key: 'integrations:read' },
-            { to: '/billing',      label: 'Billing',      icon: 'CreditCard', key: 'billing:read'      },
-          ].filter((l) => isAdmin || perms[l.key] === true);
+            { to: '/integrations', label: 'Integrations', icon: 'Zap',        key: 'integrations:read', adminBypass: true  },
+            { to: '/billing',      label: 'Billing',      icon: 'CreditCard', key: 'billing:read',      adminBypass: false },
+          ].filter((l) => (l.adminBypass && isAdmin) || perms[l.key] === true);
           if (gatedLinks.length === 0) return null;
           return (
             <>
@@ -331,57 +335,64 @@ function Sidebar() {
 function AppLayout() {
   const { isAuthenticated } = useAuthStore();
   const isSuperAdmin = useIsSuperAdmin();
+  const isTenantAdmin = useIsTenantAdmin();
   useApplyAppearance();
   if (!isAuthenticated) return <Navigate to="/login" replace />;
 
   // Super admins have no operational (ticket/voice) dashboard — their home is the
-  // platform admin console.
-  const homePath = isSuperAdmin ? '/super-admin' : '/dashboard';
+  // platform admin console. Tenant admins are administrative-only: their home is
+  // the workspace Settings console; all operational pages redirect away.
+  const homePath = isSuperAdmin ? '/super-admin' : isTenantAdmin ? '/settings' : '/dashboard';
+
+  // Operational pages are off-limits to the tenant admin (separation of duties).
+  // Wrap an operational element so it bounces the admin to their console.
+  const op = (el: JSX.Element) => (isTenantAdmin ? <Navigate to="/settings" replace /> : el);
 
   return (
     <div className="flex h-screen bg-gray-50 overflow-hidden">
       <Sidebar />
       <main className="flex-1 overflow-y-auto">
         <Routes>
-          <Route path="/dashboard"    element={isSuperAdmin ? <Navigate to="/super-admin" replace /> : <Dashboard />} />
-          <Route path="/contacts"     element={<Contacts />} />
-          <Route path="/companies"   element={<Companies />} />
-          <Route path="/deals"       element={<Deals />} />
-          <Route path="/voice"           element={<VoiceCalls />} />
-          <Route path="/voice/analytics" element={<VoiceAnalytics />} />
-          <Route path="/tickets"         element={<Tickets />} />
-          <Route path="/tickets/queues"  element={<TicketQueues />} />
-          <Route path="/tickets/sla"     element={<TicketSla />} />
-          <Route path="/emails"          element={<Emails />} />
+          <Route path="/dashboard"    element={isSuperAdmin ? <Navigate to="/super-admin" replace /> : op(<Dashboard />)} />
+          <Route path="/contacts"     element={op(<Contacts />)} />
+          <Route path="/companies"   element={op(<Companies />)} />
+          <Route path="/deals"       element={op(<Deals />)} />
+          <Route path="/voice"           element={op(<VoiceCalls />)} />
+          <Route path="/voice/analytics" element={op(<VoiceAnalytics />)} />
+          <Route path="/tickets"         element={op(<Tickets />)} />
+          <Route path="/tickets/queues"  element={op(<TicketQueues />)} />
+          <Route path="/tickets/sla"     element={op(<TicketSla />)} />
+          <Route path="/emails"          element={op(<Emails />)} />
           <Route path="/messages"        element={<TeamMessaging />} />
-          <Route path="/voice-bot"         element={<VoiceBotConfig />} />
-          <Route path="/voice-bot/calls"   element={<VoiceBotCalls />} />
-          <Route path="/voice-bot/tickets" element={<VoiceBotTickets />} />
-          <Route path="/contacts/:id"      element={<ContactDetail />} />
-          <Route path="/activities"  element={<Activities />} />
-          <Route path="/analytics"   element={<Analytics />} />
-          <Route path="/team-reports" element={<TeamReports />} />
-          <Route path="/billing"     element={<Billing />} />
+          <Route path="/voice-bot"         element={op(<VoiceBotConfig />)} />
+          <Route path="/voice-bot/calls"   element={op(<VoiceBotCalls />)} />
+          <Route path="/voice-bot/tickets" element={op(<VoiceBotTickets />)} />
+          <Route path="/contacts/:id"      element={op(<ContactDetail />)} />
+          <Route path="/activities"  element={op(<Activities />)} />
+          <Route path="/analytics"   element={op(<Analytics />)} />
+          <Route path="/team-reports" element={op(<TeamReports />)} />
+          <Route path="/billing"     element={op(<Billing />)} />
           <Route path="/integrations" element={<Integrations />} />
           <Route path="/settings"          element={<Settings />} />
           <Route path="/settings/personal" element={<PersonalSettings />} />
           <Route path="/roles"        element={<RolesPage />} />
           <Route path="/super-admin" element={<SuperAdmin />} />
           {/* Sales & Invoicing module */}
-          <Route path="/sales/dashboard"  element={<SalesDashboard />} />
-          <Route path="/sales/invoices"   element={<InvoiceList />} />
-          <Route path="/sales/invoices/new" element={<InvoiceCreate />} />
-          <Route path="/sales/invoices/:id" element={<InvoiceDetail />} />
-          <Route path="/sales/contacts"   element={<SalesContacts />} />
-          <Route path="/sales/payments"   element={<SalesPayments />} />
-          <Route path="/sales/reports"    element={<SalesReports />} />
-          <Route path="/sales/templates"  element={<SalesTemplates />} />
-          <Route path="/sales/builder"    element={<SalesBuilder />} />
-          <Route path="/sales/settings"   element={<SalesSettingsPage />} />
+          <Route path="/sales/dashboard"  element={op(<SalesDashboard />)} />
+          <Route path="/sales/invoices"   element={op(<InvoiceList />)} />
+          <Route path="/sales/invoices/new" element={op(<InvoiceCreate />)} />
+          <Route path="/sales/invoices/:id" element={op(<InvoiceDetail />)} />
+          <Route path="/sales/contacts"   element={op(<SalesContacts />)} />
+          <Route path="/sales/payments"   element={op(<SalesPayments />)} />
+          <Route path="/sales/reports"    element={op(<SalesReports />)} />
+          <Route path="/sales/templates"  element={op(<SalesTemplates />)} />
+          <Route path="/sales/builder"    element={op(<SalesBuilder />)} />
+          <Route path="/sales/settings"   element={op(<SalesSettingsPage />)} />
           <Route path="*"            element={<Navigate to={homePath} replace />} />
         </Routes>
       </main>
-      <CallWidget />
+      {/* Voice call widget is operational — not for the administrative tenant admin. */}
+      {!isTenantAdmin && !isSuperAdmin && <CallWidget />}
     </div>
   );
 }

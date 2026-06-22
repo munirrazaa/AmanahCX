@@ -219,7 +219,7 @@ function CreateWorkspaceModal({ onClose }: { onClose: () => void }) {
   const [slugTouched, setSlugTouched] = useState(false);
   const [selectedFeatures, setSelectedFeatures] = useState<string[]>([]);
   const [step, setStep] = useState<'details' | 'modules'>('details');
-  const [result, setResult] = useState<{ slug: string; adminEmail: string; tempPassword?: string } | null>(null);
+  const [result, setResult] = useState<{ slug: string; adminEmail: string; tempPassword?: string; emailSent?: boolean } | null>(null);
 
   // Licensable module + feature catalog — the single source of truth (from the API).
   // Adding a module there makes it appear here automatically.
@@ -247,7 +247,7 @@ function CreateWorkspaceModal({ onClose }: { onClose: () => void }) {
     onSuccess: (res) => {
       qc.invalidateQueries({ queryKey: ['sa-tenants'] });
       const d = res.data.data;
-      setResult({ slug: d.slug, adminEmail: form.adminEmail, tempPassword: d.tempPassword });
+      setResult({ slug: d.slug, adminEmail: form.adminEmail, tempPassword: d.tempPassword, emailSent: d.emailSent });
     },
   });
 
@@ -309,9 +309,11 @@ function CreateWorkspaceModal({ onClose }: { onClose: () => void }) {
               )}
             </div>
             {result.tempPassword && (
-              <p className="text-xs text-amber-600 flex items-start gap-1.5">
+              <p className="text-xs flex items-start gap-1.5 text-amber-600">
                 <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-                This password is shown only once — copy it and share it securely with the customer. They should change it on first login.
+                {result.emailSent
+                  ? 'Password emailed to the customer. Copy it above as a backup — it is shown only once.'
+                  : 'No system email configured — copy this password and share it securely with the customer. They should change it on first login.'}
               </p>
             )}
             <button onClick={onClose} className="w-full py-2 bg-brand-600 text-white rounded-lg text-sm hover:bg-brand-700">Done</button>
@@ -520,10 +522,15 @@ function TenantActions({ tenant, onClose }: { tenant: any; onClose: () => void }
   const entitledFeatures: string[] = Array.isArray(tenant.entitled_features) ? tenant.entitled_features : [];
   const featureLabel = (key: string) =>
     licenseCatalog.flatMap((m) => m.features).find((f) => f.key === key)?.label ?? key;
+  const resetPasswordMutation = useMutation({
+    mutationFn: (id: string) => api.post(`/super-admin/tenants/${id}/reset-admin-password`),
+  });
+
   const [showManageRoles, setShowManageRoles] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
   const [showUsers, setShowUsers] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [showResetResult, setShowResetResult] = useState(false);
 
   return (
     <div className="fixed inset-0 z-50" onClick={onClose}>
@@ -628,6 +635,35 @@ function TenantActions({ tenant, onClose }: { tenant: any; onClose: () => void }
           className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-gray-700 hover:bg-gray-50">
           <Edit2 className="w-4 h-4 text-gray-400" /> Edit Workspace
         </button>
+
+        {/* Reset admin password */}
+        {showResetResult && resetPasswordMutation.data ? (
+          <div className="px-3 py-2 border-t border-gray-50 space-y-1.5">
+            <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">New Temp Password</p>
+            <p className="font-mono text-xs bg-amber-50 border border-amber-100 px-2 py-1 rounded text-gray-900 select-all">
+              {resetPasswordMutation.data.data?.data?.tempPassword}
+            </p>
+            <p className="text-[10px] text-gray-400">
+              {resetPasswordMutation.data.data?.data?.emailSent
+                ? `Emailed to ${resetPasswordMutation.data.data?.data?.adminEmail}`
+                : 'No system email configured — share this securely'}
+            </p>
+            <button onClick={() => { setShowResetResult(false); resetPasswordMutation.reset(); }}
+              className="text-[10px] text-gray-400 hover:text-gray-600 underline">Dismiss</button>
+          </div>
+        ) : (
+          <button
+            onClick={() => {
+              resetPasswordMutation.mutate(tenant.id, {
+                onSuccess: () => setShowResetResult(true),
+              });
+            }}
+            disabled={resetPasswordMutation.isPending}
+            className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50">
+            <KeyRound className="w-4 h-4 text-gray-400" />
+            {resetPasswordMutation.isPending ? 'Resetting…' : 'Reset Admin Password'}
+          </button>
+        )}
 
         {/* Users */}
         <button onClick={() => setShowUsers(!showUsers)}

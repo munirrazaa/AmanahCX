@@ -32,7 +32,7 @@ import {
   LifeBuoy, PhoneCall, ChevronRight,
   Calendar, TrendingUp, ShieldAlert, Timer,
   Circle, ArrowRightLeft, CornerUpLeft, StickyNote,
-  Reply,
+  Reply, CreditCard,
 } from 'lucide-react';
 import { api } from '../services/api';
 import { useCan } from '../hooks/useRole';
@@ -61,6 +61,8 @@ interface Ticket {
   accepted_at?: string;
   resolved_at?: string;
   created_at: string;
+  ticket_type?: string;
+  deal_id?: string | null;
 }
 
 interface Comment {
@@ -672,6 +674,7 @@ function TicketPanel({ ticketId, onClose }: { ticketId: string; onClose: () => v
 
   const acceptMutation  = useMutation({ mutationFn: () => api.post(`/api/v1/tickets/${ticketId}/accept`, {}),  onSuccess: invalidate });
   const resolveMutation = useMutation({ mutationFn: () => api.post(`/api/v1/tickets/${ticketId}/resolve`, {}), onSuccess: invalidate });
+  const convertMutation = useMutation({ mutationFn: () => api.post(`/api/v1/tickets/${ticketId}/convert-to-deal`, {}), onSuccess: invalidate });
 
   const commentMutation = useMutation({
     mutationFn: () => api.post(`/api/v1/tickets/${ticketId}/comments`, {
@@ -854,7 +857,27 @@ function TicketPanel({ ticketId, onClose }: { ticketId: string; onClose: () => v
                   Mark Resolved
                 </button>
               )}
+              {/* Sales enquiry → pipeline deal. Shown only for sales tickets.
+                  Once converted, becomes a non-clickable "Deal created" marker. */}
+              {t.ticket_type === 'sales' && (
+                t.deal_id ? (
+                  <span className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold bg-indigo-900/40 text-indigo-300 border border-indigo-700/40">
+                    <CheckCircle className="w-3.5 h-3.5" /> Deal created
+                  </span>
+                ) : (
+                  <button onClick={() => convertMutation.mutate()} disabled={convertMutation.isPending}
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold bg-indigo-600/70 text-white hover:bg-indigo-600 disabled:opacity-40 border border-indigo-500/50">
+                    {convertMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CreditCard className="w-3.5 h-3.5" />}
+                    Convert to Deal
+                  </button>
+                )
+              )}
             </div>
+          )}
+          {convertMutation.isError && (
+            <p className="text-[11px] text-red-400">
+              {(convertMutation.error as any)?.response?.data?.error?.message ?? 'Could not convert to a deal.'}
+            </p>
           )}
 
           {/* Info grid */}

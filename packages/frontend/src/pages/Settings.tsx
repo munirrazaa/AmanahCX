@@ -1076,13 +1076,15 @@ const TAB_CONTENT: Record<Tab, React.FC> = {
 export function Settings() {
   const [tab, setTab] = useState<Tab>('workspace');
   const TabContent = TAB_CONTENT[tab];
+  const { user } = useAuthStore();
+  const visibleTabs = TABS.filter(t => !(user?.role === 'super_admin' && t.id === 'routing'));
 
   return (
     <div className="flex h-full">
       {/* Sidebar */}
       <div className="w-52 border-r border-gray-100 p-3 space-y-0.5">
         <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider px-3 mb-3">Workspace Settings</p>
-        {TABS.map(({ id, label, icon: Icon }) => (
+        {visibleTabs.map(({ id, label, icon: Icon }) => (
           <button key={id} onClick={() => setTab(id)}
             className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors text-left ${
               tab === id ? 'bg-brand-50 text-brand-700 font-medium' : 'text-gray-600 hover:bg-gray-50'

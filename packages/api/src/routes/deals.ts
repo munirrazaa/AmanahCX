@@ -3,6 +3,7 @@ import { z } from 'zod';
 import type { DatabaseClient, EventBus } from '@crm/core';
 import { CRM_EVENTS } from '@crm/core';
 import { requireScope } from '../middlewares/auth.middleware';
+import { getVisibleUserIds, ownerScopeSql } from '../lib/visibility';
 
 const CreateDealSchema = z.object({
   name: z.string().min(1),
@@ -30,13 +31,19 @@ export function dealRoutes(db: DatabaseClient, eventBus: EventBus) {
 
     // List all pipelines for this tenant
     fastify.get('/pipelines', { preHandler: requireScope('deals:read') }, async (req, reply) => {
+      // Scope the open-deal counts and pipeline value to what this user may see
+      // (own + reportees), so summary figures match the filtered deal list.
+      const scopeIds = await db.withTenant(req.tenant.id, (client) =>
+        getVisibleUserIds(client, req.user.sub, req.user.role),
+      );
+      const dealScope = ownerScopeSql('d.owner_id', scopeIds); // '' for super_admin
       const pipelines = await db.withTenant(req.tenant.id, async (client) => {
         const result = await client.query(
           `SELECT p.*,
              COUNT(d.id) FILTER (WHERE d.status = 'open') as open_deals,
              COALESCE(SUM(d.amount) FILTER (WHERE d.status = 'open'), 0) as pipeline_value
            FROM pipelines p
-           LEFT JOIN deals d ON d.pipeline_id = p.id
+           LEFT JOIN deals d ON d.pipeline_id = p.id ${dealScope}
            GROUP BY p.id
            ORDER BY p.is_default DESC, p.created_at ASC`,
         );
@@ -64,6 +71,11 @@ export function dealRoutes(db: DatabaseClient, eventBus: EventBus) {
       const { pipelineId, stageId, ownerId, companyId, contactId, status, page = 1, pageSize = 50 } = req.query as any;
       const offset = (Number(page) - 1) * Number(pageSize);
 
+      // Hard visibility filter — only deals owned by the user or their reportees.
+      const scopeIds = await db.withTenant(req.tenant.id, (client) =>
+        getVisibleUserIds(client, req.user.sub, req.user.role),
+      );
+
       const params: unknown[] = [];
       let where = "WHERE 1=1";
       if (status)     { params.push(status);     where += ` AND d.status = $${params.length}`; }
@@ -73,6 +85,7 @@ export function dealRoutes(db: DatabaseClient, eventBus: EventBus) {
       if (ownerId)    { params.push(ownerId);    where += ` AND d.owner_id = $${params.length}`; }
       if (companyId)  { params.push(companyId);  where += ` AND d.company_id = $${params.length}`; }
       if (contactId)  { params.push(contactId);  where += ` AND d.contact_id = $${params.length}`; }
+      where += ` ${ownerScopeSql('d.owner_id', scopeIds)}`;
       params.push(Number(pageSize), offset);
 
       const deals = await db.withTenant(req.tenant.id, async (client) => {
@@ -107,11 +120,17 @@ export function dealRoutes(db: DatabaseClient, eventBus: EventBus) {
       });
       if (!pipeline) return reply.code(404).send({ success: false, error: { code: 'NOT_FOUND', message: 'Pipeline not found' } });
 
+      // Hard visibility filter — only deals owned by the user or their reportees.
+      const scopeIds = await db.withTenant(req.tenant.id, (client) =>
+        getVisibleUserIds(client, req.user.sub, req.user.role),
+      );
+
       const deals = await db.withTenant(req.tenant.id, async (client) => {
         const result = await client.query(
           `SELECT d.*, c.first_name || ' ' || COALESCE(c.last_name,'') as contact_name
            FROM deals d LEFT JOIN contacts c ON d.contact_id = c.id
            WHERE d.pipeline_id = $1 AND d.status = 'open'
+           ${ownerScopeSql('d.owner_id', scopeIds)}
            ORDER BY d.updated_at DESC`,
           [pipelineId],
         );

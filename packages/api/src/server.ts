@@ -280,6 +280,36 @@ async function buildServer() {
     ) {
       return reply.code(403).send({ success: false, error: { code: 'FORBIDDEN', message: 'Super admin cannot access tenant-scoped routes. Use /super-admin/* endpoints.' } });
     }
+
+    // Tenant admin is an ADMINISTRATIVE role only (manage users, roles, settings,
+    // integrations / keep the system live). They have NO visibility of operational
+    // data — contacts, deals, activities, tickets, sales/invoicing, analytics,
+    // emails, voice and billing are all off-limits. This is separation of duties:
+    // the person who manages accounts is not the person who sees the operations.
+    // Billing (both subscription AND customer invoicing) belongs to a Finance/Sales
+    // role, never the admin.
+    const TENANT_ADMIN_BLOCKED_PREFIXES = [
+      '/api/v1/contacts',
+      '/api/v1/companies',
+      '/api/v1/deals',
+      '/api/v1/activities',
+      '/api/v1/analytics',
+      '/api/v1/tickets',
+      '/api/v1/sales',
+      '/api/v1/opportunities',
+      '/api/v1/emails',
+      '/api/v1/voice',
+      '/api/v1/voice-bot',
+      '/api/v1/billing',
+    ];
+    if (
+      req.url.startsWith('/api/v1/') &&
+      (req.user as any)?.role === 'tenant_admin' &&
+      TENANT_ADMIN_BLOCKED_PREFIXES.some((p) => req.url.startsWith(p))
+    ) {
+      return reply.code(403).send({ success: false, error: { code: 'ADMIN_NO_OPERATIONS', message: 'Administrators manage users, roles, settings and integrations — operational and billing data is not accessible to this role.' } });
+    }
+
     await tenantMiddleware(req, reply);
   });
 
