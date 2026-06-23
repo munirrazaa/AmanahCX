@@ -1603,7 +1603,7 @@ ${note ? `<p><strong>Reason:</strong> ${note}</p>` : ''}
 
       const limit  = Math.min(Math.max(1, Number(pageSize) || 50), 200);
       const offset = (Math.max(1, Number(page) || 1) - 1) * limit;
-      conditions.push(`TRUE LIMIT $${idx++} OFFSET $${idx++}`);
+      const limitClause = `LIMIT $${idx++} OFFSET $${idx++}`;
       vals.push(limit, offset);
 
       const comments = await db.withTenant(tenantId, async (client) => {
@@ -1622,7 +1622,8 @@ ${note ? `<p><strong>Reason:</strong> ${note}</p>` : ''}
            LEFT JOIN ticket_comments rt ON tc.reply_to_id = rt.id
            LEFT JOIN users ru ON rt.author_id   = ru.id
            WHERE ${conditions.join(' AND ')}
-           ORDER BY tc.created_at ASC`,
+           ORDER BY tc.created_at ASC
+           ${limitClause}`,
           vals,
         );
         return r.rows;

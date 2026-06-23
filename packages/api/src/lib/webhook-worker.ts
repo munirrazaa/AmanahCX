@@ -65,7 +65,7 @@ export async function enqueueWebhookDelivery(
 ): Promise<string> {
   const { webhookId, tenantId, event, payload, maxRetries, backoffMs } = opts;
 
-  const { rows } = await db.query(
+  const rows = await db.query<{ id: string }>(
     `INSERT INTO webhook_deliveries
        (webhook_id, tenant_id, event, payload, attempts, succeeded,
         max_retries, backoff_ms, next_attempt_at, dead_lettered)
@@ -82,7 +82,7 @@ export async function enqueueWebhookDelivery(
 async function processBatch(db: DatabaseClient): Promise<void> {
   // Claim up to BATCH_SIZE rows that are due for delivery using a CTE with
   // FOR UPDATE SKIP LOCKED — safe for concurrent workers (future horizontal scaling).
-  const { rows: pending } = await db.query(
+  const pending = await db.query<any>(
     `WITH claimed AS (
        SELECT wd.id, wd.webhook_id, wd.tenant_id, wd.event, wd.payload,
               wd.attempts, wd.max_retries, wd.backoff_ms,

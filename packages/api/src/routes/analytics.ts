@@ -174,7 +174,7 @@ export function analyticsRoutes(db: DatabaseClient) {
         ORDER BY p.period`,
         [tenantId, period, months],
       );
-      return reply.send({ success: true, data: data.rows });
+      return reply.send({ success: true, data });
     });
 
     // Pipeline funnel
@@ -233,7 +233,7 @@ export function analyticsRoutes(db: DatabaseClient) {
         ORDER BY revenue DESC`,
         [tenantId, fromDate, toDate],
       );
-      return reply.send({ success: true, data: result.rows });
+      return reply.send({ success: true, data: result });
     });
 
     // Contact source breakdown — reads from MV
@@ -245,7 +245,7 @@ export function analyticsRoutes(db: DatabaseClient) {
          ORDER BY total DESC`,
         [req.tenant.id],
       );
-      return reply.send({ success: true, data: result.rows });
+      return reply.send({ success: true, data: result });
     });
 
     // MV refresh status — shows when each view was last refreshed and how long it took
@@ -253,7 +253,7 @@ export function analyticsRoutes(db: DatabaseClient) {
       const result = await db.query(
         `SELECT view_name, refreshed_at, duration_ms FROM analytics_refresh_log ORDER BY view_name`,
       );
-      return reply.send({ success: true, data: result.rows });
+      return reply.send({ success: true, data: result });
     });
 
     // ── Backward-compat aliases ──────────────────────────────────────────

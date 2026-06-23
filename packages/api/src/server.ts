@@ -240,7 +240,7 @@ async function buildServer() {
       || req.url.startsWith('/api/v1/auth')
       || req.url.startsWith('/api/v1/billing/webhook')
       || req.url.startsWith('/api/v1/voice/webhook')
-      || req.url.startsWith('/api/v1/voice-bot/webhook')
+      || req.url.startsWith('/api/v1/voice-bot/webhook/')
       || req.url.startsWith('/api/v1/voice-bot/livekit')
       || req.url.startsWith('/api/v1/emails/webhook')
       || req.url.startsWith('/api/v1/emails/track');

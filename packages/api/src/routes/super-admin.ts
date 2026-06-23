@@ -4,6 +4,7 @@ import type { DatabaseClient, TenantService } from '@crm/core';
 import type { Plan } from '@crm/shared';
 import { requireRole } from '../middlewares/auth.middleware';
 import { defaultPermissions } from './roles';
+import { ensureDefaultPipeline } from '../lib/default-pipeline';
 
 // The four standard roles auto-seeded into every new workspace. Their default
 // permissions come from defaultPermissions(); the tenant admin tailors them later.
@@ -287,6 +288,12 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
             [tenant.id, r.name, r.color ?? '#6366f1', r.base_role, JSON.stringify(r.permissions)],
           );
         }
+      });
+
+      // Seed a default sales pipeline so the Deals feature (and sales-ticket →
+      // deal conversion) works from day one. Without this, convert-to-deal fails.
+      await db.withSuperAdmin(async (client) => {
+        await ensureDefaultPipeline(client, tenant.id);
       });
 
       // Provision the first tenant admin so the new customer can log in immediately.
@@ -1026,7 +1033,7 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
       const vals: any[] = [];
       if (body.name   !== undefined) { vals.push(body.name);   sets.push(`name = $${vals.length}`); }
       if (body.sector !== undefined) { vals.push(body.sector); sets.push(`sector = $${vals.length}`); }
-      if (body.status !== undefined) { vals.push(body.status); sets.push(`status = $${vals.length}`); }
+      if (body.status !== undefined) { vals.push(body.status === 'active'); sets.push(`is_active = $${vals.length}`); }
       if (!sets.length) return reply.code(400).send({ success: false, error: { code: 'NO_FIELDS', message: 'Nothing to update' } });
       vals.push(id);
       const [updated] = await db.withSuperAdmin(async (client) => {
@@ -1075,8 +1082,8 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
       const hash = await bcrypt.hash(body.password, 12);
       const [user] = await db.withSuperAdmin(async (client) => {
         const r = await client.query(
-          `INSERT INTO users (tenant_id, name, email, role, password_hash, status)
-           VALUES ($1, $2, $3, $4, $5, 'active') RETURNING id, name, email, role, status, created_at`,
+          `INSERT INTO users (tenant_id, name, email, role, password_hash, is_active)
+           VALUES ($1, $2, $3, $4, $5, true) RETURNING id, name, email, role, is_active, created_at`,
           [id, body.name, body.email, body.role, hash],
         );
         // Log password creation
@@ -1107,7 +1114,7 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
       if (body.name   !== undefined) { vals.push(body.name);   sets.push(`name = $${vals.length}`); }
       if (body.email  !== undefined) { vals.push(body.email);  sets.push(`email = $${vals.length}`); }
       if (body.role   !== undefined) { vals.push(body.role);   sets.push(`role = $${vals.length}`); }
-      if (body.status !== undefined) { vals.push(body.status); sets.push(`status = $${vals.length}`); }
+      if (body.status !== undefined) { vals.push(body.status === 'active'); sets.push(`is_active = $${vals.length}`); }
       if (body.password !== undefined) {
         const bcrypt = (await import('bcryptjs')).default;
         const hash = await bcrypt.hash(body.password, 12);
@@ -1118,7 +1125,7 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
       vals.push(uid);
       const [updated] = await db.withSuperAdmin(async (client) => {
         const r = await client.query(
-          `UPDATE users SET ${sets.join(', ')} WHERE id = $${vals.length} RETURNING id, name, email, role, status`,
+          `UPDATE users SET ${sets.join(', ')} WHERE id = $${vals.length} RETURNING id, name, email, role, is_active`,
           vals,
         );
         if (body.password && r.rows[0]) {
@@ -1189,7 +1196,7 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
             t.id, t.name, t.slug, t.plan, t.status, t.sector, t.active_modules,
             t.created_at,
             COUNT(DISTINCT u.id)::int           AS user_count,
-            COUNT(DISTINCT u.id) FILTER (WHERE u.status = 'active')::int AS active_users,
+            COUNT(DISTINCT u.id) FILTER (WHERE u.is_active = true)::int AS active_users,
             COUNT(DISTINCT c.id)::int           AS contact_count,
             COUNT(DISTINCT d.id) FILTER (WHERE d.status = 'open')::int AS open_deals,
             MAX(u.last_login_at)                AS last_activity,
