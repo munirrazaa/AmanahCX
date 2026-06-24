@@ -3,6 +3,19 @@ _Most recent at top. Treated as the primary record for development tracking._
 
 ---
 
+## Change Log - 2026-06-24 (SLA deadline engine)
+
+### Fixed / Enhanced
+**SLA Deadlines now skip non-working hours and public holidays**
+- Previously: deadline = accepted time + hours (e.g. accept at 4pm Friday with 8h SLA → deadline 12am Saturday — wrong).
+- Now: deadline walks forward through working days only, skipping weekends, non-working hours, and any public holidays set in the holiday calendar.
+- Both the first-response deadline and the resolution deadline use this logic.
+- Behaviour when no business hours are configured is unchanged (simple clock arithmetic).
+- Tested: late-day acceptance skipping overnight ✅, Friday acceptance skipping weekend ✅, holiday on next working day skipping to day after ✅.
+- Files: `packages/api/src/routes/tickets.ts` — `computeSlaDeadline()` and `buildSlaDeadlines()` functions added; accept handler updated to use them.
+
+---
+
 ## Change Log - 2026-06-24 (CSAT Survey)
 
 ### Added

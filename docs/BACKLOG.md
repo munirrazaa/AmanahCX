@@ -52,9 +52,8 @@ _All ideas, pending work, and deferred items. Prioritised against enterprise rea
 
 ### 6. Holiday SLA pause — wire into deadline calculation engine
 - **Verdict:** Do Soon
-- **Why:** The table and UI exist but holidays don't actually affect SLA deadlines yet. A buyer who sets up holidays and then sees breach alerts firing on Eid will raise this immediately.
-- **Benchmark:** Zendesk, Freshdesk both enforce holiday pauses in actual deadline maths.
-- **Status:** DB + UI done. Engine not wired.
+- **Status:** Done ✅ — 2026-06-24
+- **Detail:** SLA deadlines now skip weekends, non-working hours, and public holidays. Tested with late-day, end-of-week, and holiday scenarios — all correct.
 
 ### 7. SLA Breach Notifications — in-app + email alerts
 - **Verdict:** Do Soon
@@ -122,6 +121,7 @@ _All ideas, pending work, and deferred items. Prioritised against enterprise rea
 ## ✅ Completed (moved from backlog)
 
 - Email deliverability — sender changed to noreply@vividsns.com — DONE 2026-06-24 (DNS records pending owner action)
+- Holiday SLA engine — deadlines now skip holidays, weekends, non-working hours — DONE 2026-06-24
 - CSAT Survey — full end-to-end flow (public page, auto-send, ticket panel, API) — DONE 2026-06-24
 - Holiday Calendar — DONE 2026-06-24
 - First Reply Time metric (DB + stamping) — DONE 2026-06-24

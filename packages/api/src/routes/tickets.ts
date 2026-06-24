@@ -251,6 +251,155 @@ async function auditLog(
   });
 }
 
+// ── SLA deadline calculator (business hours + holidays) ──────────────────────
+/**
+ * Walks forward in time from `start`, counting only minutes that fall within
+ * business hours on non-holiday days, until `durationHours` of working time
+ * have been consumed.  Returns the wall-clock moment when the deadline is hit.
+ *
+ * If businessHoursOnly is false (or schedule is empty), falls back to simple
+ * clock arithmetic — no change from previous behaviour.
+ */
+function computeSlaDeadline(
+  start:            Date,
+  durationHours:    number,
+  businessHoursOnly: boolean,
+  schedule:         Record<string, { enabled: boolean; start: string; end: string }>,
+  holidayDates:     Set<string>,   // 'YYYY-MM-DD' strings in UTC
+): Date {
+  if (!businessHoursOnly || Object.keys(schedule).length === 0) {
+    return new Date(start.getTime() + durationHours * 3_600_000);
+  }
+
+  let remaining = durationHours * 60; // working minutes left to consume
+  const cursor  = new Date(start);
+
+  // Map day-name keys to 0-based JS getDay() (0=Sun … 6=Sat)
+  const DAY_MAP: Record<string, number> = {
+    sunday:0, monday:1, tuesday:2, wednesday:3,
+    thursday:4, friday:5, saturday:6,
+  };
+
+  // Build a lookup: dayIndex → {enabled, startMin, endMin} (minutes from midnight)
+  const dayConfig: Record<number, { enabled: boolean; startMin: number; endMin: number }> = {};
+  for (const [key, val] of Object.entries(schedule)) {
+    const dayIdx = DAY_MAP[key.toLowerCase()];
+    if (dayIdx === undefined) continue;
+    const toMin = (t: string) => {
+      const [h, m] = t.split(':').map(Number);
+      return (h ?? 0) * 60 + (m ?? 0);
+    };
+    dayConfig[dayIdx] = {
+      enabled:  val.enabled,
+      startMin: toMin(val.start ?? '09:00'),
+      endMin:   toMin(val.end   ?? '18:00'),
+    };
+  }
+
+  const MAX_DAYS = 365; // safety cap — never loop more than a year
+  let days = 0;
+
+  while (remaining > 0 && days < MAX_DAYS) {
+    const dayStr = cursor.toISOString().slice(0, 10); // 'YYYY-MM-DD'
+    const dow    = cursor.getUTCDay();
+    const cfg    = dayConfig[dow];
+
+    if (!cfg || !cfg.enabled || holidayDates.has(dayStr)) {
+      // Non-working day — skip to midnight of next day
+      cursor.setUTCDate(cursor.getUTCDate() + 1);
+      cursor.setUTCHours(0, 0, 0, 0);
+      days++;
+      continue;
+    }
+
+    // Current time in minutes from midnight (UTC)
+    const nowMin  = cursor.getUTCHours() * 60 + cursor.getUTCMinutes();
+    const workEnd = cfg.endMin;
+
+    if (nowMin >= workEnd) {
+      // Past business hours today — move to start of next day
+      cursor.setUTCDate(cursor.getUTCDate() + 1);
+      cursor.setUTCHours(0, 0, 0, 0);
+      days++;
+      continue;
+    }
+
+    // Clamp cursor to business hours start if before opening time
+    const effectiveStart = Math.max(nowMin, cfg.startMin);
+    if (effectiveStart > nowMin) {
+      cursor.setUTCHours(Math.floor(effectiveStart / 60), effectiveStart % 60, 0, 0);
+    }
+
+    // How many working minutes remain today?
+    const availableToday = workEnd - effectiveStart;
+
+    if (remaining <= availableToday) {
+      // Deadline falls within today's working hours
+      const finalMin = effectiveStart + remaining;
+      cursor.setUTCHours(Math.floor(finalMin / 60), finalMin % 60, 0, 0);
+      remaining = 0;
+    } else {
+      // Use up all of today and carry forward
+      remaining -= availableToday;
+      cursor.setUTCDate(cursor.getUTCDate() + 1);
+      cursor.setUTCHours(0, 0, 0, 0);
+      days++;
+    }
+  }
+
+  return cursor;
+}
+
+/** Fetch tenant holidays and compute both SLA deadlines for a ticket acceptance */
+async function buildSlaDeadlines(
+  db:       DatabaseClient,
+  tenantId: string,
+  start:    Date,
+  policy:   { first_response_hours: number; resolution_hours: number;
+               business_hours_only: boolean; business_hours_schedule: any },
+): Promise<{ firstResponseDue: Date; resolutionDue: Date }> {
+  // Fetch holidays for this tenant
+  const holidays = await db.withSuperAdmin(async (c) => {
+    const now = new Date();
+    const r = await c.query(
+      `SELECT date::text FROM sla_holidays
+       WHERE tenant_id = $1
+         AND (
+           -- exact-year match
+           date >= $2::date AND date <= ($2::date + INTERVAL '1 year')
+           OR
+           -- recurring: same month/day in current or next year
+           (recurring = true AND
+            EXTRACT(MONTH FROM date) = ANY(ARRAY[
+              EXTRACT(MONTH FROM $2::date)::int,
+              EXTRACT(MONTH FROM ($2::date + INTERVAL '1 year'))::int
+            ]))
+         )`,
+      [tenantId, now.toISOString()],
+    );
+    return r.rows;
+  });
+
+  const holidaySet = new Set<string>(holidays.map((h: any) => {
+    // For recurring holidays, substitute the current/next year
+    const [, mm, dd] = (h.date as string).split('-');
+    const thisYear  = new Date().getUTCFullYear();
+    const candidate = `${thisYear}-${mm}-${dd}`;
+    return new Date(candidate) >= start ? candidate : `${thisYear + 1}-${mm}-${dd}`;
+  }));
+
+  const schedule = (policy.business_hours_schedule as Record<string, any>) ?? {};
+
+  return {
+    firstResponseDue: computeSlaDeadline(
+      start, policy.first_response_hours, policy.business_hours_only, schedule, holidaySet,
+    ),
+    resolutionDue: computeSlaDeadline(
+      start, policy.resolution_hours, policy.business_hours_only, schedule, holidaySet,
+    ),
+  };
+}
+
 /** Generate a CSAT survey token, store it, and email the reporter */
 async function sendCsatSurvey(
   db:        DatabaseClient,
@@ -1319,10 +1468,12 @@ ${note ? `<p><strong>Reason:</strong> ${note}</p>` : ''}
       const tenantId = req.tenant.id;
       const userId   = req.user.sub;
 
-      // Fetch ticket + SLA policy
+      // Fetch ticket + full SLA policy (need business hours fields for deadline calc)
       const [existing] = await db.withTenant(tenantId, async (client) => {
         const r = await client.query(
-          `SELECT t.*, s.resolution_hours
+          `SELECT t.*,
+                  s.first_response_hours, s.resolution_hours,
+                  s.business_hours_only, s.business_hours_schedule
            FROM tickets t
            LEFT JOIN sla_policies s ON t.sla_policy_id = s.id
            WHERE t.id = $1`,
@@ -1337,19 +1488,29 @@ ${note ? `<p><strong>Reason:</strong> ${note}</p>` : ''}
       }
 
       const acceptedAt = new Date();
-      const resHours   = existing.resolution_hours ?? 24;
-      const slaDueAt   = new Date(acceptedAt.getTime() + resHours * 3_600_000);
+
+      // Compute deadlines honouring business hours + public holidays
+      const policy = {
+        first_response_hours:    existing.first_response_hours    ?? 4,
+        resolution_hours:        existing.resolution_hours        ?? 24,
+        business_hours_only:     existing.business_hours_only     ?? false,
+        business_hours_schedule: existing.business_hours_schedule ?? {},
+      };
+      const { firstResponseDue, resolutionDue: slaDueAt } = await buildSlaDeadlines(
+        db, tenantId, acceptedAt, policy,
+      );
 
       const [ticket] = await db.withTenant(tenantId, async (client) => {
         const r = await client.query(
           `UPDATE tickets
            SET status = 'accepted',
-               accepted_at = $1,
-               sla_due_at  = $2,
-               assignee_id = COALESCE(assignee_id, $3),
+               accepted_at       = $1,
+               sla_due_at        = $2,
+               first_response_at = $3,
+               assignee_id = COALESCE(assignee_id, $4),
                updated_at  = NOW()
-           WHERE id = $4 RETURNING *`,
-          [acceptedAt, slaDueAt, userId, id],
+           WHERE id = $5 RETURNING *`,
+          [acceptedAt, slaDueAt, firstResponseDue, userId, id],
         );
         return r.rows;
       });
