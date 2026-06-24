@@ -136,3 +136,9 @@ _All ideas, pending work, and deferred items. Prioritised against enterprise rea
 - Tenant admin operational lockout — DONE 2026-06-24
 - CRM visibility scoping (line-manager tree) — DONE 2026-06-24
 - Sales ticket → deal conversion — DONE 2026-06-24
+- Ticket visibility guards (department-scoped, hierarchy-aware) — DONE 2026-06-24
+- Cross-department originator view (read-only after acceptance, "👁 View only" badge, write blocked) — DONE 2026-06-24
+- Complaints Manager created — correct 3-department hierarchy (Support/Complaints/Sales each with own manager) — DONE 2026-06-24
+- Reports hub — 10 downloadable CSV reports (6 manager, 4 agent) — DONE 2026-06-24
+- Ops Dashboard KPI strip (CSAT, SLA %, avg resolution, avg first response) — DONE 2026-06-24
+- Analytics sidebar collapsible section (Ops Dashboard + Ticket Reports sub-links) — DONE 2026-06-24

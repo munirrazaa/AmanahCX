@@ -3,6 +3,46 @@ _Most recent at top. Treated as the primary record for development tracking._
 
 ---
 
+## Change Log - 2026-06-24 (Visibility Guards, Originator View, Reports Hub, Complaints Manager)
+
+### Added
+**Ticket visibility guards — department-scoped, hierarchy-aware**
+- `GET /api/v1/tickets` now enforces `getVisibleUserIds`: agents see only tickets assigned to them; managers see their full reportee hierarchy; super_admin/tenant_admin see all.
+- Visibility is department-scoped — Support Manager sees only Support team tickets; Complaints Manager sees only Complaints team.
+
+**Cross-department originator view**
+- When a support agent creates a ticket that is routed to and accepted by another department (Sales or Complaints), the originating agent retains read-only visibility on that ticket.
+- `is_originated_by_me` + `assignee_department` fields added to ticket list response.
+- Frontend shows an amber **"👁 View only"** badge on these tickets in the list and detail panel.
+- Write attempts on originated cross-dept tickets return `ORIGINATOR_READONLY` (HTTP 403).
+- Industry standard (Zendesk / Freshdesk / Salesforce): originator keeps status/resolution visibility but cannot act on the ticket once accepted by another team.
+
+**Complaints Manager — correct department hierarchy**
+- Created `Complaints Manager` (`complaints.manager@demo.com`) for the demo tenant.
+- Complaints Agent now correctly reports to Complaints Manager, not Support Manager.
+- Full 3-department hierarchy: Support Manager → Support Agent; Complaints Manager → Complaints Agent; Sales Manager → Sales Agent.
+
+**Reports hub (10 downloadable CSV reports)**
+- New `/reports` page available to both managers and agents from the sidebar.
+- Manager reports: Ticket Volume, SLA Performance, Agent Performance, CSAT, Issue Categories, Ticket Backlog.
+- Agent reports: My Tickets, My Activities, My SLA, My Call Log.
+- All reports export to CSV with correct column headers and live data.
+
+**Ops Dashboard KPI strip**
+- Added 4-card live KPI strip to the Manager Dashboard: CSAT Score, SLA Compliance %, Avg Resolution Time, Avg First Response Time.
+
+**Analytics sidebar section**
+- Collapsible "Analytics" button in the manager sidebar with sub-links: Ops Dashboard and Ticket Reports.
+
+### Modified
+- Sales Agent ticket permission changed from `none` to `view` — sales agents can now access tickets assigned to them (their core workflow).
+- Sales Manager ticket permission changed from `none` to `full`.
+
+### Fixed
+- Complaints Agent was incorrectly reporting to Support Manager, causing Support Manager to see Complaints tickets. Fixed by creating a dedicated Complaints Manager.
+
+---
+
 ## Change Log - 2026-06-24 (Ticket Reports)
 
 ### Added

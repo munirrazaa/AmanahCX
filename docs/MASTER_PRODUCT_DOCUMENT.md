@@ -2,7 +2,7 @@
 **AI Operations Platform — Multi-Tenant CRM, Contact-Centre & Sales Suite**
 _Single source of truth for system requirements & behaviour. Update only affected sections on each change._
 
-Last updated: 2026-06-24
+Last updated: 2026-06-24 (visibility guards, originator view, reports hub, complaints manager)
 
 ---
 
@@ -23,7 +23,12 @@ and team collaboration.
    Agent, Viewer + custom). Four system roles auto-seeded.
 3. **Record visibility (whose records):** hard filter by line-manager tree
    (`getVisibleUserIds`, `packages/api/src/lib/visibility.ts`) — agent = own; line manager = team;
-   manager = department. Applies to contacts, deals, activities, companies, opportunities, dashboards.
+   manager = department. Applies to contacts, deals, activities, companies, opportunities, dashboards,
+   and tickets. Department-scoped: Support Manager sees only Support tickets; Complaints Manager sees
+   only Complaints tickets; Sales Manager sees only Sales tickets.
+   **Cross-dept originator view:** an agent who creates a ticket routed to another department retains
+   read-only visibility after that ticket is accepted (`accepted_at IS NOT NULL`). Writes return
+   `ORIGINATOR_READONLY` (403). Enforced at API level, signalled in the UI with a "👁 View only" badge.
 4. **Separation of duties:** `tenant_admin` is administrative-only — **blocked** from all operational
    + billing routes (gateway in `server.ts`); home is Settings. Billing (subscription + invoicing)
    belongs to a Finance/Sales role, never the admin.
@@ -31,8 +36,21 @@ and team collaboration.
 ## 3. Modules (capability surface)
 Core CRM (contacts, companies, deals, activities) · Sales & Invoicing (invoices, billing-contacts,
 payments, dashboard, templates, settings) · Ticketing/Contact-Centre (queues, routing, SLA/TAT, CSAT,
-milestones) · Voice + Voice-bot (Nadia/LiveKit) · Email inbox · Analytics & Reports · Team Messaging ·
-Integrations (connectors, webhooks, API keys) · Departments & Opportunities · Super-Admin console.
+milestones) · Voice + Voice-bot (Nadia/LiveKit) · Email inbox · Analytics & Reports (Ops Dashboard KPI
+strip: CSAT, SLA %, avg resolution, avg first response; Reports hub: 6 manager + 4 agent CSV reports)
+· Team Messaging · Integrations (connectors, webhooks, API keys) · Departments & Opportunities ·
+Super-Admin console.
+
+## 3.1 Department Structure (standard)
+Every operational department has its own manager — industry standard for contact-centre CRMs:
+
+| Department | Manager | Agents |
+|---|---|---|
+| Support | Support Manager | Support Agents |
+| Complaints | Complaints Manager | Complaints Agents |
+| Sales | Sales Manager | Sales Agents |
+
+Manager hierarchy is recursive: a manager-of-managers sees all tickets in their full sub-tree.
 
 ## 4. Key Workflows
 ### 4.1 Customer onboarding

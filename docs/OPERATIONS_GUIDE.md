@@ -24,6 +24,13 @@ Last updated: 2026-06-24
 - [Access & Roles](#access--roles)
   - [Entitlements — Licensing Modules per Workspace](#entitlements--licensing-modules-per-workspace)
   - [Role Permissions — What Each Team Member Can Do](#role-permissions--what-each-team-member-can-do)
+- [Ticket Visibility & Department Guards](#ticket-visibility--department-guards)
+  - [Who Sees Which Tickets](#who-sees-which-tickets)
+  - [Cross-Department Originator View](#cross-department-originator-view)
+- [Reports Hub — Downloadable CSV Reports](#reports-hub--downloadable-csv-reports)
+  - [Manager Reports](#manager-reports)
+  - [Agent Reports](#agent-reports)
+- [Ops Dashboard — Live KPI Strip](#ops-dashboard--live-kpi-strip)
 
 ---
 
@@ -450,3 +457,165 @@ Each workspace has a hierarchy of roles: Admin, Manager, Agent, Viewer, plus cus
 - Tenant Admin is deliberately blocked from operational routes — they configure the workspace but do not handle tickets or customer data.
 - Permissions cannot exceed what the workspace is entitled to (licensing ceiling).
 - Four system roles are auto-seeded on workspace creation. Custom roles can be added but not system ones deleted.
+
+---
+
+# Ticket Visibility & Department Guards
+
+---
+
+## Who Sees Which Tickets
+
+**Module:** Ticketing
+**Who it affects:** All agents and managers
+
+### What it does
+Every user's ticket list is automatically filtered by their role and department. No configuration is needed — the system enforces it on every request.
+
+| Role | Tickets visible |
+|---|---|
+| **Agent** | Only tickets assigned to them personally |
+| **Line Manager** | All tickets assigned to any of their direct and indirect reportees (their full team tree) |
+| **Manager of Managers** | All tickets across their full reporting hierarchy, recursively |
+| **Super Admin / Platform** | All tickets across all departments |
+
+### Department boundaries
+Each department has its own manager. Managers only see tickets within their own department's team tree:
+
+- **Support Manager** → sees Support team tickets only
+- **Complaints Manager** → sees Complaints team tickets only
+- **Sales Manager** → sees Sales team tickets only
+
+A Support Manager does **not** see Complaints or Sales tickets, even if all agents technically sit under one company.
+
+### Department hierarchy (standard)
+The platform follows the global standard for contact-centre CRMs — every operational department has its own dedicated manager:
+
+| Department | Manager role | Agents |
+|---|---|---|
+| Support | Support Manager | Support Agents |
+| Complaints | Complaints Manager | Complaints Agents |
+| Sales | Sales Manager | Sales Agents |
+
+Each agent's `Reports To` field in their profile determines which manager's hierarchy they appear in.
+
+### Rules & limits
+- An agent with no manager set only sees their own tickets.
+- Reassigning a ticket to an agent in another department does not change who can view it — visibility follows the assignee's hierarchy.
+- Tenant Admin is excluded from operational visibility and sees no tickets.
+
+---
+
+## Cross-Department Originator View
+
+**Module:** Ticketing
+**Who it affects:** Agents who create tickets that are routed to another department (e.g. a Support Agent who raises a Sales or Complaints ticket on a customer's behalf)
+
+### What it does
+When a support agent creates a ticket and it is routed to and **accepted** by a different department (Sales or Complaints), the originating agent keeps **read-only visibility** of that ticket. They can see the status and resolution, but cannot edit or act on it.
+
+This is the industry standard used by Zendesk, Freshdesk, and Salesforce Service Cloud.
+
+### How it works in practice
+
+1. Customer calls in → Support Agent handles the call.
+2. Support Agent identifies a sales opportunity and creates a Sales ticket on the customer's behalf.
+3. The ticket routes to the Sales queue → Sales Agent accepts it (SLA clock starts).
+4. **From this point:** Support Agent sees the ticket in their list with a **"👁 View only"** amber badge.
+5. Support Agent can see the ticket status, notes, and whether it was resolved or converted to a deal — but cannot change anything.
+6. The Sales Agent owns the ticket fully and works it to resolution.
+
+### What "View only" means
+- Can: read all ticket details, comments, and status updates
+- Cannot: change status, priority, assignee, add comments, close, or escalate
+- Any attempt to edit returns an error: "This ticket has been accepted by another department. You have read-only access as the originator."
+
+### When originator view is NOT triggered
+- Ticket has not yet been accepted by the other department (still in queue) — the originator can still edit it
+- Ticket is assigned to someone in the same department — no restriction, normal edit access applies
+- The ticket creator is a Manager or Admin — no restriction
+
+---
+
+# Reports Hub — Downloadable CSV Reports
+
+---
+
+## Reports Hub — Downloadable CSV Reports
+
+**Module:** Reports
+**Who it affects:** Managers (6 reports) · Agents (4 reports)
+
+### What it does
+The Reports page gives every user a set of downloadable CSV reports relevant to their role. Reports are generated from live data and can be exported at any time. Available from the sidebar under **Reports**.
+
+### How to download a report
+1. Click **Reports** in the sidebar.
+2. Select the date range (7, 14, or 30 days for most reports).
+3. Click **Download CSV**.
+4. The file opens in Excel or any spreadsheet tool.
+
+---
+
+## Manager Reports
+
+| Report | What it shows |
+|---|---|
+| **Ticket Volume** | Daily breakdown of tickets created, resolved, SLA breached, by priority and channel |
+| **SLA Performance** | Weekly SLA compliance %, average resolution time, average first response time, escalation rate |
+| **Agent Performance** | Per-agent breakdown: tickets assigned, accepted, resolved, SLA compliance, calls today |
+| **CSAT** | Individual survey responses with rating, comment, ticket reference, and assigned agent |
+| **Issue Categories** | Most common ticket tags/categories — total volume, resolution rate, average resolution time, breach rate |
+| **Ticket Backlog** | Full list of all open/pending tickets with age, SLA status, priority, and assignee |
+
+All manager reports are scoped to the manager's department hierarchy (the same visibility rules as the ticket list).
+
+---
+
+## Agent Reports
+
+| Report | What it shows |
+|---|---|
+| **My Tickets** | All tickets assigned to me — status, priority, channel, SLA due, resolved date |
+| **My Activities** | All my logged activities — calls, emails, meetings, tasks — with completion status |
+| **My SLA** | My personal SLA performance — compliance %, average resolution and first response times |
+| **My Call Log** | All inbound/outbound calls — duration, status, direction, sentiment, bot-handled flag |
+
+All agent reports are scoped to the logged-in agent's own data only.
+
+### Rules & limits
+- Reports respect the same visibility rules as the ticket list — agents cannot download data outside their scope.
+- CSAT report will be empty until customers respond to surveys.
+- Call Log requires Voice module to be licensed.
+
+---
+
+# Ops Dashboard — Live KPI Strip
+
+---
+
+## Ops Dashboard — Live KPI Strip
+
+**Module:** Analytics (Managers only)
+**Who it affects:** Managers
+
+### What it does
+The Manager Ops Dashboard includes a 4-card KPI strip at the top showing real-time team performance — benchmarked against top CRM standards (Zendesk, Freshdesk).
+
+| KPI | What it measures | Why it matters |
+|---|---|---|
+| **CSAT Score** | Average customer satisfaction rating (1–5 scale) from survey responses | Industry benchmark: 4.0+ is good; below 3.5 needs attention |
+| **SLA Compliance %** | Percentage of tickets resolved within their SLA deadline | Industry benchmark: 90%+ target; below 80% is a risk |
+| **Avg Resolution Time** | Average hours from ticket creation to resolution | Shorter = better; varies by department and ticket type |
+| **Avg First Response** | Average minutes from ticket creation to first agent reply | Industry benchmark: under 1 hour for standard; under 15 min for urgent |
+
+### Colour coding
+- **Green** — above target
+- **Amber** — approaching threshold
+- **Red** — below benchmark (action needed)
+
+### How to use it
+1. Log in as a Manager.
+2. Go to **Analytics → Ops Dashboard** in the sidebar.
+3. KPIs update in real time as tickets are resolved and surveys are completed.
+4. Click **Full report →** next to SLA Compliance to open the detailed Ticket Reports page.
