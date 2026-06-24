@@ -800,7 +800,7 @@ function HolidayCalendar({ canEdit }: { canEdit: boolean }) {
                 <div>
                   <p className="text-sm font-medium text-gray-900">{h.name}</p>
                   <p className="text-xs text-gray-500">
-                    {new Date(h.date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}
+                    {new Date(h.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' })}
                     {h.recurring && <span className="ml-2 text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded-full text-[10px]">↻ Yearly</span>}
                   </p>
                 </div>

@@ -810,7 +810,7 @@ export function ticketRoutes(db: DatabaseClient, eventBus: EventBus) {
 
     fastify.get('/holidays', { preHandler: requireScope('tickets:read') }, async (req, reply) => {
       const holidays = await db.withTenant(req.tenant.id, async (client) => {
-        const r = await client.query('SELECT * FROM sla_holidays ORDER BY date ASC');
+        const r = await client.query('SELECT id, tenant_id, name, date::text, recurring, created_at FROM sla_holidays ORDER BY date ASC');
         return r.rows;
       });
       return reply.send({ success: true, data: holidays });
@@ -823,7 +823,7 @@ export function ticketRoutes(db: DatabaseClient, eventBus: EventBus) {
           `INSERT INTO sla_holidays (tenant_id, name, date, recurring)
            VALUES ($1,$2,$3,$4)
            ON CONFLICT (tenant_id, date) DO UPDATE SET name = EXCLUDED.name, recurring = EXCLUDED.recurring
-           RETURNING *`,
+           RETURNING id, tenant_id, name, date::text, recurring, created_at`,
           [req.tenant.id, body.name, body.date, body.recurring],
         );
         return r.rows;
@@ -840,7 +840,7 @@ export function ticketRoutes(db: DatabaseClient, eventBus: EventBus) {
              name      = COALESCE($1, name),
              date      = COALESCE($2::date, date),
              recurring = COALESCE($3, recurring)
-           WHERE id = $4 RETURNING *`,
+           WHERE id = $4 RETURNING id, tenant_id, name, date::text, recurring, created_at`,
           [body.name ?? null, body.date ?? null, body.recurring ?? null, id],
         );
         return r.rows;
