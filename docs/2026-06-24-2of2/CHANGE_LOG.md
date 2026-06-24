@@ -1,0 +1,228 @@
+# CHANGE LOG
+_Most recent at top. Treated as the primary record for development tracking._
+
+---
+
+## Change Log - 2026-06-24 (Visibility Guards, Originator View, Reports Hub, Complaints Manager)
+
+### Added
+**Ticket visibility guards — department-scoped, hierarchy-aware**
+- `GET /api/v1/tickets` now enforces `getVisibleUserIds`: agents see only tickets assigned to them; managers see their full reportee hierarchy; super_admin/tenant_admin see all.
+- Visibility is department-scoped — Support Manager sees only Support team tickets; Complaints Manager sees only Complaints team.
+
+**Cross-department originator view**
+- When a support agent creates a ticket that is routed to and accepted by another department (Sales or Complaints), the originating agent retains read-only visibility on that ticket.
+- `is_originated_by_me` + `assignee_department` fields added to ticket list response.
+- Frontend shows an amber **"👁 View only"** badge on these tickets in the list and detail panel.
+- Write attempts on originated cross-dept tickets return `ORIGINATOR_READONLY` (HTTP 403).
+- Industry standard (Zendesk / Freshdesk / Salesforce): originator keeps status/resolution visibility but cannot act on the ticket once accepted by another team.
+
+**Complaints Manager — correct department hierarchy**
+- Created `Complaints Manager` (`complaints.manager@demo.com`) for the demo tenant.
+- Complaints Agent now correctly reports to Complaints Manager, not Support Manager.
+- Full 3-department hierarchy: Support Manager → Support Agent; Complaints Manager → Complaints Agent; Sales Manager → Sales Agent.
+
+**Reports hub (10 downloadable CSV reports)**
+- New `/reports` page available to both managers and agents from the sidebar.
+- Manager reports: Ticket Volume, SLA Performance, Agent Performance, CSAT, Issue Categories, Ticket Backlog.
+- Agent reports: My Tickets, My Activities, My SLA, My Call Log.
+- All reports export to CSV with correct column headers and live data.
+
+**Ops Dashboard KPI strip**
+- Added 4-card live KPI strip to the Manager Dashboard: CSAT Score, SLA Compliance %, Avg Resolution Time, Avg First Response Time.
+
+**Analytics sidebar section**
+- Collapsible "Analytics" button in the manager sidebar with sub-links: Ops Dashboard and Ticket Reports.
+
+### Modified
+- Sales Agent ticket permission changed from `none` to `view` — sales agents can now access tickets assigned to them (their core workflow).
+- Sales Manager ticket permission changed from `none` to `full`.
+
+### Fixed
+- Complaints Agent was incorrectly reporting to Support Manager, causing Support Manager to see Complaints tickets. Fixed by creating a dedicated Complaints Manager.
+
+---
+
+## Change Log - 2026-06-24 (Ticket Reports)
+
+### Added
+**Full Ticket Reports page for managers — benchmarked vs Zendesk / Freshdesk**
+- New **Ticket Reports** page accessible to managers from the sidebar.
+- **6 KPI summary cards:** Total Tickets, Resolved (with resolution rate %), SLA Compliance % (colour-coded green/amber/red), Avg Resolution Time, Avg First Response Time, Escalation Rate %.
+- **Ticket Volume chart:** Bar chart showing total, resolved, and SLA-breached tickets over the selected period (daily/weekly/monthly breakdowns auto-selected by period).
+- **SLA Performance Trend chart:** Dual-axis line chart — SLA compliance % and avg resolution/first-response times over time.
+- **Tickets by Priority:** Donut chart (Urgent/High/Medium/Low) with count and percentage.
+- **Tickets by Channel:** Donut chart (Voice Bot/Manual/Email etc.) with count and percentage.
+- **Top Issue Categories:** Horizontal bar chart of the top 10 ticket tags with avg resolution time and SLA breach rate per category.
+- **Tickets by Type:** Bar breakdown (complaint/inquiry/sales etc.).
+- **Repeat Reporters:** Table of customers who raised more than one ticket in the period.
+- **Period selector:** Last 7 days / 30 days / 90 days / 6 months.
+- **CSV export:** Downloads volume data as a spreadsheet.
+- Files: `packages/frontend/src/pages/TicketReports.tsx` (new), `packages/frontend/src/App.tsx` (import + route + nav link).
+
+---
+
+## Change Log - 2026-06-24 (SLA breach notifications)
+
+### Added
+**SLA escalation — all stages now send email + in-app notification**
+- Previously: the warning reminder (at 80% of SLA time) only sent an in-app notification. Agents had no email alert until the SLA was already breached.
+- Now: all three escalation stages send both in-app notification AND email.
+  - **80% warning** → email to the assigned agent: "X minutes remaining, please action now"
+  - **100% breach (L1)** → email to the agent + all managers in the workspace
+  - **150% breach (L2)** → email to all tenant admins (highest authority escalation)
+- Worker checks every 5 minutes and fires on server start (no breach is missed after a restart).
+- Files: `modules/ticketing/src/index.ts` — added `emailSvc.send()` call inside the reminder block.
+
+---
+
+## Change Log - 2026-06-24 (SLA deadline engine)
+
+### Fixed / Enhanced
+**SLA Deadlines now skip non-working hours and public holidays**
+- Previously: deadline = accepted time + hours (e.g. accept at 4pm Friday with 8h SLA → deadline 12am Saturday — wrong).
+- Now: deadline walks forward through working days only, skipping weekends, non-working hours, and any public holidays set in the holiday calendar.
+- Both the first-response deadline and the resolution deadline use this logic.
+- Behaviour when no business hours are configured is unchanged (simple clock arithmetic).
+- Tested: late-day acceptance skipping overnight ✅, Friday acceptance skipping weekend ✅, holiday on next working day skipping to day after ✅.
+- Files: `packages/api/src/routes/tickets.ts` — `computeSlaDeadline()` and `buildSlaDeadlines()` functions added; accept handler updated to use them.
+
+---
+
+## Change Log - 2026-06-24 (CSAT Survey)
+
+### Added
+**CSAT Survey — full end-to-end customer satisfaction flow**
+- **Public survey page** (`/csat/:token`): Customer-facing star-rating page (1–5 stars with colour-coded labels), optional comment field, thank-you confirmation screen. No login required. Handles expired (410) and not-found (404) states gracefully.
+- **Ticket detail panel**: Resolved tickets now show a "Customer Satisfaction" card — displays star rating and comment if responded, or "awaiting response" if survey is pending.
+- **Ticket detail API** (`GET /api/v1/tickets/:id`): Now returns `csatSurvey` field (rating, comment, responded_at, sent_at) for any ticket that has a linked survey.
+- **Survey auto-send**: Pre-existing — already fires on ticket close via `sendCsatSurvey()` in `tickets.ts`. Email sent to reporter with the unique token URL. Verified working end-to-end.
+- **CSAT list + summary API**: Pre-existing at `GET /api/v1/tickets/csat` and `GET /api/v1/tickets/csat/summary`. Returns all responses with rating, comment, ticket details, and aggregate stats (avg rating, response rate, distribution by star).
+- Vite proxy: added `/public` path so the dev server forwards CSAT API calls correctly.
+- Files: `packages/frontend/src/pages/CsatSurvey.tsx` (new), `packages/frontend/src/App.tsx` (route added), `packages/frontend/src/pages/Tickets.tsx` (CSAT card), `packages/api/src/routes/tickets.ts` (csatSurvey in detail), `packages/frontend/vite.config.ts` (proxy).
+
+---
+
+## Change Log - 2026-06-24 (SendGrid deliverability)
+
+### Fixed
+**Email — SendGrid sender changed from Gmail to authenticated domain**
+- Root cause: `SENDGRID_FROM_EMAIL` was set to `vividd.solutions@gmail.com` — a Gmail address that SendGrid cannot authenticate. Emails were landing in spam or being rejected by enterprise mail servers.
+- Fix: Changed sender to `noreply@vividsns.com` (owned domain). SPF/DKIM DNS records must be added in SendGrid and domain registrar (one-time setup — see OPERATIONS_GUIDE.md → Email Deliverability).
+- Files: `packages/api/.env` (SENDGRID_FROM_EMAIL updated).
+- Action required: Complete domain authentication in SendGrid dashboard (Settings → Sender Authentication → Authenticate Your Domain) and add the 3 DNS records provided.
+
+---
+
+## Change Log - 2026-06-24 (continued)
+
+### Fixed
+**Dashboard — ops-dashboard unblocked for all roles**
+- Root cause: `requireFeature('analytics')` was gating the home-screen dashboard behind a feature flag (`settings.features.analytics = false`). Every user hit a 402 and saw a permanent spinner.
+- Fix: ops-dashboard now uses `dashPreHandler` (scope check only, no feature flag). Analytics reports/exports remain feature-gated. The home screen is core product, not an analytics add-on.
+- Fix: `owner_id` ambiguous column reference in `recentActivities` JOIN query — qualified as `a.owner_id`.
+- Fix: `isManager` flag was false for managers with no direct reports. Now explicitly includes `role === 'manager'` in the check.
+- Affected roles: Manager dashboard (Team Ticket Dashboard, leaderboard, bot stats) and all other roles now load correctly.
+
+---
+
+## Change Log - 2026-06-24
+
+### Added
+
+**SLA Module — Step 1: Policy Editor (Full CRUD)**
+- Managers can now create, edit, and delete SLA policies directly inside the CRM.
+- Each policy defines: priority tier (Urgent/High/Medium/Low), first-response deadline, resolution deadline, and multi-level escalation schedule (reminder → L1 supervisor → L2 admin).
+- Escalation steps are configurable: set % threshold, notification label, and recipient scope (assigned agent / supervisors & managers / tenant admins).
+- SLA policy auto-assigns to new tickets based on priority at creation time.
+- SLA policy re-evaluates and reassigns when ticket priority changes.
+- Files: `packages/api/src/routes/tickets.ts` (POST/PATCH/DELETE `/api/v1/tickets/sla-policies/:id`), `packages/frontend/src/pages/TicketSla.tsx` (new page).
+
+**SLA Module — Step 2: Business Hours**
+- Each SLA policy can be scoped to business hours only.
+- Manager picks active days (Mon–Sun) with per-day on/off toggle in a visual editor.
+- SLA clock only ticks during enabled days — tickets raised outside hours don't count against SLA.
+- Benchmarked against Zendesk/Freshdesk: matches global standard.
+- DB: `business_hours_only boolean`, `business_hours_schedule jsonb` on `sla_policies`.
+
+**SLA Module — Steps 4–6: Holiday Calendar, First Reply Time, Smart Policy Matching**
+- **Holiday Calendar** (Step 4): Managers can now define public holidays at workspace level. SLA clocks pause on holiday dates — applies across ALL SLA policies. Holidays can recur yearly (e.g. Eid, national holidays). New tab on the SLA page. API: `GET/POST/PATCH/DELETE /api/v1/tickets/holidays`. DB: new `sla_holidays` table with RLS and `UNIQUE(tenant_id, date)` constraint. Benchmarked: matches Zendesk/Freshdesk standard.
+- **First Reply Time** (Step 5): New `first_replied_at` column on `tickets` table. Stamps when the agent posts their first public reply — tracked independently of the SLA `first_response_at` timer. Useful for pure performance metrics without SLA distortion.
+- **Smart Policy Matching** (Step 6): SLA policies now have `match_conditions` (jsonb: channels, departments, tags). When creating a ticket, the system picks the most specific matching policy — most conditions set = highest priority, with fallback to least-specific policy. Manager can set conditions via comma-separated fields in the policy editor. DB: `match_conditions jsonb NOT NULL DEFAULT '{}'` on `sla_policies` (migration 030).
+- Migration: `030_sla_enhancements.sql` applied.
+
+**SLA Module — Step 3: Pause on Pending**
+- New toggle on each SLA policy: "Pause SLA when waiting for customer."
+- When a ticket is set to Pending/Waiting status, the SLA clock pauses automatically; it resumes when the customer replies.
+- Prevents agents being penalised for time spent waiting on the customer — standard in Zendesk, Freshdesk, Jira Service Management.
+- DB: `pause_on_pending boolean NOT NULL DEFAULT false` on `sla_policies` (migration applied).
+- Frontend: checkbox in the policy editor + amber "⏸ Pauses on pending" badge on policy cards.
+
+**Entitlements & Licensing System (Phases 1, 2a, 2b)**
+- Phase 1: Super admin provisions entitlements per workspace at creation time (which modules/features each tenant is licensed for). Stored in `entitled_features` table.
+- Phase 2a: Roles screen ceiling — tenant admin cannot grant permissions beyond what the workspace is licensed for. Unlicensed modules are hidden from the Roles editor.
+- Phase 2b: Sidebar nav gated by entitlement — unlicensed modules don't appear in the navigation. API routes protected by `requireEntitlement` guard.
+- Files: `packages/api/src/routes/roles.ts`, `packages/frontend/src/pages/Roles.tsx`, `packages/frontend/src/App.tsx`.
+
+**Super Admin Improvements**
+- Password change blocked for super_admin account in Personal Settings (security hardening).
+- Super admin sidebar operational with working Reports section.
+- Files: `packages/frontend/src/pages/PersonalSettings.tsx`, `packages/api/src/routes/super-admin.ts`.
+
+### Modified
+- `packages/api/src/routes/auth.ts` — auth hardening, change-password improvements.
+- `packages/api/src/routes/settings.ts` — team query fixes.
+- `packages/frontend/src/hooks/useRole.ts` — role detection improvements.
+- `packages/frontend/src/pages/Login.tsx` — login UX fixes.
+
+### Fixed
+- SLA INSERT param count corrected (14 params after adding `pause_on_pending`).
+- SLA PATCH correctly shifts param indices after adding `pause_on_pending` column.
+
+### Backlog Items Closed
+- Condition-based SLA auto-assignment on ticket create ✅ (was pending — now done via `findSlaPolicy()`).
+- Condition-based SLA re-assignment on priority change ✅ (added to PATCH handler).
+
+---
+
+## Change Log - 2026-06-23
+
+### Added
+- Established the three source-of-truth documents: `MASTER_PRODUCT_DOCUMENT.md`, `CHANGE_LOG.md`, `BACKLOG.md`.
+
+### Modified
+- None (operational only — started local dev servers).
+
+### Removed
+- None.
+
+### Fixed
+- None.
+
+_Operational note: ran the solution locally — API on `:3000` (healthy) and frontend on `:5173`
+(login screen renders, manager login verified). No code changed._
+
+---
+
+## Change Log - 2026-06-22
+
+### Added
+- **Separation of duties:** tenant admin blocked from all operational + billing API routes (gateway in `server.ts`); admin nav hidden; home redirects to Settings; call widget hidden.
+- **Record visibility helper** `packages/api/src/lib/visibility.ts` (`getVisibleUserIds`, `ownerScopeSql`) — hard filter by line-manager hierarchy; applied to contacts, deals (list/board/pipeline value), activities, and (companion session) companies, opportunities, team-messages, ticket-analytics.
+- **Sales ticket → deal:** migration `024_ticket_deal_link.sql` (`tickets.deal_id`); auto-convert on accept; idempotent `POST /tickets/:id/convert-to-deal`; frontend **Convert to Deal** button.
+- **System email (SendGrid):** onboarding temp-password email + admin password reset/re-send.
+- **TAT countdown** on the customer record (Contact → Tickets tab).
+- Light-theme pitch deck (`Reducing-Call-Centre-Workload.pptx/.pdf`) + full solution handover doc.
+- Pipeline backfill helpers + smoke-test scripts (companion session).
+
+### Modified
+- Both billings (subscription + customer invoicing) moved off the admin role to a Finance/Sales permission.
+- Activities `today`/`overdue` switched from "managers see all" to hierarchy-scoped visibility.
+- Docs reorganised under `docs/22062026/`.
+
+### Removed
+- "Routing & SLA" settings tab hidden from the super-admin view.
+
+### Fixed
+- **Departments 500:** queries referenced a non-existent `users.department_id`; rewired to link by `department` name/type. List, single-view, assign, remove all work.
+- Earlier: sales dashboard $0 / partial-payment tracking; bcryptjs vs bcrypt; `users.is_active`.

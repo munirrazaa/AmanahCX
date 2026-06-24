@@ -1,0 +1,621 @@
+# Operations Guide
+**AI Operations Platform — How It Works for Your Team**
+_Plain-language reference for workspace managers, agents, and admins.
+Updated automatically on every release. Each section covers one feature: who uses it, what it does, and exactly how to operate it._
+
+Last updated: 2026-06-24
+
+---
+
+## Table of Contents
+
+- [Home Dashboard — Role-Aware Home Screen](#home-dashboard--role-aware-home-screen)
+- [Ticketing & Contact Centre](#ticketing--contact-centre)
+  - [SLA Policies — Response & Resolution Timers](#sla-policies--response--resolution-timers)
+  - [Business Hours — When the SLA Clock Ticks](#business-hours--when-the-sla-clock-ticks)
+  - [Pause on Pending — Stop the Clock While Waiting](#pause-on-pending--stop-the-clock-while-waiting)
+  - [Holiday Calendar — Automatic SLA Pause on Public Holidays](#holiday-calendar--automatic-sla-pause-on-public-holidays)
+  - [First Reply Time — Measuring Agent Responsiveness](#first-reply-time--measuring-agent-responsiveness)
+  - [Smart Policy Matching — Right SLA for Every Ticket](#smart-policy-matching--right-sla-for-every-ticket)
+  - [CSAT Survey — Measuring Customer Satisfaction](#csat-survey--measuring-customer-satisfaction)
+  - [SLA Breach Alerts — Automatic Warnings & Escalations](#sla-breach-alerts--automatic-warnings--escalations)
+- [Email & Notifications](#email--notifications)
+  - [Email Deliverability — Sending from Your Domain](#email-deliverability--sending-from-your-domain)
+- [Access & Roles](#access--roles)
+  - [Entitlements — Licensing Modules per Workspace](#entitlements--licensing-modules-per-workspace)
+  - [Role Permissions — What Each Team Member Can Do](#role-permissions--what-each-team-member-can-do)
+- [Ticket Visibility & Department Guards](#ticket-visibility--department-guards)
+  - [Who Sees Which Tickets](#who-sees-which-tickets)
+  - [Cross-Department Originator View](#cross-department-originator-view)
+- [Reports Hub — Downloadable CSV Reports](#reports-hub--downloadable-csv-reports)
+  - [Manager Reports](#manager-reports)
+  - [Agent Reports](#agent-reports)
+- [Ops Dashboard — Live KPI Strip](#ops-dashboard--live-kpi-strip)
+
+---
+
+# Home Dashboard — Role-Aware Home Screen
+
+---
+
+## Home Dashboard — Role-Aware Home Screen
+
+**Module:** Platform Core
+**Who it affects:** All logged-in users — each role sees a different view tailored to their job
+
+### What it does
+The dashboard is the first screen every user sees after login. It automatically shows the right information for each role — an agent sees their own tickets and call queue, a manager sees their full team's performance, and a tenant admin sees workspace health. All data is filtered to the user's department automatically.
+
+### Who sees what
+
+| Role | Dashboard view | Key information shown |
+|---|---|---|
+| **Agent** | Personal performance | My open tickets, SLA countdown, TAT status, my recent calls, activity due today |
+| **Manager** | Team overview | Team ticket counts, agent leaderboard, bot stats, SLA breaches, calls in queue, recent open tickets |
+| **Tenant Admin** | Workspace health | Total users, role/department breakdown, voice bot status, email delivery health |
+| **Viewer** | Read-only personal view | Own tickets and activities (no edit access) |
+
+### Department scoping
+If a user belongs to a department (Sales, Support, Complaints), all dashboard metrics are automatically filtered to that department only. A banner at the top of the dashboard confirms which department is active. This ensures agents and managers only see data relevant to their team.
+
+### Quick action buttons
+Each role gets a row of quick-access buttons at the top of the dashboard matching their most common tasks:
+- **Agents/Managers:** New Ticket, Voice Calls, Bot Calls, Reports
+- **Tenant Admin:** Manage Users, Roles, Voice Bot, Email Logs
+
+### Live refresh
+The dashboard refreshes automatically every 30 seconds. A manual refresh button is available in the top right corner showing when data was last updated.
+
+### Example scenario
+> Munir logs in as Manager in the Complaints department. He sees "Good evening, Munir — Manager View · Complaints Dept". The dashboard shows his team's complaint tickets only: 12 open, 3 breaching SLA, 2 calls in queue. The agent leaderboard shows each agent's tickets and calls for today. All other departments' data is hidden.
+
+### Rules & limits
+- The dashboard is available to all roles — it is the home screen and cannot be disabled.
+- Data scope is determined at login by the user's role and department — it cannot be manually overridden from the dashboard.
+- Tenant Admin dashboard shows workspace configuration health only — no ticket or call operational data (by design: admins configure, agents operate).
+
+---
+
+# Ticketing & Contact Centre
+
+---
+
+## SLA Policies — Response & Resolution Timers
+
+**Module:** Ticketing / Contact Centre
+**Who it affects:** Managers (create & manage policies) · Agents (work under them) · Supervisors & Admins (receive escalation alerts)
+
+### What it does
+An SLA (Service Level Agreement) policy sets the maximum time your team has to respond to and resolve a ticket. It also defines what happens if those deadlines are at risk — automatically reminding and escalating before a breach occurs.
+
+### Who can do what
+
+| Role | Can do |
+|---|---|
+| Manager | Create, edit, delete SLA policies |
+| Tenant Admin | View policies (cannot edit operational settings) |
+| Agent | Works under the policy assigned to their ticket — no direct access |
+| Supervisor / L1 | Receives escalation notifications when threshold is crossed |
+| Admin / L2 | Receives critical escalation when breach is imminent |
+
+### How to use it — step by step
+
+1. Go to **SLA Policies** in the left sidebar (bottom section).
+2. Click **New Policy**.
+3. Fill in the policy name and select the **priority tier** it applies to (Urgent, High, Medium, or Low).
+4. Set the **First Response** deadline — how long until an agent must first reply.
+5. Set the **Resolution** deadline — total time to fully close the ticket.
+6. Add **escalation steps** using the schedule builder:
+   - **Reminder** — notifies the assigned agent at a % of time elapsed (e.g. 75%).
+   - **L1 Escalation** — notifies supervisors and managers (e.g. at 90%).
+   - **L2 Escalation** — notifies admins for critical/imminent breaches (e.g. at 100%).
+7. Click **Save Policy**.
+
+### Example scenario
+> JS Bank sets a High-priority SLA: first response in 2 hours, resolution in 8 hours.
+> Escalation steps: reminder to agent at 75% (6 hrs), L1 to supervisors at 90% (7.2 hrs), L2 to admins at 100%.
+> When a card-dispute ticket comes in marked High, it auto-assigns this policy. If the agent hasn't replied by hour 1.5, they get a reminder. At hour 7.2 the supervisor is alerted.
+
+### Rules & limits
+- Each policy applies to one priority tier (Urgent / High / Medium / Low).
+- Multiple policies can exist for the same priority — the most specific one wins (see Smart Policy Matching).
+- SLA clock starts when an agent **accepts** the ticket, not when it is created.
+- Deleting a policy does not affect tickets already assigned to it.
+
+---
+
+## Business Hours — When the SLA Clock Ticks
+
+**Module:** Ticketing / Contact Centre
+**Who it affects:** Managers (configure per policy) · Agents (affects their deadlines)
+
+### What it does
+Allows each SLA policy to count time only during your defined working hours. Tickets raised at 11 PM on a Friday won't burn through the weekend — the clock only ticks on the days and hours you specify.
+
+### How to use it — step by step
+
+1. Open an SLA policy (New or Edit).
+2. Toggle **Business Hours Only** on.
+3. A day-by-day schedule appears. Enable each working day and set its start/end time.
+4. Days left off (e.g. Saturday, Sunday) are fully excluded from the SLA countdown.
+5. Save the policy.
+
+### Example scenario
+> The Medium-priority SLA is set to business hours: Mon–Fri, 09:00–18:00.
+> A ticket arrives Friday at 5 PM with a 4-hour resolution target.
+> Only 1 hour counts on Friday (5–6 PM). The remaining 3 hours count from Monday 9 AM. The actual clock-deadline is Monday 12 PM — not Saturday 9 AM.
+
+### Rules & limits
+- Business hours are set per policy, not globally. A 24/7 call-centre policy can run with hours off; a back-office policy can run Mon–Fri only.
+- If business hours are off, the SLA clock runs 24/7 from ticket acceptance.
+
+---
+
+## Pause on Pending — Stop the Clock While Waiting
+
+**Module:** Ticketing / Contact Centre
+**Who it affects:** Managers (enable per policy) · Agents (pause by setting ticket to Pending)
+
+### What it does
+When an agent is waiting for the customer to respond — e.g. awaiting documents, a callback, or more information — they can set the ticket to **Pending**. If the SLA policy has this toggle enabled, the SLA clock pauses automatically and only resumes when the customer replies.
+
+### How to use it — step by step
+
+1. Open or create an SLA policy.
+2. Toggle **Pause SLA when waiting for customer** on.
+3. Save the policy.
+4. When an agent is waiting, they change the ticket status to **Pending / Waiting for Customer**.
+5. The SLA clock pauses. A "⏸ Paused" badge appears on the ticket.
+6. When the customer replies, the ticket moves back to Open and the clock resumes.
+
+### Example scenario
+> A loan-query ticket has an 8-hour resolution SLA. At hour 3, the agent requests documents from the customer and marks the ticket Pending. The clock freezes at 3 hrs elapsed. The customer replies 2 days later. The clock resumes — the agent still has 5 hours left, not 0.
+
+### Rules & limits
+- Only policies with this toggle on will pause. Policies without it keep running regardless of ticket status.
+- If an agent forgets to set the ticket to Pending, the clock does not pause — status must be explicitly changed.
+
+---
+
+## Holiday Calendar — Automatic SLA Pause on Public Holidays
+
+**Module:** Ticketing / Contact Centre
+**Who it affects:** Managers (manage the calendar) · All agents (SLA deadlines shift automatically)
+
+### What it does
+Managers define a list of public holidays for the workspace. On those dates, SLA clocks pause across all policies — no agent is penalised for time that falls on a holiday. Holidays can be set to recur yearly so they don't need to be re-entered each year.
+
+### How to use it — step by step
+
+1. Go to **SLA Policies** → click the **🗓 Holidays** tab.
+2. Click **Add Holiday**.
+3. Enter the holiday name (e.g. "Eid Al-Fitr"), the date, and tick **Repeat every year** if it recurs annually.
+4. Click **Add Holiday** — it appears in the list immediately.
+5. To edit a holiday (e.g. update next year's date), click the pencil icon.
+6. To remove a holiday, click the bin icon.
+
+### Example scenario
+> JS Bank adds Pakistan Day (23 March) and Eid Al-Fitr (31 March) to the holiday calendar, both set to recurring.
+> A High-priority ticket arrives on 22 March at 4 PM with an 8-hour resolution deadline. 2 hours tick on 22 March. Pakistan Day (23 March) is skipped entirely. The remaining 6 hours count from 24 March. The agent has until 24 March 6 AM — not 23 March 12 AM.
+
+### Rules & limits
+- The holiday calendar is workspace-wide — it applies to all SLA policies and all departments equally.
+- If your call centre operates on public holidays, the current calendar still pauses their SLA. Per-department holiday profiles are a planned enhancement (see Backlog).
+- Recurring holidays repeat on the same day and month each year automatically.
+- Two holidays cannot share the same date — if you try to add one that already exists, it updates the existing entry.
+
+---
+
+## First Reply Time — Measuring Agent Responsiveness
+
+**Module:** Ticketing / Contact Centre
+**Who it affects:** Managers & Supervisors (performance reporting) · Agents (awareness of responsiveness metric)
+
+### What it does
+Tracks the exact moment an agent first sends a public reply to a customer — separate from the SLA deadline timer. This gives a clean measure of how fast your team actually responds, unaffected by clock pausing, business hours, or pending states.
+
+### How it works
+- When any agent posts a public reply (not an internal note) on a ticket for the first time, the system automatically records the timestamp as **First Reply Time**.
+- This is stamped once and never overwritten — subsequent replies don't change it.
+- It is separate from the SLA First Response metric, which can be paused or adjusted by policy settings.
+
+### Example scenario
+> A ticket arrives at 10:00 AM. The SLA is business-hours only so the clock doesn't start until 9 AM the next working day. But the agent replies at 10:45 AM on the same day. First Reply Time is recorded as 45 minutes — accurately reflecting real agent responsiveness regardless of the SLA configuration.
+
+### Rules & limits
+- Only public replies count — internal notes between agents do not stamp this.
+- The metric is read-only and set automatically. Agents cannot manually set or clear it.
+- First Reply Time is stored for reporting and future dashboard display.
+
+---
+
+## Smart Policy Matching — Right SLA for Every Ticket
+
+**Module:** Ticketing / Contact Centre
+**Who it affects:** Managers (configure match conditions) · Agents (automatically get the correct SLA)
+
+### What it does
+Allows multiple SLA policies to exist for the same priority tier, each applying only to tickets that match specific conditions — channel (email, phone, chat), department, or tags. The most specific matching policy wins. This means a phone complaint, an email complaint, and a VIP-tagged complaint can all be High priority but each get a different SLA.
+
+### How to use it — step by step
+
+1. Open or create an SLA policy.
+2. Scroll to **Smart Matching Conditions**.
+3. Enter comma-separated values for any combination of:
+   - **Channels** — e.g. `email, chat`
+   - **Departments** — e.g. `Support, Complaints`
+   - **Tags** — e.g. `vip, fraud`
+4. Leave a field blank to match any value for that dimension.
+5. Save the policy.
+6. Create a second (catch-all) policy for the same priority with **no conditions set** — this is the fallback for tickets that don't match any specific policy.
+
+### How matching works
+The system scores each active policy by how many conditions it has set. The most conditions = highest priority match. If a ticket matches multiple policies, the most specific one wins. If nothing matches, the least specific (catch-all) policy is used.
+
+### Example scenario
+> JS Bank has two High-priority policies:
+> - **"Email Support SLA"** — channels: `email`, departments: `Support` → 2-hour first response.
+> - **"High Priority Catch-All"** — no conditions → 4-hour first response.
+>
+> An email ticket from the Support department gets the 2-hour policy.
+> A phone call ticket gets the catch-all 4-hour policy.
+> Both are High priority — but each gets the right deadline.
+
+### Rules & limits
+- All conditions within a policy use AND logic — a ticket must match channel AND department AND tags (whichever are set).
+- A blank condition field means "match anything" for that dimension.
+- Always create a catch-all policy (no conditions) as a fallback for each priority tier, otherwise unmatched tickets get no SLA.
+- Conditions are evaluated at ticket creation and on priority change.
+
+---
+
+## CSAT Survey — Measuring Customer Satisfaction
+
+**Module:** Ticketing / Contact Centre
+**Who it affects:** All customers (receive the survey) · Agents (see score on their resolved tickets) · Managers & Admins (review scores in reports)
+
+### What it does
+When a ticket is closed, the platform automatically emails the customer a one-question satisfaction survey. The customer clicks a link, chooses 1–5 stars, and optionally leaves a comment. The score is recorded against the ticket and is visible to the handling agent and managers.
+
+### How it works — step by step
+
+**For the customer:**
+1. Agent closes the ticket.
+2. Customer receives an email: "How did we do? — Ticket #TKT-XXXXX".
+3. Customer clicks the link → a clean survey page opens (no login required).
+4. Customer selects 1–5 stars and optionally types a comment.
+5. Clicks **Submit Feedback** → sees a thank-you screen.
+6. Survey link expires after 7 days.
+
+**For agents and managers:**
+1. Open any resolved ticket → scroll to the **Customer Satisfaction** card in the detail panel.
+2. If the customer has responded: shows the star rating and comment.
+3. If the customer hasn't responded yet: shows "Survey sent — awaiting customer response".
+
+**For managers (aggregate view):**
+1. The CSAT summary API (`/api/v1/tickets/csat/summary`) returns: average rating, response rate %, and breakdown by star (1–5).
+2. The full list (`/api/v1/tickets/csat`) shows all responses with ticket number, subject, rating, comment, and date.
+
+### Rating scale
+
+| Stars | Label |
+|---|---|
+| ⭐ (1) | Very dissatisfied |
+| ⭐⭐ (2) | Dissatisfied |
+| ⭐⭐⭐ (3) | Neutral |
+| ⭐⭐⭐⭐ (4) | Satisfied |
+| ⭐⭐⭐⭐⭐ (5) | Very satisfied |
+
+### Example scenario
+> A customer calls about a blocked debit card. The agent resolves the ticket within 2 hours. An email is sent automatically: "Hi Ahmed, how did we do with ticket TKT-00123?" Ahmed clicks the link, gives 5 stars, and writes "Very fast and helpful." The agent and their manager can see the 5-star rating on the ticket record.
+
+### Rules & limits
+- The survey is sent only if the ticket has a **reporter email** on record.
+- Each ticket gets one survey — sending is idempotent (no duplicate emails on re-close).
+- Survey links expire after 7 days by default (configurable per workspace via `csat_expiry_days` in tenant settings).
+- A customer can only submit once — the link is blocked on a second attempt.
+- The survey page works on any device — no login, no app required.
+
+---
+
+## SLA Breach Alerts — Automatic Warnings & Escalations
+
+**Module:** Ticketing / SLA
+**Who it affects:** Agents (receive warnings) · Managers & Supervisors (receive breach alerts) · Admins (receive critical escalation emails)
+
+### What it does
+The platform watches every open ticket's SLA deadline continuously. When a ticket is getting close to or has missed its deadline, it automatically sends both an in-app notification AND an email — no manual action required.
+
+### Three escalation stages
+
+| Stage | When it fires | Who gets notified |
+|---|---|---|
+| **Warning** | When 80% of the SLA time has passed (e.g. 6.4 hrs into an 8-hr SLA) | The assigned agent only |
+| **Breach (L1)** | When the SLA deadline is missed (100%) | The assigned agent + all managers in the workspace |
+| **Critical (L2)** | When the ticket is 50% past its deadline (150%) | All workspace admins |
+
+Each stage sends:
+- An **in-app bell notification** (visible on the top bar inside the CRM)
+- An **email** to each relevant person with the ticket number, subject, and how much time is remaining or overdue
+
+### How to configure the warning threshold
+The 80% warning threshold is set per SLA policy. To change it:
+1. Go to **SLA Policies** in the sidebar.
+2. Open the policy you want to adjust.
+3. Set the **Reminder** escalation step to the percentage you want (e.g. 75% for an earlier warning).
+
+### Example scenario
+> An Urgent ticket (4-hour SLA) is accepted at 9:00 AM. By 12:12 PM (3h 12m = 80%), the assigned agent receives an email and in-app notification: "⏰ SLA Reminder — TKT-00456 — 48 minutes remaining." At 1:00 PM (100%) the agent and all managers receive a breach alert. If still unresolved at 3:00 PM (150%), all admins receive a critical escalation email.
+
+### Rules & notes
+- Each stage fires once per ticket — no repeated reminders.
+- The system checks every 5 minutes automatically. No setup required.
+- Notifications are only sent if the ticket has an assigned agent.
+- Emails are sent using your configured email provider (SendGrid or other).
+
+---
+
+# Email & Notifications
+
+---
+
+## Email Deliverability — Sending from Your Domain
+
+**Module:** Platform Core / Integrations
+**Who it affects:** Super Admin (DNS configuration) · All users (reliable email delivery)
+
+### What it does
+The platform sends system emails on your behalf — password resets, onboarding invitations, and ticket notifications. For these to land reliably in inboxes (not spam), the sending domain (`vividsns.com`) must be authenticated with SendGrid via SPF and DKIM DNS records.
+
+### Why this matters
+Without domain authentication, emails sent via SendGrid from `noreply@vividsns.com` will fail spam filters at Gmail, Outlook, and corporate mail servers. Customers will not receive their onboarding passwords, and ticket notifications will be silently discarded.
+
+### One-time setup — DNS records to add
+
+Log in to your DNS provider (wherever `vividsns.com` is registered) and add the following records. SendGrid will provide the exact values when you complete domain authentication in their dashboard — the steps below tell you where to find them.
+
+**Step by step:**
+
+1. Log in to [app.sendgrid.com](https://app.sendgrid.com).
+2. Go to **Settings → Sender Authentication → Authenticate Your Domain**.
+3. Select your DNS host, enter `vividsns.com`, and click **Next**.
+4. SendGrid will show you **3 DNS records** to add — two CNAME records (DKIM) and one TXT record (SPF).
+5. Log in to your domain registrar and add all three records exactly as shown.
+6. Back in SendGrid, click **Verify** — it will confirm when DNS has propagated (usually within minutes, up to 48 hours).
+
+**Record types you'll add:**
+
+| Type | Purpose | Where to add |
+|---|---|---|
+| TXT | SPF — tells mail servers SendGrid is authorised to send on behalf of vividsns.com | @ or root of domain |
+| CNAME × 2 | DKIM — cryptographically signs each outgoing email so it cannot be spoofed | Two subdomains provided by SendGrid |
+
+### After DNS is verified
+
+Once SendGrid shows the domain as verified, all system emails will:
+- Pass SPF and DKIM checks at recipient mail servers
+- Display `noreply@vividsns.com` as the sender (not a generic SendGrid address)
+- Land in inbox, not spam
+- Pass enterprise email security gateways (important for bank/financial sector customers)
+
+### Current sender configuration
+- **From address:** `noreply@vividsns.com`
+- **From name:** `Vivid CRM`
+- **Provider:** SendGrid (system-level fallback; individual tenants can configure their own SMTP/SendGrid/Microsoft 365 connector in Integrations)
+
+### Rules & limits
+- This setup is a one-time DNS change — it does not need to be repeated.
+- Each tenant can override the system sender by configuring their own email connector in **Settings → Integrations**.
+- Never change the `SENDGRID_FROM_EMAIL` to a Gmail or free-email address — these cannot be authenticated and will cause delivery failures.
+
+---
+
+# Access & Roles
+
+---
+
+## Entitlements — Licensing Modules per Workspace
+
+**Module:** Super Admin / Platform
+**Who it affects:** Super Admin (controls what each workspace can access) · Tenant Admins (see only what is licensed)
+
+### What it does
+The platform super admin controls which modules and features each workspace (tenant) is licensed to use. Unlicensed modules are hidden from navigation and blocked at the API level — tenant staff simply don't see features their organisation hasn't purchased.
+
+### How to use it — step by step
+
+1. Log in as **Super Admin**.
+2. Go to **Workspaces** → select a workspace → **Edit**.
+3. Under **Licensed Modules**, toggle on the modules this workspace has purchased (e.g. Ticketing, Voice Bot, Analytics).
+4. Save. The workspace's navigation updates immediately — unlicensed modules disappear.
+
+### Rules & limits
+- Entitlements are set at workspace creation and can be updated at any time by the super admin.
+- A tenant admin cannot grant their staff access to unlicensed modules, even if they try to via the Roles screen.
+
+---
+
+## Role Permissions — What Each Team Member Can Do
+
+**Module:** Settings / Access Control
+**Who it affects:** Tenant Admins (configure roles) · All staff (work within their assigned permissions)
+
+### What it does
+Each workspace has a hierarchy of roles: Admin, Manager, Agent, Viewer, plus custom roles. The tenant admin controls exactly which actions each role can perform — create, read, edit, delete — per module. Role permissions can only be set up to the ceiling of what the workspace is licensed for.
+
+### Role hierarchy
+
+| Role | Default purpose |
+|---|---|
+| Tenant Admin | Workspace configuration only — no operational access |
+| Manager | Day-to-day operational management — queues, SLA, routing, team |
+| Agent | Handles tickets, contacts, calls |
+| Viewer | Read-only access across modules |
+| Custom roles | Any combination defined by the tenant admin |
+
+### Rules & limits
+- Tenant Admin is deliberately blocked from operational routes — they configure the workspace but do not handle tickets or customer data.
+- Permissions cannot exceed what the workspace is entitled to (licensing ceiling).
+- Four system roles are auto-seeded on workspace creation. Custom roles can be added but not system ones deleted.
+
+---
+
+# Ticket Visibility & Department Guards
+
+---
+
+## Who Sees Which Tickets
+
+**Module:** Ticketing
+**Who it affects:** All agents and managers
+
+### What it does
+Every user's ticket list is automatically filtered by their role and department. No configuration is needed — the system enforces it on every request.
+
+| Role | Tickets visible |
+|---|---|
+| **Agent** | Only tickets assigned to them personally |
+| **Line Manager** | All tickets assigned to any of their direct and indirect reportees (their full team tree) |
+| **Manager of Managers** | All tickets across their full reporting hierarchy, recursively |
+| **Super Admin / Platform** | All tickets across all departments |
+
+### Department boundaries
+Each department has its own manager. Managers only see tickets within their own department's team tree:
+
+- **Support Manager** → sees Support team tickets only
+- **Complaints Manager** → sees Complaints team tickets only
+- **Sales Manager** → sees Sales team tickets only
+
+A Support Manager does **not** see Complaints or Sales tickets, even if all agents technically sit under one company.
+
+### Department hierarchy (standard)
+The platform follows the global standard for contact-centre CRMs — every operational department has its own dedicated manager:
+
+| Department | Manager role | Agents |
+|---|---|---|
+| Support | Support Manager | Support Agents |
+| Complaints | Complaints Manager | Complaints Agents |
+| Sales | Sales Manager | Sales Agents |
+
+Each agent's `Reports To` field in their profile determines which manager's hierarchy they appear in.
+
+### Rules & limits
+- An agent with no manager set only sees their own tickets.
+- Reassigning a ticket to an agent in another department does not change who can view it — visibility follows the assignee's hierarchy.
+- Tenant Admin is excluded from operational visibility and sees no tickets.
+
+---
+
+## Cross-Department Originator View
+
+**Module:** Ticketing
+**Who it affects:** Agents who create tickets that are routed to another department (e.g. a Support Agent who raises a Sales or Complaints ticket on a customer's behalf)
+
+### What it does
+When a support agent creates a ticket and it is routed to and **accepted** by a different department (Sales or Complaints), the originating agent keeps **read-only visibility** of that ticket. They can see the status and resolution, but cannot edit or act on it.
+
+This is the industry standard used by Zendesk, Freshdesk, and Salesforce Service Cloud.
+
+### How it works in practice
+
+1. Customer calls in → Support Agent handles the call.
+2. Support Agent identifies a sales opportunity and creates a Sales ticket on the customer's behalf.
+3. The ticket routes to the Sales queue → Sales Agent accepts it (SLA clock starts).
+4. **From this point:** Support Agent sees the ticket in their list with a **"👁 View only"** amber badge.
+5. Support Agent can see the ticket status, notes, and whether it was resolved or converted to a deal — but cannot change anything.
+6. The Sales Agent owns the ticket fully and works it to resolution.
+
+### What "View only" means
+- Can: read all ticket details, comments, and status updates
+- Cannot: change status, priority, assignee, add comments, close, or escalate
+- Any attempt to edit returns an error: "This ticket has been accepted by another department. You have read-only access as the originator."
+
+### When originator view is NOT triggered
+- Ticket has not yet been accepted by the other department (still in queue) — the originator can still edit it
+- Ticket is assigned to someone in the same department — no restriction, normal edit access applies
+- The ticket creator is a Manager or Admin — no restriction
+
+---
+
+# Reports Hub — Downloadable CSV Reports
+
+---
+
+## Reports Hub — Downloadable CSV Reports
+
+**Module:** Reports
+**Who it affects:** Managers (6 reports) · Agents (4 reports)
+
+### What it does
+The Reports page gives every user a set of downloadable CSV reports relevant to their role. Reports are generated from live data and can be exported at any time. Available from the sidebar under **Reports**.
+
+### How to download a report
+1. Click **Reports** in the sidebar.
+2. Select the date range (7, 14, or 30 days for most reports).
+3. Click **Download CSV**.
+4. The file opens in Excel or any spreadsheet tool.
+
+---
+
+## Manager Reports
+
+| Report | What it shows |
+|---|---|
+| **Ticket Volume** | Daily breakdown of tickets created, resolved, SLA breached, by priority and channel |
+| **SLA Performance** | Weekly SLA compliance %, average resolution time, average first response time, escalation rate |
+| **Agent Performance** | Per-agent breakdown: tickets assigned, accepted, resolved, SLA compliance, calls today |
+| **CSAT** | Individual survey responses with rating, comment, ticket reference, and assigned agent |
+| **Issue Categories** | Most common ticket tags/categories — total volume, resolution rate, average resolution time, breach rate |
+| **Ticket Backlog** | Full list of all open/pending tickets with age, SLA status, priority, and assignee |
+
+All manager reports are scoped to the manager's department hierarchy (the same visibility rules as the ticket list).
+
+---
+
+## Agent Reports
+
+| Report | What it shows |
+|---|---|
+| **My Tickets** | All tickets assigned to me — status, priority, channel, SLA due, resolved date |
+| **My Activities** | All my logged activities — calls, emails, meetings, tasks — with completion status |
+| **My SLA** | My personal SLA performance — compliance %, average resolution and first response times |
+| **My Call Log** | All inbound/outbound calls — duration, status, direction, sentiment, bot-handled flag |
+
+All agent reports are scoped to the logged-in agent's own data only.
+
+### Rules & limits
+- Reports respect the same visibility rules as the ticket list — agents cannot download data outside their scope.
+- CSAT report will be empty until customers respond to surveys.
+- Call Log requires Voice module to be licensed.
+
+---
+
+# Ops Dashboard — Live KPI Strip
+
+---
+
+## Ops Dashboard — Live KPI Strip
+
+**Module:** Analytics (Managers only)
+**Who it affects:** Managers
+
+### What it does
+The Manager Ops Dashboard includes a 4-card KPI strip at the top showing real-time team performance — benchmarked against top CRM standards (Zendesk, Freshdesk).
+
+| KPI | What it measures | Why it matters |
+|---|---|---|
+| **CSAT Score** | Average customer satisfaction rating (1–5 scale) from survey responses | Industry benchmark: 4.0+ is good; below 3.5 needs attention |
+| **SLA Compliance %** | Percentage of tickets resolved within their SLA deadline | Industry benchmark: 90%+ target; below 80% is a risk |
+| **Avg Resolution Time** | Average hours from ticket creation to resolution | Shorter = better; varies by department and ticket type |
+| **Avg First Response** | Average minutes from ticket creation to first agent reply | Industry benchmark: under 1 hour for standard; under 15 min for urgent |
+
+### Colour coding
+- **Green** — above target
+- **Amber** — approaching threshold
+- **Red** — below benchmark (action needed)
+
+### How to use it
+1. Log in as a Manager.
+2. Go to **Analytics → Ops Dashboard** in the sidebar.
+3. KPIs update in real time as tickets are resolved and surveys are completed.
+4. Click **Full report →** next to SLA Compliance to open the detailed Ticket Reports page.
