@@ -2,7 +2,7 @@
 **AI Operations Platform — Multi-Tenant CRM, Contact-Centre & Sales Suite**
 _Single source of truth for system requirements & behaviour. Update only affected sections on each change._
 
-Last updated: 2026-06-23
+Last updated: 2026-06-24
 
 ---
 
@@ -13,7 +13,7 @@ and team collaboration.
 
 - **Frontend:** React + TanStack, Vite (`packages/frontend`)
 - **API:** Fastify + GraphQL/Mercurius, Zod, JWT (`packages/api`)
-- **DB:** PostgreSQL with Row-Level Security; 24 migrations (`packages/core`)
+- **DB:** PostgreSQL with Row-Level Security; 25+ migrations (`packages/core`)
 - **Voice:** LiveKit ("Nadia" agent) · **Email:** SMTP / SendGrid / MS365
 
 ## 2. Roles & Access Control (three layers + separation of duties)
@@ -46,15 +46,24 @@ smart routing to the right team → agent accepts (TAT/SLA starts) → worked th
 interval reminders + auto-escalation before breach → resolved → customer informed + CSAT survey.
 Ticket + live status also appear on the customer's CRM record (Contact → Tickets tab, with TAT countdown).
 
+### 4.4 SLA Policy Engine
+Managers create SLA policies per priority tier (Urgent / High / Medium / Low). Each policy defines:
+first-response deadline, resolution deadline, business hours scope (per-day toggle), pause-on-pending
+toggle, and a multi-step escalation schedule (reminder → L1 supervisor → L2 admin), each with a %
+threshold and recipient scope. On ticket create the system auto-assigns the matching policy by priority;
+on priority change it re-evaluates and reassigns. Clock pauses when ticket is Pending if the policy has
+pause_on_pending enabled. SLA policies managed by Managers at `/tickets/sla`.
+
 ### 4.3 Sales ticket → pipeline deal
 A `sales` ticket, on acceptance (or via manual **Convert to Deal** button), creates a linked deal in the
 default pipeline (owner = handling agent; carries contact/company). Idempotent (`tickets.deal_id`).
 Complaints keep the normal resolve→close lifecycle.
 
 ## 5. Data Model
-24 ordered migrations. Notable: `012_line_manager` (manager_id), `018_departments_and_opportunities`,
-`023_tenant_entitlements`, `024_ticket_deal_link`. Users link to departments by `department`/`department_type`
-text (no `department_id` column).
+25+ ordered migrations. Notable: `012_line_manager` (manager_id), `018_departments_and_opportunities`,
+`023_tenant_entitlements`, `024_ticket_deal_link`, `025_default_departments`.
+Users link to departments by `department`/`department_type` text (no `department_id` column).
+`sla_policies` table: includes `business_hours_only`, `business_hours_schedule` (jsonb), `pause_on_pending` (bool).
 
 ## 6. Environments & Access
 Repo: github.com/munirrazaa/AI-Operations-Platfrom- (main). Frontend: Vercel · API: VPS ·
