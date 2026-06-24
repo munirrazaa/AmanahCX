@@ -3,6 +3,18 @@ _Most recent at top. Treated as the primary record for development tracking._
 
 ---
 
+## Change Log - 2026-06-24 (continued)
+
+### Fixed
+**Dashboard — ops-dashboard unblocked for all roles**
+- Root cause: `requireFeature('analytics')` was gating the home-screen dashboard behind a feature flag (`settings.features.analytics = false`). Every user hit a 402 and saw a permanent spinner.
+- Fix: ops-dashboard now uses `dashPreHandler` (scope check only, no feature flag). Analytics reports/exports remain feature-gated. The home screen is core product, not an analytics add-on.
+- Fix: `owner_id` ambiguous column reference in `recentActivities` JOIN query — qualified as `a.owner_id`.
+- Fix: `isManager` flag was false for managers with no direct reports. Now explicitly includes `role === 'manager'` in the check.
+- Affected roles: Manager dashboard (Team Ticket Dashboard, leaderboard, bot stats) and all other roles now load correctly.
+
+---
+
 ## Change Log - 2026-06-24
 
 ### Added

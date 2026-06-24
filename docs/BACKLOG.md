@@ -1,60 +1,134 @@
 # BACKLOG
-_Future ideas only — NOT yet implemented. Move items to the Change Log once built._
+_All ideas, pending work, and deferred items. Prioritised against enterprise readiness and benchmarked vs. Zendesk, Freshdesk, Salesforce Service Cloud, HubSpot._
+
+**Priority scale:**
+- **P1 – Critical** → Blocks enterprise sale. Every top CRM ships this. Missing = demo fails.
+- **P2 – High** → Important for serious buyers. Do within next few sessions.
+- **P3 – Medium** → Good to have. Won't lose a deal without it but adds polish/depth.
+- **P4 – Low** → Nice idea. Post-launch or on-request only.
 
 ---
 
-## SLA Module — Remaining Upgrades
+## 🔴 P1 — Critical (Do Now — blocks enterprise readiness)
 
-~~- **Holiday Calendar** — DONE 2026-06-24~~
-~~- **First Reply Time Metric** — DONE 2026-06-24~~
-~~- **Smart Policy Matching** — DONE 2026-06-24~~
+### 1. Dashboard — Fix broken analytics / ops dashboard
+- **Verdict:** Do Now
+- **Why:** The main screen every user lands on is broken. A broken dashboard in a demo kills the sale instantly. Every enterprise CRM has a working home screen.
+- **Benchmark:** Zendesk, Freshdesk, HubSpot all show live ticket counts, SLA status, and team performance on login.
+- **Status:** Not Started
+- **Detail:** `/api/v1/analytics/ops-dashboard` hangs because materialized views (`mv_daily_deal_stats` etc.) don't exist in some DBs. Must render for all roles.
 
-## SLA Module — Future Enhancements
+### 2. SQL Injection Security Patch (Abdurrehman branch)
+- **Verdict:** Do Now
+- **Why:** Any enterprise procurement / security review will find this. It is a critical vulnerability. No enterprise will buy software with known SQL injection exposure.
+- **Benchmark:** Non-negotiable across all CRMs and any SaaS product.
+- **Status:** Branch `abdrehman-merge` ready — awaiting merge decision
+- **Detail:** Auth bug fixes + SQL injection patch in `abdrehman-merge`. Must be merged before any customer demo or trial.
 
-- **First Reply Time UI** — Display `first_replied_at` on the ticket detail page as a visible metric card (KPI display). DB column and stamping are done; only the UI stat is missing. Priority: Medium.
-- **Holiday SLA pause enforcement in engine** — The `sla_holidays` table exists but the SLA calculation/breach-check logic needs to actually skip holiday dates when computing deadlines. Priority: High.
-- **SLA breach webhook / notification** — Notify an external URL when a ticket breaches SLA. Priority: Medium.
+### 3. Email Deliverability — SendGrid SPF/DKIM authentication
+- **Verdict:** Do Now
+- **Why:** Onboarding flow sends password emails via SendGrid. If they land in spam, new customers cannot log in. This breaks the entire customer onboarding journey.
+- **Benchmark:** All SaaS products configure domain authentication before go-live.
+- **Status:** Not Started
+- **Detail:** Add SPF/DKIM records for sending domain so emails land in inbox reliably.
+
+### 4. CSAT Survey — Customer satisfaction after ticket close
+- **Verdict:** Do Now
+- **Why:** Enterprise contact centres are bought and judged on customer satisfaction scores. It is listed in the product modules (Section 3) but not built. Every buyer will ask to see it.
+- **Benchmark:** Zendesk, Freshdesk, Salesforce all ship CSAT as core — not an add-on.
+- **Status:** Not Started
+- **Detail:** Auto-send a 1-question satisfaction survey when a ticket is resolved. Record score. Show in reports and on the ticket record.
+
+### 5. Ticket Queue / Live Wallboard for supervisors
+- **Verdict:** Do Now
+- **Why:** A contact centre without a live queue view is not a contact centre. Supervisors need to see waiting tickets, agent status, and queue depth in real time. Enterprise buyers demo this on day one.
+- **Benchmark:** Every CCaaS product (Genesys, Zendesk, Freshdesk) ships a supervisor wallboard.
+- **Status:** Referenced in product but no confirmed working UI
+- **Detail:** Real-time view of: tickets in queue, assigned vs. unassigned, agents online, SLA breach risk.
 
 ---
 
-## Merge Pending
+## 🟡 P2 — High (Do Soon — important for serious buyers)
 
-- **Abdurrehman's `abdrehman-merge` branch** contains complementary work: auth bug fixes, SQL injection security patch, mobile app, org chart, and department/queue migrations. These need to be merged into `main`. Hold until Munir confirms. Priority: High.
+### 6. Holiday SLA pause — wire into deadline calculation engine
+- **Verdict:** Do Soon
+- **Why:** The table and UI exist but holidays don't actually affect SLA deadlines yet. A buyer who sets up holidays and then sees breach alerts firing on Eid will raise this immediately.
+- **Benchmark:** Zendesk, Freshdesk both enforce holiday pauses in actual deadline maths.
+- **Status:** DB + UI done. Engine not wired.
+
+### 7. SLA Breach Notifications — in-app + email alerts
+- **Verdict:** Do Soon
+- **Why:** SLA escalation steps are configured but if notifications aren't delivered (email or in-app), the escalation feature has no teeth. Enterprise buyers specifically ask "what happens when SLA is breached?"
+- **Benchmark:** Zendesk sends email + in-app. Freshdesk adds webhook. Both are standard.
+- **Status:** Escalation schedule exists in DB. Notification delivery not confirmed working end-to-end.
+
+### 8. Reports Module — SLA performance, ticket volume, agent stats
+- **Verdict:** Do Soon
+- **Why:** Every enterprise buyer asks for reporting. "How do I know my team is performing?" Without reports the product feels incomplete. Listed in product modules but needs confirmation it works.
+- **Benchmark:** All top CRMs ship basic reports: SLA compliance %, ticket volume by channel/dept, first reply time, resolution time.
+- **Status:** Module exists in nav — needs audit of what actually works vs. what is scaffolded.
+
+### 9. Agent Status — Online / Away / Busy / Offline
+- **Verdict:** Do Soon
+- **Why:** Routing logic depends on knowing which agents are available. Without this, tickets can be assigned to offline agents.
+- **Benchmark:** All CCaaS products ship presence/status as a core feature.
+- **Status:** Unknown — needs audit.
+
+### 10. Named Business Hour Profiles (per-department holiday calendars)
+- **Verdict:** Do Soon
+- **Why:** As discussed — call centres work on holidays, back-office doesn't. Current global holiday calendar is too blunt for enterprise. Will come up in enterprise trials with banks/telcos.
+- **Benchmark:** Zendesk, Freshdesk — business hour profiles each with own holiday list.
+- **Status:** Not Started
 
 ---
 
-- **Idea:** Embed the actual Vivid Solutions logo image on the pitch-deck title/closing slides
-  (currently brand colours + wordmark only).
-  - **Value:** Stronger brand identity on the customer-facing deck.
-  - **Priority:** Medium
-  - **Status:** Not Started
+## 🟢 P3 — Medium (Backlog — good to have, post-core)
 
-- **Idea:** Fix the operational Dashboard (`/api/v1/analytics/ops-dashboard`) — it hangs because
-  analytics materialized views (`mv_daily_deal_stats`, etc.) don't exist in some databases.
-  - **Value:** The main dashboard renders for all roles; usable in demos/screenshots.
-  - **Priority:** High
-  - **Status:** Not Started
+### 11. First Reply Time — display on ticket detail page
+- **Verdict:** Backlog
+- **Why:** Column is stamped, data exists. Just needs a UI metric card on the ticket. Low effort, not blocking.
+- **Status:** DB done. UI not built.
 
-- **Idea:** Add a formal `department_id` foreign key on `users` (with backfill) instead of linking
-  departments by text name/type.
-  - **Value:** Robust department membership; richer department features; avoids name-match fragility.
-  - **Priority:** Medium
-  - **Status:** Not Started
+### 12. SLA Breach Webhook — notify external URL
+- **Verdict:** Backlog
+- **Why:** Useful for integrations but not needed to sell to first customers.
+- **Benchmark:** Freshdesk has it. Zendesk has it via triggers. Not expected on day one.
+- **Status:** Not Started
 
-- **Idea:** Email deliverability — SendGrid domain authentication (SPF/DKIM) so onboarding mail lands
-  in inbox, not spam.
-  - **Value:** Customers reliably receive credentials/notifications.
-  - **Priority:** High
-  - **Status:** Not Started
+### 13. Department foreign key (`department_id` on users)
+- **Verdict:** Backlog
+- **Why:** Current text-based department link works but is fragile. Important for long-term data integrity. Not visible to buyers.
+- **Status:** Not Started
 
-- **Idea:** Optional company-wide operational manager role (single person who sees all operations),
-  enabled purely by reporting-line config.
-  - **Value:** Flexibility for orgs that want one cross-department view.
-  - **Priority:** Low
-  - **Status:** Not Started
+### 14. Company-wide operational manager role (cross-department view)
+- **Verdict:** Backlog
+- **Why:** Niche requirement. Some enterprise orgs want it but it's not a blocking gap.
+- **Status:** Not Started
 
-- **Idea:** Fill or remove the empty module scaffolds `modules/companies` and `modules/email`
-  (currently empty `src/` folders; functionality lives in `packages/`).
-  - **Value:** Cleaner repo; no confusion about where code lives.
-  - **Priority:** Low
-  - **Status:** Not Started
+---
+
+## 🔵 P4 — Low (Post-launch / on-request)
+
+### 15. Pitch deck — embed Vivid Solutions logo image
+- **Verdict:** Post-launch
+- **Status:** Not Started
+
+### 16. Clean up empty module scaffolds (`modules/companies`, `modules/email`)
+- **Verdict:** Post-launch — internal housekeeping only
+- **Status:** Not Started
+
+---
+
+## ✅ Completed (moved from backlog)
+
+- Holiday Calendar — DONE 2026-06-24
+- First Reply Time metric (DB + stamping) — DONE 2026-06-24
+- Smart Policy Matching — DONE 2026-06-24
+- SLA Policies full CRUD — DONE 2026-06-24
+- Business Hours per policy — DONE 2026-06-24
+- Pause on Pending — DONE 2026-06-24
+- Entitlements (Phase 1, 2a, 2b) — DONE 2026-06-24
+- Role permissions ceiling — DONE 2026-06-24
+- Tenant admin operational lockout — DONE 2026-06-24
+- CRM visibility scoping (line-manager tree) — DONE 2026-06-24
+- Sales ticket → deal conversion — DONE 2026-06-24

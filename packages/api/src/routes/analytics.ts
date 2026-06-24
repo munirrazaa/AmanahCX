@@ -5,6 +5,8 @@ import { requireFeature, requireScope, requireRole } from '../middlewares/auth.m
 export function analyticsRoutes(db: DatabaseClient) {
   return async function (fastify: FastifyInstance) {
     const preHandler = [requireFeature('analytics'), requireScope('analytics:read')];
+    // ops-dashboard is the home screen for all roles — not gated by analytics feature flag
+    const dashPreHandler = [requireScope('analytics:read')];
 
     // Dashboard summary
     fastify.get('/dashboard', { preHandler }, async (req, reply) => {
@@ -265,7 +267,7 @@ export function analyticsRoutes(db: DatabaseClient) {
     // ── Operational Dashboard (role-aware) ───────────────────────────────
     // Agent  → personal call + ticket metrics for today
     // Manager/Admin → team-level aggregates + per-agent breakdown
-    fastify.get('/ops-dashboard', { preHandler }, async (req, reply) => {
+    fastify.get('/ops-dashboard', { preHandler: dashPreHandler }, async (req, reply) => {
       const tenantId   = req.tenant.id;
       const userId     = req.user.sub;
       const role       = req.user.role as string ?? 'agent';
@@ -287,7 +289,7 @@ export function analyticsRoutes(db: DatabaseClient) {
         return [userId, ...hier.rows.map((r: any) => r.id)];
       });
 
-      const isManager = isAdmin || (scopeIds !== null && scopeIds.length > 1);
+      const isManager = isAdmin || ['manager'].includes(role) || (scopeIds !== null && scopeIds.length > 1);
       // Build safe SQL fragment for filtering by hierarchy (owner/assignee)
       const scopeLiteral = scopeIds
         ? `ARRAY[${scopeIds.map(id => `'${id}'::uuid`).join(',')}]`
@@ -471,6 +473,7 @@ export function analyticsRoutes(db: DatabaseClient) {
         return r.rows[0] ?? {};
       });
 
+      const scopeOwnerAliasSql = scopeIds ? `AND a.owner_id = ANY(${scopeLiteral})` : '';
       const recentActivities = await db.withTenant(tenantId, async (client) => {
         const r = await client.query(`
           SELECT a.id, a.type, a.subject, a.status, a.due_at, a.created_at,
@@ -479,7 +482,7 @@ export function analyticsRoutes(db: DatabaseClient) {
           FROM activities a
           LEFT JOIN contacts c ON a.contact_id = c.id
           LEFT JOIN users u ON a.owner_id = u.id
-          WHERE 1=1 ${scopeOwnerSql}
+          WHERE 1=1 ${scopeOwnerAliasSql}
           ORDER BY a.created_at DESC LIMIT 8
         `);
         return r.rows;

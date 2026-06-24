@@ -9,7 +9,6 @@ Last updated: 2026-06-24
 
 ## Table of Contents
 
-- [Home Dashboard — Role-Aware Home Screen](#home-dashboard--role-aware-home-screen)
 - [Ticketing & Contact Centre](#ticketing--contact-centre)
   - [SLA Policies — Response & Resolution Timers](#sla-policies--response--resolution-timers)
   - [Business Hours — When the SLA Clock Ticks](#business-hours--when-the-sla-clock-ticks)
@@ -20,48 +19,6 @@ Last updated: 2026-06-24
 - [Access & Roles](#access--roles)
   - [Entitlements — Licensing Modules per Workspace](#entitlements--licensing-modules-per-workspace)
   - [Role Permissions — What Each Team Member Can Do](#role-permissions--what-each-team-member-can-do)
-
----
-
-# Home Dashboard — Role-Aware Home Screen
-
----
-
-## Home Dashboard — Role-Aware Home Screen
-
-**Module:** Platform Core
-**Who it affects:** All logged-in users — each role sees a different view tailored to their job
-
-### What it does
-The dashboard is the first screen every user sees after login. It automatically shows the right information for each role — an agent sees their own tickets and call queue, a manager sees their full team's performance, and a tenant admin sees workspace health. All data is filtered to the user's department automatically.
-
-### Who sees what
-
-| Role | Dashboard view | Key information shown |
-|---|---|---|
-| **Agent** | Personal performance | My open tickets, SLA countdown, TAT status, my recent calls, activity due today |
-| **Manager** | Team overview | Team ticket counts, agent leaderboard, bot stats, SLA breaches, calls in queue, recent open tickets |
-| **Tenant Admin** | Workspace health | Total users, role/department breakdown, voice bot status, email delivery health |
-| **Viewer** | Read-only personal view | Own tickets and activities (no edit access) |
-
-### Department scoping
-If a user belongs to a department (Sales, Support, Complaints), all dashboard metrics are automatically filtered to that department only. A banner at the top of the dashboard confirms which department is active. This ensures agents and managers only see data relevant to their team.
-
-### Quick action buttons
-Each role gets a row of quick-access buttons at the top of the dashboard matching their most common tasks:
-- **Agents/Managers:** New Ticket, Voice Calls, Bot Calls, Reports
-- **Tenant Admin:** Manage Users, Roles, Voice Bot, Email Logs
-
-### Live refresh
-The dashboard refreshes automatically every 30 seconds. A manual refresh button is available in the top right corner showing when data was last updated.
-
-### Example scenario
-> Munir logs in as Manager in the Complaints department. He sees "Good evening, Munir — Manager View · Complaints Dept". The dashboard shows his team's complaint tickets only: 12 open, 3 breaching SLA, 2 calls in queue. The agent leaderboard shows each agent's tickets and calls for today. All other departments' data is hidden.
-
-### Rules & limits
-- The dashboard is available to all roles — it is the home screen and cannot be disabled.
-- Data scope is determined at login by the user's role and department — it cannot be manually overridden from the dashboard.
-- Tenant Admin dashboard shows workspace configuration health only — no ticket or call operational data (by design: admins configure, agents operate).
 
 ---
 
