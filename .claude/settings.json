@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -c \"\nimport sys, json, datetime, shutil, os\ndata = json.load(sys.stdin)\ncmd = data.get('tool_input', {}).get('command', '')\nif 'git push' not in cmd:\n    sys.exit(0)\ntoday = datetime.date.today().strftime('%Y-%m-%d')\nsrc = '/Users/mba/Desktop/crm-platform/docs'\ndest = f'{src}/{today}'\nos.makedirs(dest, exist_ok=True)\nfor f in ['CHANGE_LOG.md', 'MASTER_PRODUCT_DOCUMENT.md', 'BACKLOG.md']:\n    sf = f'{src}/{f}'\n    if os.path.exists(sf):\n        shutil.copy2(sf, f'{dest}/{f}')\n\" 2>/dev/null || true",
+            "statusMessage": "Snapshotting docs into date folder..."
+          }
+        ]
+      }
+    ]
+  }
+}
