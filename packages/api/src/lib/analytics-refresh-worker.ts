@@ -36,15 +36,19 @@ export function startAnalyticsRefreshWorker(db: DatabaseClient): () => void {
       if (!running) break;
       const start = Date.now();
       try {
-        await db.query(`REFRESH MATERIALIZED VIEW CONCURRENTLY ${view}`);
+        await db.withSuperAdmin(async (c) => {
+          await c.query(`REFRESH MATERIALIZED VIEW CONCURRENTLY ${view}`);
+        });
         const ms = Date.now() - start;
-        await db.query(
-          `INSERT INTO analytics_refresh_log (view_name, refreshed_at, duration_ms)
-           VALUES ($1, NOW(), $2)
-           ON CONFLICT (view_name) DO UPDATE
-             SET refreshed_at = NOW(), duration_ms = EXCLUDED.duration_ms`,
-          [view, ms],
-        );
+        await db.withSuperAdmin(async (c) => {
+          await c.query(
+            `INSERT INTO analytics_refresh_log (view_name, refreshed_at, duration_ms)
+             VALUES ($1, NOW(), $2)
+             ON CONFLICT (view_name) DO UPDATE
+               SET refreshed_at = NOW(), duration_ms = EXCLUDED.duration_ms`,
+            [view, ms],
+          );
+        });
         logger.info('Analytics MV refreshed', { view, ms });
       } catch (err: any) {
         logger.error('Analytics MV refresh failed', { view, error: err.message });

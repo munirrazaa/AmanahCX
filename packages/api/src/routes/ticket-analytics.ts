@@ -137,7 +137,7 @@ export function ticketAnalyticsRoutes(db: DatabaseClient) {
         .replaceAll('$3_period', `'${q.period}'`),
         mvParams,
       );
-      return reply.send({ success: true, data: result.rows });
+      return reply.send({ success: true, data: result });
     });
 
     // ── GET /heatmap ───────────────────────────────────────────────────────

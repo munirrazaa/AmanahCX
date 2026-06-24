@@ -63,6 +63,8 @@ interface Ticket {
   created_at: string;
   ticket_type?: string;
   deal_id?: string | null;
+  is_originated_by_me?: boolean;
+  assignee_department?: string;
 }
 
 interface Comment {
@@ -271,6 +273,11 @@ function TicketCard({
           {ticket.escalation_level === 1 && (
             <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-orange-900/60 text-orange-300 border border-orange-700/50">
               <ArrowUpCircle className="w-3 h-3" /> L1 Escalation
+            </span>
+          )}
+          {ticket.is_originated_by_me && (
+            <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-100 text-amber-700 border border-amber-200">
+              👁 View only
             </span>
           )}
         </div>
@@ -738,6 +745,11 @@ function TicketPanel({ ticketId, onClose }: { ticketId: string; onClose: () => v
               {t.escalation_level >= 2 && (
                 <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-red-900/80 text-red-300 border border-red-600/50">
                   <ShieldAlert className="w-3 h-3" /> Escalated L{t.escalation_level}
+                </span>
+              )}
+              {t.is_originated_by_me && (
+                <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+                  👁 View only · {t.assignee_department ?? 'Other dept'}
                 </span>
               )}
             </div>

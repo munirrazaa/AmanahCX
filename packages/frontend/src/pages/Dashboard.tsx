@@ -553,6 +553,31 @@ function ManagerDashboard({ d, department, deptType }: { d: any; department: str
     queryFn: () => api.get('/api/v1/tickets/dashboard/team').then(r => r.data.data),
     refetchInterval: 30_000,
   });
+
+  // CSAT summary — same endpoint as the reports page
+  const { data: csatData } = useQuery({
+    queryKey: ['csat-summary-dashboard'],
+    queryFn: () => api.get('/api/v1/tickets/csat/summary').then(r => r.data.data),
+    staleTime: 60_000,
+  });
+
+  // Live ticket performance (resolution + first-response times from analytics)
+  const { data: perfData } = useQuery({
+    queryKey: ['manager-perf-kpis'],
+    queryFn: () =>
+      api.get('/api/v1/tickets/analytics/resolution', { params: { period: 'week', days: 30 } })
+        .then(r => {
+          const rows: any[] = r.data.data ?? [];
+          const valid = rows.filter(row => row.avg_resolution_hrs != null);
+          if (!valid.length) return null;
+          const avgRes  = valid.reduce((s, row) => s + (row.avg_resolution_hrs ?? 0), 0) / valid.length;
+          const avgFR   = valid.reduce((s, row) => s + (row.avg_first_response_hrs ?? 0), 0) / valid.length;
+          const slaRows = rows.filter(row => row.sla_compliance_pct != null);
+          const avgSla  = slaRows.length ? slaRows.reduce((s, row) => s + (row.sla_compliance_pct ?? 0), 0) / slaRows.length : null;
+          return { avgRes: avgRes.toFixed(1), avgFR: avgFR.toFixed(1), avgSla: avgSla?.toFixed(1) ?? null };
+        }),
+    staleTime: 60_000,
+  });
   const hCalls   = human.calls      ?? {};
   const hTickets = human.tickets    ?? {};
   const hActs    = human.activities ?? {};
@@ -581,8 +606,76 @@ function ManagerDashboard({ d, department, deptType }: { d: any; department: str
     { name: 'Complaint',  value: Number(hTickets.complaint_tickets ?? 0), color: C.orange },
   ].filter(x => x.value > 0);
 
+  const slaColor = (v: string | null | undefined) => {
+    const n = parseFloat(v ?? '0');
+    return n >= 90 ? C.green : n >= 70 ? C.gold : C.red;
+  };
+
   return (
     <div className="space-y-5">
+
+      {/* ── Live Ops KPI strip (Zendesk/Freshdesk-grade) ──── */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        {/* CSAT */}
+        <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
+          <div className="flex items-start justify-between mb-3">
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: `${C.gold}18` }}>
+              <Star className="w-5 h-5" style={{ color: C.gold }} />
+            </div>
+            {csatData?.avg_rating && <ArrowUpRight className="w-4 h-4 text-emerald-500" />}
+          </div>
+          <p className="text-2xl font-bold text-gray-900">
+            {csatData?.avg_rating ? `${csatData.avg_rating}/5` : '—'}
+          </p>
+          <p className="text-sm text-gray-500 mt-0.5">CSAT Score</p>
+          <p className="text-xs mt-1 font-medium text-gray-400">
+            {csatData?.total_responses ? `${csatData.total_responses} responses · ${csatData.response_rate ?? 0}% response rate` : 'No responses yet'}
+          </p>
+        </div>
+
+        {/* SLA compliance (30d) */}
+        <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
+          <div className="flex items-start justify-between mb-3">
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: `${slaColor(perfData?.avgSla)}18` }}>
+              <ShieldAlert className="w-5 h-5" style={{ color: slaColor(perfData?.avgSla) }} />
+            </div>
+            {perfData?.avgSla && parseFloat(perfData.avgSla) < 80 && <AlertTriangle className="w-4 h-4 text-orange-400" />}
+          </div>
+          <p className="text-2xl font-bold text-gray-900">{perfData?.avgSla ? `${perfData.avgSla}%` : '—'}</p>
+          <p className="text-sm text-gray-500 mt-0.5">SLA Compliance</p>
+          <p className="text-xs mt-1 font-medium text-gray-400">30-day average · <Link to="/ticket-reports" style={{ color: C.cyan }}>Full report →</Link></p>
+        </div>
+
+        {/* Avg Resolution Time */}
+        <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
+          <div className="flex items-start justify-between mb-3">
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: `${C.cyan}18` }}>
+              <Timer className="w-5 h-5" style={{ color: C.cyan }} />
+            </div>
+          </div>
+          <p className="text-2xl font-bold text-gray-900">{perfData?.avgRes ? `${perfData.avgRes}h` : '—'}</p>
+          <p className="text-sm text-gray-500 mt-0.5">Avg Resolution Time</p>
+          <p className="text-xs mt-1 font-medium text-gray-400">30-day rolling average</p>
+        </div>
+
+        {/* Avg First Response */}
+        <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
+          <div className="flex items-start justify-between mb-3">
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: `${C.green}18` }}>
+              <MessageSquare className="w-5 h-5" style={{ color: C.green }} />
+            </div>
+          </div>
+          <p className="text-2xl font-bold text-gray-900">
+            {perfData?.avgFR
+              ? parseFloat(perfData.avgFR) < 1
+                ? `${Math.round(parseFloat(perfData.avgFR) * 60)}m`
+                : `${perfData.avgFR}h`
+              : '—'}
+          </p>
+          <p className="text-sm text-gray-500 mt-0.5">Avg First Response</p>
+          <p className="text-xs mt-1 font-medium text-gray-400">30-day rolling average</p>
+        </div>
+      </div>
 
       {/* ── Team TAT Rollup ────────────────────────────────── */}
       {teamData && (
@@ -1156,10 +1249,10 @@ export function Dashboard() {
       ]
     : isManager
     ? [
-        { label: 'New Ticket',  to: '/tickets',            icon: Ticket,      color: C.orange },
-        { label: 'Voice Calls', to: '/voice',              icon: PhoneCall,   color: C.cyan   },
-        { label: 'Bot Calls',   to: '/voice-bot',          icon: Bot,         color: C.purple },
-        { label: 'Reports',     to: '/sales/reports',      icon: BarChart2,   color: C.gold   },
+        { label: 'New Ticket',     to: '/tickets',         icon: Ticket,      color: C.orange },
+        { label: 'Voice Calls',    to: '/voice',           icon: PhoneCall,   color: C.cyan   },
+        { label: 'Bot Calls',      to: '/voice-bot',       icon: Bot,         color: C.purple },
+        { label: 'Ticket Reports', to: '/ticket-reports',  icon: BarChart2,   color: C.gold   },
       ]
     : [
         { label: 'New Ticket',  to: '/tickets',            icon: Ticket,      color: C.orange },

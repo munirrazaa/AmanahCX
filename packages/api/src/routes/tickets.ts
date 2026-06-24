@@ -32,6 +32,7 @@ import { randomBytes } from 'node:crypto';
 import type { DatabaseClient, EventBus } from '@crm/core';
 import { CRM_EVENTS } from '@crm/core';
 import { requireScope } from '../middlewares/auth.middleware';
+import { getVisibleUserIds } from '../lib/visibility';
 import { EmailService } from '../services/email.service';
 import { SmsService } from '@crm/core/sms.service';
 
@@ -1152,6 +1153,22 @@ export function ticketRoutes(db: DatabaseClient, eventBus: EventBus) {
       const where: string[] = ['1=1'];
       let idx = 1;
 
+      // Visibility guard: agents see only their tickets; managers see full reportee hierarchy.
+      // Cross-dept originator view: also show tickets this user created that have been
+      // accepted by another department (read-only — enforced at write time).
+      const visibleIds = await db.withTenant(tenantId, (client) =>
+        getVisibleUserIds(client, userId, req.user.role),
+      );
+      if (visibleIds !== null) {
+        where.push(
+          `(t.assignee_id = ANY($${idx}::uuid[])` +
+          ` OR (t.created_by = $${idx + 1} AND t.accepted_at IS NOT NULL` +
+          `     AND (t.assignee_id IS NULL OR t.assignee_id != ALL($${idx}::uuid[]))))`,
+        );
+        params.push(visibleIds, userId);
+        idx += 2;
+      }
+
       if (query.status) {
         // Allow comma-separated multi-status: "open,assigned"
         const statuses = query.status.split(',').map(s => s.trim());
@@ -1182,12 +1199,17 @@ export function ticketRoutes(db: DatabaseClient, eventBus: EventBus) {
           `SELECT t.*,
              u.name  AS assignee_name,
              u.avatar AS assignee_avatar,
+             u.department AS assignee_department,
              c.first_name || ' ' || COALESCE(c.last_name,'') AS contact_name,
              q.name  AS queue_name,
              q.color AS queue_color,
              CASE WHEN t.sla_due_at < NOW() AND t.status NOT IN ('resolved','closed')
                   THEN true ELSE false END AS is_overdue,
-             EXTRACT(EPOCH FROM (t.sla_due_at - NOW())) AS sla_seconds_remaining
+             EXTRACT(EPOCH FROM (t.sla_due_at - NOW())) AS sla_seconds_remaining,
+             CASE WHEN t.created_by = '${userId}' AND t.accepted_at IS NOT NULL
+                       AND (t.assignee_id IS NULL OR u.id IS NULL
+                            OR (SELECT department FROM users WHERE id = '${userId}') != u.department)
+                  THEN true ELSE false END AS is_originated_by_me
            FROM tickets t
            LEFT JOIN users u    ON t.assignee_id  = u.id
            LEFT JOIN contacts c ON t.contact_id   = c.id
@@ -1295,6 +1317,31 @@ export function ticketRoutes(db: DatabaseClient, eventBus: EventBus) {
     fastify.patch('/:id', { preHandler: requireScope('tickets:write') }, async (req, reply) => {
       const { id } = req.params as { id: string };
       const body  = UpdateTicketSchema.parse(req.body);
+      const userId = req.user.sub;
+      const role   = req.user.role;
+
+      // Originator read-only guard: if the ticket was created by this user but accepted
+      // by a different department, they have view-only access — block writes.
+      if (role !== 'super_admin' && role !== 'tenant_admin' && role !== 'manager') {
+        const visibleIds = await db.withTenant(req.tenant.id, (client) =>
+          getVisibleUserIds(client, userId, role),
+        );
+        if (visibleIds !== null) {
+          const [tkt] = await db.withTenant(req.tenant.id, async (client) => {
+            const r = await client.query(
+              `SELECT created_by, assignee_id, accepted_at FROM tickets WHERE id = $1`, [id],
+            );
+            return r.rows;
+          });
+          if (tkt && tkt.created_by === userId && tkt.accepted_at && tkt.assignee_id
+              && !visibleIds.includes(tkt.assignee_id)) {
+            return reply.code(403).send({
+              success: false,
+              error: { code: 'ORIGINATOR_READONLY', message: 'This ticket has been accepted by another department. You have read-only access as the originator.' },
+            });
+          }
+        }
+      }
 
       const sets: string[] = ['updated_at = NOW()'];
       const vals: unknown[] = [];

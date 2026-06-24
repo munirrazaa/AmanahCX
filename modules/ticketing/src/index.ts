@@ -65,6 +65,26 @@ async function runSlaWorker(ctx: ModuleContext): Promise<void> {
              ticket.id],
           );
         });
+        // Email the assignee
+        const [assignee] = await db.withSuperAdmin(async (c) => {
+          const r = await c.query(
+            `SELECT email, name FROM users WHERE id = $1 AND email IS NOT NULL`,
+            [ticket.assignee_id],
+          );
+          return r.rows as { email: string; name: string }[];
+        });
+        if (assignee) {
+          emailSvc.send(ticket.tenant_id, {
+            to: assignee.email,
+            toName: assignee.name,
+            subject: `⏰ SLA Reminder: Ticket ${ticket.ticket_number}`,
+            bodyHtml: `<p>Hi ${assignee.name},</p>
+<p>This is a reminder that ticket <strong>${ticket.ticket_number}</strong> — "<em>${ticket.subject}</em>" is approaching its SLA deadline.</p>
+<p><strong>${remMins > 0 ? `${remMins} minutes remaining` : 'SLA due very soon'}</strong> — please action this ticket now.</p>`,
+            bodyText: `Hi ${assignee.name},\n\nSLA reminder: Ticket ${ticket.ticket_number} ("${ticket.subject}") has ${remMins > 0 ? `${remMins} minutes remaining` : 'very little time remaining'} before the SLA deadline.\n\nPlease action this ticket now.`,
+            ticketId: ticket.id,
+          }).catch(() => { /* non-fatal */ });
+        }
         await eventBus.publish(ticket.tenant_id, 'ticket.sla_reminder', { ticketId: ticket.id });
         logger.info(`SLA reminder sent for ticket ${ticket.ticket_number}`);
       }

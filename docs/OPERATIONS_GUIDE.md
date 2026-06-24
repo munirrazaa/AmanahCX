@@ -18,6 +18,7 @@ Last updated: 2026-06-24
   - [First Reply Time — Measuring Agent Responsiveness](#first-reply-time--measuring-agent-responsiveness)
   - [Smart Policy Matching — Right SLA for Every Ticket](#smart-policy-matching--right-sla-for-every-ticket)
   - [CSAT Survey — Measuring Customer Satisfaction](#csat-survey--measuring-customer-satisfaction)
+  - [SLA Breach Alerts — Automatic Warnings & Escalations](#sla-breach-alerts--automatic-warnings--escalations)
 - [Email & Notifications](#email--notifications)
   - [Email Deliverability — Sending from Your Domain](#email-deliverability--sending-from-your-domain)
 - [Access & Roles](#access--roles)
@@ -307,6 +308,43 @@ When a ticket is closed, the platform automatically emails the customer a one-qu
 - Survey links expire after 7 days by default (configurable per workspace via `csat_expiry_days` in tenant settings).
 - A customer can only submit once — the link is blocked on a second attempt.
 - The survey page works on any device — no login, no app required.
+
+---
+
+## SLA Breach Alerts — Automatic Warnings & Escalations
+
+**Module:** Ticketing / SLA
+**Who it affects:** Agents (receive warnings) · Managers & Supervisors (receive breach alerts) · Admins (receive critical escalation emails)
+
+### What it does
+The platform watches every open ticket's SLA deadline continuously. When a ticket is getting close to or has missed its deadline, it automatically sends both an in-app notification AND an email — no manual action required.
+
+### Three escalation stages
+
+| Stage | When it fires | Who gets notified |
+|---|---|---|
+| **Warning** | When 80% of the SLA time has passed (e.g. 6.4 hrs into an 8-hr SLA) | The assigned agent only |
+| **Breach (L1)** | When the SLA deadline is missed (100%) | The assigned agent + all managers in the workspace |
+| **Critical (L2)** | When the ticket is 50% past its deadline (150%) | All workspace admins |
+
+Each stage sends:
+- An **in-app bell notification** (visible on the top bar inside the CRM)
+- An **email** to each relevant person with the ticket number, subject, and how much time is remaining or overdue
+
+### How to configure the warning threshold
+The 80% warning threshold is set per SLA policy. To change it:
+1. Go to **SLA Policies** in the sidebar.
+2. Open the policy you want to adjust.
+3. Set the **Reminder** escalation step to the percentage you want (e.g. 75% for an earlier warning).
+
+### Example scenario
+> An Urgent ticket (4-hour SLA) is accepted at 9:00 AM. By 12:12 PM (3h 12m = 80%), the assigned agent receives an email and in-app notification: "⏰ SLA Reminder — TKT-00456 — 48 minutes remaining." At 1:00 PM (100%) the agent and all managers receive a breach alert. If still unresolved at 3:00 PM (150%), all admins receive a critical escalation email.
+
+### Rules & notes
+- Each stage fires once per ticket — no repeated reminders.
+- The system checks every 5 minutes automatically. No setup required.
+- Notifications are only sent if the ticket has an assigned agent.
+- Emails are sent using your configured email provider (SendGrid or other).
 
 ---
 

@@ -3,6 +3,39 @@ _Most recent at top. Treated as the primary record for development tracking._
 
 ---
 
+## Change Log - 2026-06-24 (Ticket Reports)
+
+### Added
+**Full Ticket Reports page for managers — benchmarked vs Zendesk / Freshdesk**
+- New **Ticket Reports** page accessible to managers from the sidebar.
+- **6 KPI summary cards:** Total Tickets, Resolved (with resolution rate %), SLA Compliance % (colour-coded green/amber/red), Avg Resolution Time, Avg First Response Time, Escalation Rate %.
+- **Ticket Volume chart:** Bar chart showing total, resolved, and SLA-breached tickets over the selected period (daily/weekly/monthly breakdowns auto-selected by period).
+- **SLA Performance Trend chart:** Dual-axis line chart — SLA compliance % and avg resolution/first-response times over time.
+- **Tickets by Priority:** Donut chart (Urgent/High/Medium/Low) with count and percentage.
+- **Tickets by Channel:** Donut chart (Voice Bot/Manual/Email etc.) with count and percentage.
+- **Top Issue Categories:** Horizontal bar chart of the top 10 ticket tags with avg resolution time and SLA breach rate per category.
+- **Tickets by Type:** Bar breakdown (complaint/inquiry/sales etc.).
+- **Repeat Reporters:** Table of customers who raised more than one ticket in the period.
+- **Period selector:** Last 7 days / 30 days / 90 days / 6 months.
+- **CSV export:** Downloads volume data as a spreadsheet.
+- Files: `packages/frontend/src/pages/TicketReports.tsx` (new), `packages/frontend/src/App.tsx` (import + route + nav link).
+
+---
+
+## Change Log - 2026-06-24 (SLA breach notifications)
+
+### Added
+**SLA escalation — all stages now send email + in-app notification**
+- Previously: the warning reminder (at 80% of SLA time) only sent an in-app notification. Agents had no email alert until the SLA was already breached.
+- Now: all three escalation stages send both in-app notification AND email.
+  - **80% warning** → email to the assigned agent: "X minutes remaining, please action now"
+  - **100% breach (L1)** → email to the agent + all managers in the workspace
+  - **150% breach (L2)** → email to all tenant admins (highest authority escalation)
+- Worker checks every 5 minutes and fires on server start (no breach is missed after a restart).
+- Files: `modules/ticketing/src/index.ts` — added `emailSvc.send()` call inside the reminder block.
+
+---
+
 ## Change Log - 2026-06-24 (SLA deadline engine)
 
 ### Fixed / Enhanced

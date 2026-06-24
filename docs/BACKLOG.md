@@ -59,13 +59,15 @@ _All ideas, pending work, and deferred items. Prioritised against enterprise rea
 - **Verdict:** Do Soon
 - **Why:** SLA escalation steps are configured but if notifications aren't delivered (email or in-app), the escalation feature has no teeth. Enterprise buyers specifically ask "what happens when SLA is breached?"
 - **Benchmark:** Zendesk sends email + in-app. Freshdesk adds webhook. Both are standard.
-- **Status:** Escalation schedule exists in DB. Notification delivery not confirmed working end-to-end.
+- **Status:** Done ✅ — 2026-06-24
+- **Detail:** All three escalation stages now send both in-app notification AND email. Stage 1 (warning at 80%): emails the assigned agent. Stage 2 (SLA breach at 100%): emails the agent + all managers. Stage 3 (critical escalation at 150%): emails all tenant admins. Worker runs every 5 minutes automatically.
 
 ### 8. Reports Module — SLA performance, ticket volume, agent stats
 - **Verdict:** Do Soon
 - **Why:** Every enterprise buyer asks for reporting. "How do I know my team is performing?" Without reports the product feels incomplete. Listed in product modules but needs confirmation it works.
 - **Benchmark:** All top CRMs ship basic reports: SLA compliance %, ticket volume by channel/dept, first reply time, resolution time.
-- **Status:** Module exists in nav — needs audit of what actually works vs. what is scaffolded.
+- **Status:** Done ✅ — 2026-06-24
+- **Detail:** Full Ticket Reports page now live for managers. Includes: 6 KPI cards (total tickets, resolved, SLA compliance %, avg resolution time, avg first response time, escalation rate), ticket volume chart over time, SLA performance trend chart, tickets by priority (donut), tickets by channel (donut), top issue categories with avg resolution time and breach rate, tickets by type, and repeat reporters list. Period selector (7d / 30d / 90d / 6m) and CSV export included. Sales Reports (invoices, aging, customer-wise) and Team Activity Report were already working.
 
 ### 9. Agent Status — Online / Away / Busy / Offline
 - **Verdict:** Do Soon

@@ -5,7 +5,8 @@ import {
   LayoutDashboard, Users, Building2, TrendingUp, Phone,
   CheckSquare, BarChart3, Settings as SettingsIcon, Zap, Shield,
   LogOut, CreditCard, BarChart2, LifeBuoy, List, Clock, Mail, Bot,
-  FileText, Layers, MessageCircle, Key, Bell, Lock,
+  FileText, Layers, MessageCircle, Key, Bell, Lock, ChevronDown, ChevronRight,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { useAuthStore } from './store/auth.store';
 import { useIsSuperAdmin, useIsAdmin, useIsTenantAdmin, useHasRole } from './hooks/useRole';
@@ -54,6 +55,8 @@ import { SalesTemplates }    from './pages/sales/SalesTemplates';
 import { SalesBuilder }      from './pages/sales/SalesBuilder';
 import { SalesSettingsPage } from './pages/sales/SalesSettings';
 import { TeamReports }       from './pages/TeamReports';
+import { TicketReports }     from './pages/TicketReports';
+import { Reports }           from './pages/Reports';
 import { TeamMessaging }     from './pages/TeamMessaging';
 import CsatSurvey            from './pages/CsatSurvey';
 
@@ -93,6 +96,7 @@ function Sidebar() {
   const isAdmin       = useIsAdmin();
   const isTenantAdmin = useIsTenantAdmin();
   const isManager     = useHasRole('manager');
+  const [analyticsOpen, setAnalyticsOpen] = React.useState(true);
 
   // Fetch active modules from the API — drives the sidebar dynamically
   const { data: modulesData } = useQuery<ActiveModule[]>({
@@ -374,7 +378,72 @@ function Sidebar() {
           </NavLink>
         )}
 
-        {/* SLA Policies — managers only */}
+        {/* Reports — managers AND agents (not tenant admin) */}
+        {!isSuperAdmin && !isTenantAdmin && (
+          <NavLink to="/reports"
+            className={({ isActive }) =>
+              `flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm transition-all ${
+                isActive ? 'text-white font-semibold' : 'text-white/60 hover:text-white hover:bg-white/10'
+              }`
+            }
+            style={({ isActive }) => isActive ? {
+              background: 'linear-gradient(135deg, rgba(41,171,226,0.25) 0%, rgba(77,139,60,0.15) 100%)',
+              borderLeft: '2px solid #29ABE2',
+            } : {}}
+          >
+            <FileSpreadsheet className="w-4 h-4 shrink-0" />
+            Reports
+          </NavLink>
+        )}
+
+        {/* Analytics section — managers only */}
+        {isManager && !isTenantAdmin && (
+          <div>
+            <button
+              onClick={() => setAnalyticsOpen(o => !o)}
+              className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm transition-all text-white/60 hover:text-white hover:bg-white/10"
+            >
+              <BarChart3 className="w-4 h-4 shrink-0" />
+              <span className="flex-1 text-left">Analytics</span>
+              {analyticsOpen
+                ? <ChevronDown className="w-3.5 h-3.5" />
+                : <ChevronRight className="w-3.5 h-3.5" />}
+            </button>
+            {analyticsOpen && (
+              <div className="ml-3 mt-0.5 space-y-0.5 border-l border-white/10 pl-3">
+                <NavLink to="/dashboard"
+                  className={({ isActive }) =>
+                    `flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs transition-all ${
+                      isActive ? 'text-white font-semibold' : 'text-white/50 hover:text-white hover:bg-white/10'
+                    }`
+                  }
+                  style={({ isActive }) => isActive ? {
+                    background: 'linear-gradient(135deg, rgba(41,171,226,0.2) 0%, rgba(77,139,60,0.1) 100%)',
+                    borderLeft: '2px solid #29ABE2',
+                  } : {}}
+                >
+                  <LayoutDashboard className="w-3.5 h-3.5 shrink-0" />
+                  Ops Dashboard
+                </NavLink>
+                <NavLink to="/ticket-reports"
+                  className={({ isActive }) =>
+                    `flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs transition-all ${
+                      isActive ? 'text-white font-semibold' : 'text-white/50 hover:text-white hover:bg-white/10'
+                    }`
+                  }
+                  style={({ isActive }) => isActive ? {
+                    background: 'linear-gradient(135deg, rgba(41,171,226,0.2) 0%, rgba(77,139,60,0.1) 100%)',
+                    borderLeft: '2px solid #29ABE2',
+                  } : {}}
+                >
+                  <BarChart3 className="w-3.5 h-3.5 shrink-0" />
+                  Ticket Reports
+                </NavLink>
+              </div>
+            )}
+          </div>
+        )}
+
         {isManager && !isTenantAdmin && (
           <NavLink to="/tickets/sla"
             className={({ isActive }) =>
@@ -541,7 +610,9 @@ function AppLayout() {
           <Route path="/contacts/:id"      element={op(<ContactDetail />)} />
           <Route path="/activities"  element={op(<Activities />)} />
           <Route path="/analytics"   element={op(<Analytics />)} />
-          <Route path="/team-reports" element={op(<TeamReports />)} />
+          <Route path="/team-reports"    element={op(<TeamReports />)} />
+          <Route path="/ticket-reports" element={op(<TicketReports />)} />
+          <Route path="/reports"        element={op(<Reports />)} />
           <Route path="/billing"     element={op(<Billing />)} />
           <Route path="/integrations" element={<Integrations />} />
           <Route path="/settings"          element={<Settings />} />
