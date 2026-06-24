@@ -55,6 +55,7 @@ import { SalesBuilder }      from './pages/sales/SalesBuilder';
 import { SalesSettingsPage } from './pages/sales/SalesSettings';
 import { TeamReports }       from './pages/TeamReports';
 import { TeamMessaging }     from './pages/TeamMessaging';
+import CsatSurvey            from './pages/CsatSurvey';
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 30_000, retry: 1 } },
@@ -578,6 +579,7 @@ export default function App() {
           <Route path="/register"        element={<RegisterPage />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password"  element={<ResetPassword />} />
+          <Route path="/csat/:token"     element={<CsatSurvey />} />
           <Route path="/*"               element={<AppLayout />} />
         </Routes>
       </BrowserRouter>

@@ -29,15 +29,15 @@ _All ideas, pending work, and deferred items. Prioritised against enterprise rea
 - **Verdict:** Do Now
 - **Why:** Onboarding flow sends password emails via SendGrid. If they land in spam, new customers cannot log in. This breaks the entire customer onboarding journey.
 - **Benchmark:** All SaaS products configure domain authentication before go-live.
-- **Status:** Not Started
-- **Detail:** Add SPF/DKIM records for sending domain so emails land in inbox reliably.
+- **Status:** Code done ✅ — DNS setup pending (action required by owner)
+- **Detail:** Sender changed to `noreply@vividsns.com`. DNS records (SPF TXT + 2 DKIM CNAMEs) must be added via SendGrid dashboard → Sender Authentication → Authenticate Your Domain. One-time setup.
 
 ### 4. CSAT Survey — Customer satisfaction after ticket close
 - **Verdict:** Do Now
-- **Why:** Enterprise contact centres are bought and judged on customer satisfaction scores. It is listed in the product modules (Section 3) but not built. Every buyer will ask to see it.
+- **Why:** Enterprise contact centres are bought and judged on customer satisfaction scores.
 - **Benchmark:** Zendesk, Freshdesk, Salesforce all ship CSAT as core — not an add-on.
-- **Status:** Not Started
-- **Detail:** Auto-send a 1-question satisfaction survey when a ticket is resolved. Record score. Show in reports and on the ticket record.
+- **Status:** Done ✅ — 2026-06-24
+- **Detail:** Public survey page (`/csat/:token`), auto-sent on ticket close, rating shown on ticket panel, list + summary API available. CSAT score visible to managers via `GET /api/v1/tickets/csat/summary`.
 
 ### 5. Ticket Queue / Live Wallboard for supervisors
 - **Verdict:** Do Now
@@ -121,6 +121,8 @@ _All ideas, pending work, and deferred items. Prioritised against enterprise rea
 
 ## ✅ Completed (moved from backlog)
 
+- Email deliverability — sender changed to noreply@vividsns.com — DONE 2026-06-24 (DNS records pending owner action)
+- CSAT Survey — full end-to-end flow (public page, auto-send, ticket panel, API) — DONE 2026-06-24
 - Holiday Calendar — DONE 2026-06-24
 - First Reply Time metric (DB + stamping) — DONE 2026-06-24
 - Smart Policy Matching — DONE 2026-06-24

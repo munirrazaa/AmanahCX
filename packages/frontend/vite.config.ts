@@ -15,6 +15,7 @@ export default defineConfig({
     strictPort: true, // never silently move to another port — fail loudly instead
     proxy: {
       '/api':          { target: 'http://localhost:3000', changeOrigin: true },
+      '/public':       { target: 'http://localhost:3000', changeOrigin: true },
       '/auth':         { target: 'http://localhost:3000', changeOrigin: true },
       '/super-admin':  { target: 'http://localhost:3000', changeOrigin: true },
       '/graphql':      { target: 'http://localhost:3000', changeOrigin: true },

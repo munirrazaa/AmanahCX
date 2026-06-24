@@ -17,6 +17,9 @@ Last updated: 2026-06-24
   - [Holiday Calendar — Automatic SLA Pause on Public Holidays](#holiday-calendar--automatic-sla-pause-on-public-holidays)
   - [First Reply Time — Measuring Agent Responsiveness](#first-reply-time--measuring-agent-responsiveness)
   - [Smart Policy Matching — Right SLA for Every Ticket](#smart-policy-matching--right-sla-for-every-ticket)
+  - [CSAT Survey — Measuring Customer Satisfaction](#csat-survey--measuring-customer-satisfaction)
+- [Email & Notifications](#email--notifications)
+  - [Email Deliverability — Sending from Your Domain](#email-deliverability--sending-from-your-domain)
 - [Access & Roles](#access--roles)
   - [Entitlements — Licensing Modules per Workspace](#entitlements--licensing-modules-per-workspace)
   - [Role Permissions — What Each Team Member Can Do](#role-permissions--what-each-team-member-can-do)
@@ -255,6 +258,110 @@ The system scores each active policy by how many conditions it has set. The most
 - A blank condition field means "match anything" for that dimension.
 - Always create a catch-all policy (no conditions) as a fallback for each priority tier, otherwise unmatched tickets get no SLA.
 - Conditions are evaluated at ticket creation and on priority change.
+
+---
+
+## CSAT Survey — Measuring Customer Satisfaction
+
+**Module:** Ticketing / Contact Centre
+**Who it affects:** All customers (receive the survey) · Agents (see score on their resolved tickets) · Managers & Admins (review scores in reports)
+
+### What it does
+When a ticket is closed, the platform automatically emails the customer a one-question satisfaction survey. The customer clicks a link, chooses 1–5 stars, and optionally leaves a comment. The score is recorded against the ticket and is visible to the handling agent and managers.
+
+### How it works — step by step
+
+**For the customer:**
+1. Agent closes the ticket.
+2. Customer receives an email: "How did we do? — Ticket #TKT-XXXXX".
+3. Customer clicks the link → a clean survey page opens (no login required).
+4. Customer selects 1–5 stars and optionally types a comment.
+5. Clicks **Submit Feedback** → sees a thank-you screen.
+6. Survey link expires after 7 days.
+
+**For agents and managers:**
+1. Open any resolved ticket → scroll to the **Customer Satisfaction** card in the detail panel.
+2. If the customer has responded: shows the star rating and comment.
+3. If the customer hasn't responded yet: shows "Survey sent — awaiting customer response".
+
+**For managers (aggregate view):**
+1. The CSAT summary API (`/api/v1/tickets/csat/summary`) returns: average rating, response rate %, and breakdown by star (1–5).
+2. The full list (`/api/v1/tickets/csat`) shows all responses with ticket number, subject, rating, comment, and date.
+
+### Rating scale
+
+| Stars | Label |
+|---|---|
+| ⭐ (1) | Very dissatisfied |
+| ⭐⭐ (2) | Dissatisfied |
+| ⭐⭐⭐ (3) | Neutral |
+| ⭐⭐⭐⭐ (4) | Satisfied |
+| ⭐⭐⭐⭐⭐ (5) | Very satisfied |
+
+### Example scenario
+> A customer calls about a blocked debit card. The agent resolves the ticket within 2 hours. An email is sent automatically: "Hi Ahmed, how did we do with ticket TKT-00123?" Ahmed clicks the link, gives 5 stars, and writes "Very fast and helpful." The agent and their manager can see the 5-star rating on the ticket record.
+
+### Rules & limits
+- The survey is sent only if the ticket has a **reporter email** on record.
+- Each ticket gets one survey — sending is idempotent (no duplicate emails on re-close).
+- Survey links expire after 7 days by default (configurable per workspace via `csat_expiry_days` in tenant settings).
+- A customer can only submit once — the link is blocked on a second attempt.
+- The survey page works on any device — no login, no app required.
+
+---
+
+# Email & Notifications
+
+---
+
+## Email Deliverability — Sending from Your Domain
+
+**Module:** Platform Core / Integrations
+**Who it affects:** Super Admin (DNS configuration) · All users (reliable email delivery)
+
+### What it does
+The platform sends system emails on your behalf — password resets, onboarding invitations, and ticket notifications. For these to land reliably in inboxes (not spam), the sending domain (`vividsns.com`) must be authenticated with SendGrid via SPF and DKIM DNS records.
+
+### Why this matters
+Without domain authentication, emails sent via SendGrid from `noreply@vividsns.com` will fail spam filters at Gmail, Outlook, and corporate mail servers. Customers will not receive their onboarding passwords, and ticket notifications will be silently discarded.
+
+### One-time setup — DNS records to add
+
+Log in to your DNS provider (wherever `vividsns.com` is registered) and add the following records. SendGrid will provide the exact values when you complete domain authentication in their dashboard — the steps below tell you where to find them.
+
+**Step by step:**
+
+1. Log in to [app.sendgrid.com](https://app.sendgrid.com).
+2. Go to **Settings → Sender Authentication → Authenticate Your Domain**.
+3. Select your DNS host, enter `vividsns.com`, and click **Next**.
+4. SendGrid will show you **3 DNS records** to add — two CNAME records (DKIM) and one TXT record (SPF).
+5. Log in to your domain registrar and add all three records exactly as shown.
+6. Back in SendGrid, click **Verify** — it will confirm when DNS has propagated (usually within minutes, up to 48 hours).
+
+**Record types you'll add:**
+
+| Type | Purpose | Where to add |
+|---|---|---|
+| TXT | SPF — tells mail servers SendGrid is authorised to send on behalf of vividsns.com | @ or root of domain |
+| CNAME × 2 | DKIM — cryptographically signs each outgoing email so it cannot be spoofed | Two subdomains provided by SendGrid |
+
+### After DNS is verified
+
+Once SendGrid shows the domain as verified, all system emails will:
+- Pass SPF and DKIM checks at recipient mail servers
+- Display `noreply@vividsns.com` as the sender (not a generic SendGrid address)
+- Land in inbox, not spam
+- Pass enterprise email security gateways (important for bank/financial sector customers)
+
+### Current sender configuration
+- **From address:** `noreply@vividsns.com`
+- **From name:** `Vivid CRM`
+- **Provider:** SendGrid (system-level fallback; individual tenants can configure their own SMTP/SendGrid/Microsoft 365 connector in Integrations)
+
+### Rules & limits
+- This setup is a one-time DNS change — it does not need to be repeated.
+- Each tenant can override the system sender by configuring their own email connector in **Settings → Integrations**.
+- Never change the `SENDGRID_FROM_EMAIL` to a Gmail or free-email address — these cannot be authenticated and will cause delivery failures.
 
 ---
 

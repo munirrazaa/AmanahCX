@@ -79,7 +79,14 @@ interface Comment {
   reply_to_created_at?: string;
   reply_to_author_name?: string;
 }
+interface CsatSurveyData {
+  rating: number | null;
+  comment: string | null;
+  responded_at: string | null;
+  sent_at: string | null;
+}
 interface TicketDetail extends Ticket {
+  csatSurvey: CsatSurveyData | null;
   comments: Comment[];
   escalations: any[];
   // Warm-transfer fields
@@ -899,6 +906,33 @@ function TicketPanel({ ticketId, onClose }: { ticketId: string; onClose: () => v
               </div>
             ))}
           </div>
+
+          {/* CSAT Survey */}
+          {t.csatSurvey && (() => {
+            const csat = t.csatSurvey!;
+            const rating = csat.rating ?? 0;
+            const ratingColor = rating >= 4 ? 'text-emerald-400' : rating === 3 ? 'text-yellow-400' : 'text-red-400';
+            const ratingLabels = ['','Very dissatisfied','Dissatisfied','Neutral','Satisfied','Very satisfied'];
+            return (
+              <div className="bg-white rounded-xl p-3">
+                <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-2">Customer Satisfaction</p>
+                {csat.responded_at ? (
+                  <div>
+                    <div className="flex items-center gap-1 mb-1">
+                      {[1,2,3,4,5].map(s => (
+                        <span key={s} className={`text-lg ${s <= rating ? ratingColor : 'text-gray-200'}`}>★</span>
+                      ))}
+                      <span className="text-xs font-semibold text-gray-600 ml-1">{ratingLabels[rating]}</span>
+                    </div>
+                    {csat.comment && <p className="text-xs text-gray-600 italic mt-1">"{csat.comment}"</p>}
+                    <p className="text-[10px] text-gray-400 mt-1.5">Responded {new Date(csat.responded_at).toLocaleDateString('en-GB')}</p>
+                  </div>
+                ) : (
+                  <p className="text-xs text-gray-400">Survey sent — awaiting customer response</p>
+                )}
+              </div>
+            );
+          })()}
 
           {/* Description */}
           {t.description && (

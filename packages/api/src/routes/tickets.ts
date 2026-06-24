@@ -1128,7 +1128,18 @@ export function ticketRoutes(db: DatabaseClient, eventBus: EventBus) {
       });
 
       if (!ticket) return reply.code(404).send({ success: false, error: { code: 'NOT_FOUND', message: 'Ticket not found' } });
-      return reply.send({ success: true, data: { ...ticket, comments, escalations, voiceBotCall } });
+
+      // Fetch CSAT survey for this ticket (super-admin bypass — csat_surveys has RLS)
+      const [csatSurvey] = await db.withSuperAdmin(async (c) => {
+        const r = await c.query(
+          `SELECT id, rating, comment, responded_at, sent_at, expires_at
+           FROM csat_surveys WHERE ticket_id = $1 LIMIT 1`,
+          [ticket.id],
+        );
+        return r.rows;
+      });
+
+      return reply.send({ success: true, data: { ...ticket, comments, escalations, voiceBotCall, csatSurvey: csatSurvey ?? null } });
     });
 
     // ── Update ticket ─────────────────────────────────────────────────────

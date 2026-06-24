@@ -3,6 +3,31 @@ _Most recent at top. Treated as the primary record for development tracking._
 
 ---
 
+## Change Log - 2026-06-24 (CSAT Survey)
+
+### Added
+**CSAT Survey — full end-to-end customer satisfaction flow**
+- **Public survey page** (`/csat/:token`): Customer-facing star-rating page (1–5 stars with colour-coded labels), optional comment field, thank-you confirmation screen. No login required. Handles expired (410) and not-found (404) states gracefully.
+- **Ticket detail panel**: Resolved tickets now show a "Customer Satisfaction" card — displays star rating and comment if responded, or "awaiting response" if survey is pending.
+- **Ticket detail API** (`GET /api/v1/tickets/:id`): Now returns `csatSurvey` field (rating, comment, responded_at, sent_at) for any ticket that has a linked survey.
+- **Survey auto-send**: Pre-existing — already fires on ticket close via `sendCsatSurvey()` in `tickets.ts`. Email sent to reporter with the unique token URL. Verified working end-to-end.
+- **CSAT list + summary API**: Pre-existing at `GET /api/v1/tickets/csat` and `GET /api/v1/tickets/csat/summary`. Returns all responses with rating, comment, ticket details, and aggregate stats (avg rating, response rate, distribution by star).
+- Vite proxy: added `/public` path so the dev server forwards CSAT API calls correctly.
+- Files: `packages/frontend/src/pages/CsatSurvey.tsx` (new), `packages/frontend/src/App.tsx` (route added), `packages/frontend/src/pages/Tickets.tsx` (CSAT card), `packages/api/src/routes/tickets.ts` (csatSurvey in detail), `packages/frontend/vite.config.ts` (proxy).
+
+---
+
+## Change Log - 2026-06-24 (SendGrid deliverability)
+
+### Fixed
+**Email — SendGrid sender changed from Gmail to authenticated domain**
+- Root cause: `SENDGRID_FROM_EMAIL` was set to `vividd.solutions@gmail.com` — a Gmail address that SendGrid cannot authenticate. Emails were landing in spam or being rejected by enterprise mail servers.
+- Fix: Changed sender to `noreply@vividsns.com` (owned domain). SPF/DKIM DNS records must be added in SendGrid and domain registrar (one-time setup — see OPERATIONS_GUIDE.md → Email Deliverability).
+- Files: `packages/api/.env` (SENDGRID_FROM_EMAIL updated).
+- Action required: Complete domain authentication in SendGrid dashboard (Settings → Sender Authentication → Authenticate Your Domain) and add the 3 DNS records provided.
+
+---
+
 ## Change Log - 2026-06-24 (continued)
 
 ### Fixed
