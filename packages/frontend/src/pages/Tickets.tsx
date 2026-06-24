@@ -293,9 +293,16 @@ function TicketCard({
           <p className="text-[10px] text-gray-400 uppercase tracking-wider mb-1 flex items-center gap-1">
             <User className="w-3 h-3" /> Reporter
           </p>
-          <p className="text-sm font-semibold text-gray-800 truncate">
-            {ticket.reporter_name || ticket.contact_name?.trim() || 'Unknown'}
-          </p>
+          {ticket.contact_id ? (
+            <a href={`/contacts/${ticket.contact_id}`}
+               className="text-sm font-semibold text-blue-600 hover:underline truncate block">
+              {ticket.reporter_name || ticket.contact_name?.trim() || 'View Customer →'}
+            </a>
+          ) : (
+            <p className="text-sm font-semibold text-gray-800 truncate">
+              {ticket.reporter_name || ticket.contact_name?.trim() || 'Unknown'}
+            </p>
+          )}
           {ticket.reporter_email && (
             <p className="text-xs text-gray-400 truncate">{ticket.reporter_email}</p>
           )}
@@ -700,6 +707,14 @@ function TicketPanel({ ticketId, onClose }: { ticketId: string; onClose: () => v
     onSuccess: () => { setComment(''); setReplyTo(null); invalidate(); },
   });
 
+  // Cross-dept note mutation — available to any agent including view-only originators
+  const [crossNote, setCrossNote] = React.useState('');
+  const [showNoteBox, setShowNoteBox] = React.useState(false);
+  const noteMutation = useMutation({
+    mutationFn: () => api.post(`/api/v1/tickets/${ticketId}/notes`, { body: crossNote }),
+    onSuccess: () => { setCrossNote(''); setShowNoteBox(false); invalidate(); },
+  });
+
   const handleReply = (c: Comment) => {
     setReplyTo(c);
     inputRef.current?.focus();
@@ -809,6 +824,45 @@ function TicketPanel({ ticketId, onClose }: { ticketId: string; onClose: () => v
           </div>
         )}
 
+        {/* ── ORIGINATOR / CALLBACK NOTE BANNER ───────────────────────── */}
+        {t.is_originated_by_me && (
+          <div className="mx-4 mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 shrink-0">
+            <div className="flex items-center justify-between gap-2 mb-1">
+              <p className="text-xs font-semibold text-amber-800">
+                👁 View only — handled by {t.assignee_department ?? 'another department'}
+              </p>
+              <button
+                onClick={() => setShowNoteBox(v => !v)}
+                className="text-xs font-semibold text-amber-700 border border-amber-300 bg-white hover:bg-amber-100 rounded-lg px-2.5 py-1 transition-colors"
+              >
+                {showNoteBox ? 'Cancel' : '+ Add Note'}
+              </button>
+            </div>
+            <p className="text-[11px] text-amber-600">You created this ticket. You can view its progress and add internal notes for the handling team.</p>
+            {showNoteBox && (
+              <div className="mt-3 space-y-2">
+                <textarea
+                  value={crossNote}
+                  onChange={e => setCrossNote(e.target.value)}
+                  rows={3}
+                  placeholder="Add a note for the handling team (e.g. customer called back, requested update by Friday)…"
+                  className="w-full text-xs border border-amber-300 rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-1 focus:ring-amber-400 bg-white"
+                />
+                <button
+                  onClick={() => noteMutation.mutate()}
+                  disabled={!crossNote.trim() || noteMutation.isPending}
+                  className="text-xs font-semibold bg-amber-600 hover:bg-amber-700 text-white rounded-lg px-3 py-1.5 disabled:opacity-50 transition-colors"
+                >
+                  {noteMutation.isPending ? 'Saving…' : 'Save Note'}
+                </button>
+                {noteMutation.isError && (
+                  <p className="text-[11px] text-red-500">Failed to save note. Please try again.</p>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* ── TABS ─────────────────────────────────────────────────────── */}
         <div className="flex gap-0 px-5 pt-3 pb-0 border-b border-gray-200 bg-white shrink-0">
           {([
@@ -901,8 +955,19 @@ function TicketPanel({ ticketId, onClose }: { ticketId: string; onClose: () => v
 
           {/* Info grid */}
           <div className="grid grid-cols-2 gap-3">
+            {/* Reporter — clickable to Customer 360 if contact_id exists */}
+            <div className="bg-white rounded-xl px-3 py-2.5">
+              <p className="text-[10px] text-gray-500 uppercase tracking-wider">Reporter</p>
+              {t.contact_id ? (
+                <a href={`/contacts/${t.contact_id}`}
+                   className="text-sm font-medium text-blue-600 hover:underline mt-0.5 block truncate">
+                  {t.reporter_name || t.contact_name?.trim() || 'View Customer →'}
+                </a>
+              ) : (
+                <p className="text-sm font-medium text-gray-700 mt-0.5 truncate">{t.reporter_name || '—'}</p>
+              )}
+            </div>
             {[
-              { label: 'Reporter',    val: t.reporter_name  || '—' },
               { label: 'Phone',       val: t.reporter_phone || '—' },
               { label: 'Email',       val: t.reporter_email || '—' },
               { label: 'Assigned To', val: t.assignee_name  || 'Unassigned' },
@@ -1241,7 +1306,7 @@ export function Tickets() {
         <div className="flex gap-2">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-500" />
-            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by subject, #, reporter…"
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by ticket #, name, mobile, NIC, email…"
               className="pl-9 pr-4 py-2 bg-white border border-gray-200 text-gray-500 placeholder-gray-600 rounded-xl text-xs outline-none focus:border-brand-500/60 w-64" />
           </div>
           <div className="relative">

@@ -1183,9 +1183,19 @@ export function ticketRoutes(db: DatabaseClient, eventBus: EventBus) {
       if (query.contactId) { where.push(`t.contact_id = $${idx++}`); params.push(query.contactId); }
       if (query.overdue)   { where.push(`t.sla_due_at < NOW() AND t.status NOT IN ('resolved','closed')`); }
       if (query.search) {
-        where.push(`(t.subject ILIKE $${idx++} OR t.ticket_number ILIKE $${idx++} OR t.reporter_email ILIKE $${idx})`);
-        const like = `%${query.search}%`;
-        params.push(like, like, like); idx += 2;
+        // Search by: ticket number (exact prefix), subject, reporter email, reporter name,
+        // reporter phone, and contact mobile/NIC (for customer callback identification)
+        where.push(
+          `(t.ticket_number ILIKE $${idx}` +
+          ` OR t.subject ILIKE $${idx}` +
+          ` OR t.reporter_email ILIKE $${idx}` +
+          ` OR t.reporter_name ILIKE $${idx}` +
+          ` OR t.reporter_phone ILIKE $${idx}` +
+          ` OR EXISTS (SELECT 1 FROM contacts ct WHERE ct.id = t.contact_id` +
+          `   AND (ct.mobile ILIKE $${idx} OR ct.phone ILIKE $${idx} OR ct.nic_number ILIKE $${idx})))`,
+        );
+        params.push(`%${query.search}%`);
+        idx++;
       }
 
       const whereStr = where.join(' AND ');
@@ -2070,6 +2080,54 @@ ${note ? `<p><strong>Reason:</strong> ${note}</p>` : ''}
 
 
       return reply.code(201).send({ success: true, data: comment });
+    });
+
+    // ── Customer-context internal note — any agent can add ────────────
+    // Any agent with tickets:read can annotate a ticket they encountered during
+    // a customer callback. Always stored as is_internal=true. Does not change
+    // ticket ownership or trigger SLA stamps.
+    fastify.post('/:id/notes', { preHandler: requireScope('tickets:read') }, async (req, reply) => {
+      const { id }   = req.params as { id: string };
+      const { body: noteBody } = req.body as { body: string };
+      if (!noteBody?.trim()) {
+        return reply.code(400).send({ success: false, error: { code: 'EMPTY_NOTE', message: 'Note body is required' } });
+      }
+      const tenantId = req.tenant.id;
+      const userId   = req.user.sub;
+
+      // Verify the ticket exists in this tenant
+      const [exists] = await db.withTenant(tenantId, async (client) => {
+        const r = await client.query(`SELECT id FROM tickets WHERE id = $1`, [id]);
+        return r.rows;
+      });
+      if (!exists) return reply.code(404).send({ success: false, error: { code: 'NOT_FOUND', message: 'Ticket not found' } });
+
+      const [note] = await db.withTenant(tenantId, async (client) => {
+        const r = await client.query(
+          `INSERT INTO ticket_comments
+             (tenant_id, ticket_id, author_id, body, is_internal, comment_type)
+           VALUES ($1,$2,$3,$4,true,'note')
+           RETURNING *`,
+          [tenantId, id, userId, noteBody.trim()],
+        );
+        const newId = r.rows[0]?.id;
+        const enriched = await client.query(
+          `SELECT tc.*, u.name AS author_name_resolved, u.role AS author_role, u.department AS author_department
+           FROM ticket_comments tc LEFT JOIN users u ON tc.author_id = u.id
+           WHERE tc.id = $1`,
+          [newId],
+        );
+        return enriched.rows;
+      });
+
+      await auditLog(db, {
+        tenantId, ticketId: id,
+        actorId: userId,
+        action: 'note_added',
+        newValue: { crossDept: true, excerpt: noteBody.trim().slice(0, 120) },
+      });
+
+      return reply.code(201).send({ success: true, data: note });
     });
 
     // ── AGENT DASHBOARD — department-aware ticket counts ──────────────
