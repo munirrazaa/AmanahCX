@@ -49,10 +49,20 @@ Ticket + live status also appear on the customer's CRM record (Contact → Ticke
 ### 4.4 SLA Policy Engine
 Managers create SLA policies per priority tier (Urgent / High / Medium / Low). Each policy defines:
 first-response deadline, resolution deadline, business hours scope (per-day toggle), pause-on-pending
-toggle, and a multi-step escalation schedule (reminder → L1 supervisor → L2 admin), each with a %
-threshold and recipient scope. On ticket create the system auto-assigns the matching policy by priority;
-on priority change it re-evaluates and reassigns. Clock pauses when ticket is Pending if the policy has
-pause_on_pending enabled. SLA policies managed by Managers at `/tickets/sla`.
+toggle, match conditions (channels/departments/tags), and a multi-step escalation schedule
+(reminder → L1 supervisor → L2 admin), each with a % threshold and recipient scope.
+
+**Smart matching:** on ticket create, the system finds the most specific active policy matching
+the ticket's priority + context (channel, department, tags). Most conditions set = wins.
+Fallback to least-specific (catch-all) policy if no exact match.
+
+**Holiday calendar:** tenant-level list of public holidays. SLA clocks pause on holiday dates
+across all policies. Recurring holidays (yearly) supported.
+
+**First reply time:** `tickets.first_replied_at` stamps the first agent public reply — separate
+from the SLA `first_response_at` timer, used as a pure performance metric.
+
+SLA policies and holiday calendar managed by Managers at `/tickets/sla`.
 
 ### 4.3 Sales ticket → pipeline deal
 A `sales` ticket, on acceptance (or via manual **Convert to Deal** button), creates a linked deal in the

@@ -5,11 +5,15 @@ _Future ideas only — NOT yet implemented. Move items to the Change Log once bu
 
 ## SLA Module — Remaining Upgrades
 
-- **Holiday Calendar** — Allow managers to define public holidays per workspace. SLA clock pauses on those days automatically. Standard in Zendesk/Freshdesk. Priority: High.
+~~- **Holiday Calendar** — DONE 2026-06-24~~
+~~- **First Reply Time Metric** — DONE 2026-06-24~~
+~~- **Smart Policy Matching** — DONE 2026-06-24~~
 
-- **First Reply Time Metric** — Track time-to-first-agent-response as a separate KPI from overall resolution SLA. Gives a cleaner picture of initial responsiveness. Priority: Medium.
+## SLA Module — Future Enhancements
 
-- **Smart Policy Matching (beyond priority)** — Assign SLA policies based on channel (email/phone/chat), department, or ticket tags — not just priority. Matches Freshdesk/Jira SM capability. Priority: Medium.
+- **First Reply Time UI** — Display `first_replied_at` on the ticket detail page as a visible metric card (KPI display). DB column and stamping are done; only the UI stat is missing. Priority: Medium.
+- **Holiday SLA pause enforcement in engine** — The `sla_holidays` table exists but the SLA calculation/breach-check logic needs to actually skip holiday dates when computing deadlines. Priority: High.
+- **SLA breach webhook / notification** — Notify an external URL when a ticket breaches SLA. Priority: Medium.
 
 ---
 

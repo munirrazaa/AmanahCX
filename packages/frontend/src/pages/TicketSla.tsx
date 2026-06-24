@@ -30,8 +30,16 @@ interface SlaPolicy {
   business_hours_only: boolean;
   business_hours_schedule: BusinessHoursSchedule;
   pause_on_pending: boolean;
+  match_conditions: { channels?: string[]; departments?: string[]; tags?: string[] };
   is_active: boolean;
   reminder_schedule: ReminderStep[];
+}
+
+interface Holiday {
+  id: string;
+  name: string;
+  date: string;
+  recurring: boolean;
 }
 
 // ── Business hours defaults (benchmarked: Zendesk/Freshdesk standard schedule) ──
@@ -244,6 +252,9 @@ function SlaModal({ policy, onClose }: { policy?: SlaPolicy; onClose: () => void
     businessHoursOnly:  policy?.business_hours_only   ?? false,
     pauseOnPending:     policy?.pause_on_pending      ?? false,
     isActive:           policy?.is_active             ?? true,
+    matchChannels:      (policy?.match_conditions?.channels    ?? []).join(', '),
+    matchDepartments:   (policy?.match_conditions?.departments ?? []).join(', '),
+    matchTags:          (policy?.match_conditions?.tags        ?? []).join(', '),
   });
 
   // Business hours schedule — load from policy or use defaults
@@ -291,7 +302,18 @@ function SlaModal({ policy, onClose }: { policy?: SlaPolicy; onClose: () => void
 
   const mutation = useMutation({
     mutationFn: () => {
-      const payload = { ...form, reminderSchedule: schedule, businessHoursSchedule: bizHours };
+      const splitCSV = (s: string) => s.split(',').map(x => x.trim()).filter(Boolean);
+      const { matchChannels, matchDepartments, matchTags, ...rest } = form;
+      const payload = {
+        ...rest,
+        reminderSchedule: schedule,
+        businessHoursSchedule: bizHours,
+        matchConditions: {
+          channels:    splitCSV(matchChannels),
+          departments: splitCSV(matchDepartments),
+          tags:        splitCSV(matchTags),
+        },
+      };
       return policy
         ? api.patch(`/api/v1/tickets/sla-policies/${policy.id}`, payload)
         : api.post('/api/v1/tickets/sla-policies', payload);
@@ -422,6 +444,43 @@ function SlaModal({ policy, onClose }: { policy?: SlaPolicy; onClose: () => void
                 <p className="text-xs text-gray-500">Clock pauses when ticket is set to Pending / Waiting — resumes when customer replies</p>
               </div>
             </label>
+          </div>
+
+          {/* Smart matching conditions */}
+          <div className="mt-3 border border-gray-100 rounded-xl p-4 bg-gray-50">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Smart Matching Conditions</p>
+            <p className="text-xs text-gray-400 mb-3">
+              Leave blank to match any. Comma-separated values. Most specific policy wins — more conditions = higher priority.
+            </p>
+            <div className="grid grid-cols-1 gap-3">
+              <div>
+                <label className="text-xs font-medium text-gray-600 mb-1 block">Channels</label>
+                <input
+                  value={form.matchChannels}
+                  onChange={e => setForm(f => ({ ...f, matchChannels: e.target.value }))}
+                  placeholder="e.g. email, phone, chat"
+                  className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-600 mb-1 block">Departments</label>
+                <input
+                  value={form.matchDepartments}
+                  onChange={e => setForm(f => ({ ...f, matchDepartments: e.target.value }))}
+                  placeholder="e.g. Support, Billing, Sales"
+                  className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-600 mb-1 block">Tags</label>
+                <input
+                  value={form.matchTags}
+                  onChange={e => setForm(f => ({ ...f, matchTags: e.target.value }))}
+                  placeholder="e.g. vip, enterprise, urgent-client"
+                  className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                />
+              </div>
+            </div>
           </div>
 
           {/* Reminder schedule */}
@@ -680,9 +739,128 @@ function BotDefaultPriority() {
   );
 }
 
+// ── Holiday Calendar ─────────────────────────────────────────────────────────
+function HolidayCalendar({ canEdit }: { canEdit: boolean }) {
+  const qc = useQueryClient();
+  const [showForm, setShowForm]   = useState(false);
+  const [editHol,  setEditHol]    = useState<Holiday | undefined>(undefined);
+  const [form, setForm]           = useState({ name: '', date: '', recurring: true });
+
+  const { data: holidays = [], isLoading } = useQuery<Holiday[]>({
+    queryKey: ['sla-holidays'],
+    queryFn:  async () => (await api.get('/api/v1/tickets/holidays')).data.data,
+  });
+
+  const saveMut = useMutation({
+    mutationFn: () => editHol
+      ? api.patch(`/api/v1/tickets/holidays/${editHol.id}`, form)
+      : api.post('/api/v1/tickets/holidays', form),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['sla-holidays'] });
+      setShowForm(false); setEditHol(undefined); setForm({ name: '', date: '', recurring: true });
+    },
+  });
+
+  const delMut = useMutation({
+    mutationFn: (id: string) => api.delete(`/api/v1/tickets/holidays/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['sla-holidays'] }),
+  });
+
+  const openEdit = (h: Holiday) => { setEditHol(h); setForm({ name: h.name, date: h.date, recurring: h.recurring }); setShowForm(true); };
+  const openNew  = () => { setEditHol(undefined); setForm({ name: '', date: '', recurring: true }); setShowForm(true); };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-sm font-semibold text-gray-900">Holiday Calendar</p>
+          <p className="text-xs text-gray-500 mt-0.5">SLA clocks pause on these dates — applies across all policies. Benchmarked: Zendesk/Freshdesk standard.</p>
+        </div>
+        {canEdit && (
+          <button onClick={openNew}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-brand-600 text-white rounded-xl text-sm font-medium hover:bg-brand-700">
+            <Plus className="w-4 h-4" /> Add Holiday
+          </button>
+        )}
+      </div>
+
+      {isLoading ? (
+        <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-gray-300" /></div>
+      ) : holidays.length === 0 ? (
+        <div className="text-center py-10 text-gray-400 bg-gray-50 rounded-2xl border border-gray-100">
+          <span className="text-3xl block mb-2">🗓️</span>
+          <p className="text-sm">No holidays added yet. Add public holidays to pause SLA automatically.</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {holidays.map(h => (
+            <div key={h.id} className="flex items-center justify-between bg-white border border-gray-100 rounded-xl px-4 py-3">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 bg-blue-50 rounded-lg flex items-center justify-center text-lg">🗓️</div>
+                <div>
+                  <p className="text-sm font-medium text-gray-900">{h.name}</p>
+                  <p className="text-xs text-gray-500">
+                    {new Date(h.date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}
+                    {h.recurring && <span className="ml-2 text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded-full text-[10px]">↻ Yearly</span>}
+                  </p>
+                </div>
+              </div>
+              {canEdit && (
+                <div className="flex gap-1">
+                  <button onClick={() => openEdit(h)} className="p-1.5 text-gray-400 hover:text-brand-600 hover:bg-brand-50 rounded-lg"><Pencil className="w-4 h-4" /></button>
+                  <button onClick={() => { if (confirm(`Delete holiday "${h.name}"?`)) delMut.mutate(h.id); }}
+                    className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg"><Trash2 className="w-4 h-4" /></button>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Add/Edit modal */}
+      {showForm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold text-gray-900">{editHol ? 'Edit Holiday' : 'Add Holiday'}</h3>
+              <button onClick={() => { setShowForm(false); setEditHol(undefined); }} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-600 block mb-1">Holiday Name</label>
+              <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+                placeholder="e.g. Eid Al-Fitr" className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-600 block mb-1">Date</label>
+              <input type="date" value={form.date} onChange={e => setForm(f => ({ ...f, date: e.target.value }))}
+                className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
+            </div>
+            <label className="flex items-center gap-3 px-4 py-3 cursor-pointer bg-gray-50 hover:bg-gray-100 rounded-xl border border-gray-100">
+              <input type="checkbox" checked={form.recurring} onChange={e => setForm(f => ({ ...f, recurring: e.target.checked }))} className="rounded accent-brand-600 w-4 h-4" />
+              <div>
+                <p className="text-sm font-medium text-gray-800">Repeat every year</p>
+                <p className="text-xs text-gray-500">Same month & day recurs annually (e.g. national holidays)</p>
+              </div>
+            </label>
+            <div className="flex gap-2 pt-2">
+              <button onClick={() => { setShowForm(false); setEditHol(undefined); }}
+                className="flex-1 px-4 py-2 text-sm font-medium border border-gray-200 text-gray-700 rounded-xl hover:bg-gray-50">Cancel</button>
+              <button onClick={() => saveMut.mutate()} disabled={saveMut.isPending || !form.name || !form.date}
+                className="flex-1 px-4 py-2 text-sm font-medium bg-brand-600 text-white rounded-xl hover:bg-brand-700 disabled:opacity-50">
+                {saveMut.isPending ? 'Saving…' : editHol ? 'Save Changes' : 'Add Holiday'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function TicketSla() {
   const can = useCan();
   const qc  = useQueryClient();
+  const [tab,        setTab]        = useState<'policies' | 'holidays'>('policies');
   const [editing,    setEditing]    = useState<SlaPolicy | undefined>(undefined);
   const [showCreate, setShowCreate] = useState(false);
 
@@ -710,7 +888,7 @@ export function TicketSla() {
             multi-step reminder and escalation schedule.
           </p>
         </div>
-        {can.manageSla && (
+        {tab === 'policies' && can.manageSla && (
           <button onClick={() => setShowCreate(true)}
             className="flex items-center gap-1.5 px-4 py-2 bg-brand-600 text-white rounded-xl text-sm font-medium hover:bg-brand-700">
             <Plus className="w-4 h-4" /> New Policy
@@ -718,51 +896,69 @@ export function TicketSla() {
         )}
       </div>
 
-      {/* How it works */}
-      <div className="bg-brand-50 rounded-2xl p-4 border border-brand-100">
-        <p className="text-sm font-semibold text-brand-800 mb-2">How multi-step escalation works</p>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
-          {([
-            { Icon: Bell,          color: 'text-amber-600 bg-amber-100',  title: '🔔 Reminder steps',    desc: 'Notify the assigned agent. Add as many as needed — e.g. 50%, 75%, 90%.' },
-            { Icon: AlertTriangle, color: 'text-orange-600 bg-orange-100', title: '⚠️ L1 Escalation',     desc: 'Notify supervisors/managers. Fires when % threshold is crossed.' },
-            { Icon: ShieldAlert,   color: 'text-red-600 bg-red-100',       title: '🚨 L2 Escalation',     desc: 'Notify admins. Used for critical or long-overdue breaches.' },
-          ] as const).map(({ Icon, color, title, desc }) => (
-            <div key={title} className="flex items-start gap-2 bg-white rounded-xl p-3">
-              <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${color}`}>
-                <Icon className="w-4 h-4" />
-              </div>
-              <div>
-                <p className="font-semibold text-gray-800">{title}</p>
-                <p className="text-gray-500 mt-0.5">{desc}</p>
-              </div>
-            </div>
-          ))}
-        </div>
+      {/* Tabs */}
+      <div className="flex gap-1 bg-gray-100 rounded-xl p-1 w-fit">
+        {(['policies', 'holidays'] as const).map(t => (
+          <button key={t} onClick={() => setTab(t)}
+            className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${
+              tab === t ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'
+            }`}>
+            {t === 'policies' ? '⏱ Policies' : '🗓 Holidays'}
+          </button>
+        ))}
       </div>
 
-      {/* Policies */}
-      {isLoading ? (
-        <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-gray-300" /></div>
-      ) : (
-        <div className="space-y-4">
-          {data.map(p => (
-            <PolicyCard key={p.id} p={p}
-              canEdit={can.manageSla}
-              onEdit={() => setEditing(p)}
-              onDelete={() => { if (confirm(`Delete policy "${p.name}"?`)) deleteMutation.mutate(p.id); }}
-            />
-          ))}
-          {data.length === 0 && (
-            <div className="text-center py-12 text-gray-400">
-              <Clock className="w-8 h-8 mx-auto mb-2 opacity-30" />
-              <p className="text-sm">No SLA policies yet. Create one to start tracking response times.</p>
+      {tab === 'policies' && (
+        <>
+          {/* How it works */}
+          <div className="bg-brand-50 rounded-2xl p-4 border border-brand-100">
+            <p className="text-sm font-semibold text-brand-800 mb-2">How multi-step escalation works</p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+              {([
+                { Icon: Bell,          color: 'text-amber-600 bg-amber-100',  title: '🔔 Reminder steps',    desc: 'Notify the assigned agent. Add as many as needed — e.g. 50%, 75%, 90%.' },
+                { Icon: AlertTriangle, color: 'text-orange-600 bg-orange-100', title: '⚠️ L1 Escalation',     desc: 'Notify supervisors/managers. Fires when % threshold is crossed.' },
+                { Icon: ShieldAlert,   color: 'text-red-600 bg-red-100',       title: '🚨 L2 Escalation',     desc: 'Notify admins. Used for critical or long-overdue breaches.' },
+              ] as const).map(({ Icon, color, title, desc }) => (
+                <div key={title} className="flex items-start gap-2 bg-white rounded-xl p-3">
+                  <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${color}`}>
+                    <Icon className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <p className="font-semibold text-gray-800">{title}</p>
+                    <p className="text-gray-500 mt-0.5">{desc}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Policies */}
+          {isLoading ? (
+            <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-gray-300" /></div>
+          ) : (
+            <div className="space-y-4">
+              {data.map(p => (
+                <PolicyCard key={p.id} p={p}
+                  canEdit={can.manageSla}
+                  onEdit={() => setEditing(p)}
+                  onDelete={() => { if (confirm(`Delete policy "${p.name}"?`)) deleteMutation.mutate(p.id); }}
+                />
+              ))}
+              {data.length === 0 && (
+                <div className="text-center py-12 text-gray-400">
+                  <Clock className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                  <p className="text-sm">No SLA policies yet. Create one to start tracking response times.</p>
+                </div>
+              )}
             </div>
           )}
-        </div>
+
+          {/* Bot default priority */}
+          {can.manageSla && <BotDefaultPriority />}
+        </>
       )}
 
-      {/* Bot default priority */}
-      {can.manageSla && <BotDefaultPriority />}
+      {tab === 'holidays' && <HolidayCalendar canEdit={can.manageSla} />}
 
       {(showCreate || editing) && (
         <SlaModal

@@ -110,6 +110,11 @@ const CreateSlaSchema = z.object({
     end:     z.string().regex(/^\d{2}:\d{2}$/),
   })).optional(),
   pauseOnPending:      z.boolean().default(false),
+  matchConditions:     z.object({
+    channels:    z.array(z.string()).optional(),
+    departments: z.array(z.string()).optional(),
+    tags:        z.array(z.string()).optional(),
+  }).optional(),
   isActive:            z.boolean().default(true),
   reminderSchedule:    z.array(z.object({
     id:           z.string(),
@@ -155,19 +160,38 @@ async function findSlaPolicy(
   tenantId: string,
   slaPolicyId: string | undefined,
   priority: string,
+  context?: { channel?: string; department?: string; tags?: string[] },
 ): Promise<{ id: string; resolution_hours: number } | null> {
   const rows = await db.withTenant(tenantId, async (client) => {
     if (slaPolicyId) {
       const r = await client.query('SELECT id, resolution_hours FROM sla_policies WHERE id = $1', [slaPolicyId]);
       return r.rows;
     }
+    // Fetch all active policies matching priority, ordered by specificity (most conditions first)
     const r = await client.query(
-      `SELECT id, resolution_hours FROM sla_policies
+      `SELECT id, resolution_hours, match_conditions FROM sla_policies
        WHERE priority = $1 AND is_active = true
-       ORDER BY created_at ASC LIMIT 1`,
+       ORDER BY (
+         (CASE WHEN match_conditions->>'channels'    IS NOT NULL AND jsonb_array_length(match_conditions->'channels')    > 0 THEN 1 ELSE 0 END) +
+         (CASE WHEN match_conditions->>'departments' IS NOT NULL AND jsonb_array_length(match_conditions->'departments') > 0 THEN 1 ELSE 0 END) +
+         (CASE WHEN match_conditions->>'tags'        IS NOT NULL AND jsonb_array_length(match_conditions->'tags')        > 0 THEN 1 ELSE 0 END)
+       ) DESC, created_at ASC`,
       [priority],
     );
-    return r.rows;
+    if (!r.rows.length) return [];
+    if (!context) return [r.rows[0]];
+    // Find first policy whose conditions all match the ticket context
+    for (const policy of r.rows) {
+      const cond = policy.match_conditions ?? {};
+      const channels    = cond.channels    as string[] | undefined;
+      const departments = cond.departments as string[] | undefined;
+      const tags        = cond.tags        as string[] | undefined;
+      if (channels?.length    && context.channel    && !channels.includes(context.channel))    continue;
+      if (departments?.length && context.department && !departments.includes(context.department)) continue;
+      if (tags?.length        && context.tags       && !tags.some(t => context.tags!.includes(t))) continue;
+      return [policy];
+    }
+    return [r.rows[r.rows.length - 1]]; // fallback: last (least specific) policy
   });
   return rows[0] ?? null;
 }
@@ -717,13 +741,14 @@ export function ticketRoutes(db: DatabaseClient, eventBus: EventBus) {
            `INSERT INTO sla_policies
               (tenant_id, name, description, priority, first_response_hours, resolution_hours,
                reminder_pct, l1_escalation_pct, l2_escalation_pct, business_hours_only,
-               business_hours_schedule, pause_on_pending, is_active, reminder_schedule)
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`,
+               business_hours_schedule, pause_on_pending, match_conditions, is_active, reminder_schedule)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *`,
            [req.tenant.id, body.name, body.description ?? null, body.priority,
             body.firstResponseHours, body.resolutionHours,
             body.reminderPct, body.l1EscalationPct, body.l2EscalationPct,
             body.businessHoursOnly, JSON.stringify(body.businessHoursSchedule ?? {}),
-            body.pauseOnPending, body.isActive, JSON.stringify(body.reminderSchedule ?? [])],
+            body.pauseOnPending, JSON.stringify(body.matchConditions ?? {}),
+            body.isActive, JSON.stringify(body.reminderSchedule ?? [])],
          );
         return r.rows;
       });
@@ -747,15 +772,17 @@ export function ticketRoutes(db: DatabaseClient, eventBus: EventBus) {
              business_hours_only     = COALESCE($9,        business_hours_only),
              business_hours_schedule = COALESCE($10::jsonb, business_hours_schedule),
              pause_on_pending        = COALESCE($11,        pause_on_pending),
-             is_active               = COALESCE($12,        is_active),
-             reminder_schedule       = COALESCE($13::jsonb, reminder_schedule),
+             match_conditions        = COALESCE($12::jsonb, match_conditions),
+             is_active               = COALESCE($13,        is_active),
+             reminder_schedule       = COALESCE($14::jsonb, reminder_schedule),
              updated_at              = NOW()
-           WHERE id = $14 RETURNING *`,
+           WHERE id = $15 RETURNING *`,
           [body.name, body.description, body.priority, body.firstResponseHours,
            body.resolutionHours, body.reminderPct, body.l1EscalationPct,
            body.l2EscalationPct, body.businessHoursOnly,
            body.businessHoursSchedule !== undefined ? JSON.stringify(body.businessHoursSchedule) : null,
            body.pauseOnPending ?? null,
+           body.matchConditions !== undefined ? JSON.stringify(body.matchConditions) : null,
            body.isActive,
            body.reminderSchedule !== undefined ? JSON.stringify(body.reminderSchedule) : null, id],
         );
@@ -774,12 +801,72 @@ export function ticketRoutes(db: DatabaseClient, eventBus: EventBus) {
       return reply.code(204).send();
     });
 
+    // ── Holiday calendar CRUD ─────────────────────────────────────────────
+    const HolidaySchema = z.object({
+      name:      z.string().min(1),
+      date:      z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be YYYY-MM-DD'),
+      recurring: z.boolean().default(true),
+    });
+
+    fastify.get('/holidays', { preHandler: requireScope('tickets:read') }, async (req, reply) => {
+      const holidays = await db.withTenant(req.tenant.id, async (client) => {
+        const r = await client.query('SELECT * FROM sla_holidays ORDER BY date ASC');
+        return r.rows;
+      });
+      return reply.send({ success: true, data: holidays });
+    });
+
+    fastify.post('/holidays', { preHandler: requireScope('tickets:write') }, async (req, reply) => {
+      const body = HolidaySchema.parse(req.body);
+      const [holiday] = await db.withTenant(req.tenant.id, async (client) => {
+        const r = await client.query(
+          `INSERT INTO sla_holidays (tenant_id, name, date, recurring)
+           VALUES ($1,$2,$3,$4)
+           ON CONFLICT (tenant_id, date) DO UPDATE SET name = EXCLUDED.name, recurring = EXCLUDED.recurring
+           RETURNING *`,
+          [req.tenant.id, body.name, body.date, body.recurring],
+        );
+        return r.rows;
+      });
+      return reply.code(201).send({ success: true, data: holiday });
+    });
+
+    fastify.patch('/holidays/:id', { preHandler: requireScope('tickets:write') }, async (req, reply) => {
+      const { id } = req.params as { id: string };
+      const body = HolidaySchema.partial().parse(req.body);
+      const [holiday] = await db.withTenant(req.tenant.id, async (client) => {
+        const r = await client.query(
+          `UPDATE sla_holidays SET
+             name      = COALESCE($1, name),
+             date      = COALESCE($2::date, date),
+             recurring = COALESCE($3, recurring)
+           WHERE id = $4 RETURNING *`,
+          [body.name ?? null, body.date ?? null, body.recurring ?? null, id],
+        );
+        return r.rows;
+      });
+      if (!holiday) return reply.code(404).send({ success: false, error: { code: 'NOT_FOUND', message: 'Holiday not found' } });
+      return reply.send({ success: true, data: holiday });
+    });
+
+    fastify.delete('/holidays/:id', { preHandler: requireScope('tickets:write') }, async (req, reply) => {
+      const { id } = req.params as { id: string };
+      await db.withTenant(req.tenant.id, async (client) => {
+        await client.query('DELETE FROM sla_holidays WHERE id = $1', [id]);
+      });
+      return reply.code(204).send();
+    });
+
     // ── Create ticket (manual) ────────────────────────────────────────────
     fastify.post('/', { preHandler: requireScope('tickets:write') }, async (req, reply) => {
       const body       = CreateTicketSchema.parse(req.body);
       const tenantId   = req.tenant.id;
       const ticketNum  = await nextTicketNumber(db, tenantId);
-      const sla        = await findSlaPolicy(db, tenantId, body.slaPolicyId, body.priority);
+      const sla        = await findSlaPolicy(db, tenantId, body.slaPolicyId, body.priority, {
+        channel:    body.channel,
+        department: (body as any).department,
+        tags:       body.tags,
+      });
 
       const [ticket] = await db.withTenant(tenantId, async (client) => {
         // Auto-assign to default queue if none given
@@ -1659,10 +1746,13 @@ ${note ? `<p><strong>Reason:</strong> ${note}</p>` : ''}
       const userId   = req.user.sub;
 
       const [comment] = await db.withTenant(tenantId, async (client) => {
-        // If this is the first external reply, record first_response_at
+        // Record first_response_at (SLA timer) and first_replied_at (metric) on first agent reply
         if (!body.isInternal && body.commentType === 'reply') {
           await client.query(
-            `UPDATE tickets SET first_response_at = COALESCE(first_response_at, NOW()) WHERE id = $1`,
+            `UPDATE tickets SET
+               first_response_at = COALESCE(first_response_at, NOW()),
+               first_replied_at  = COALESCE(first_replied_at,  NOW())
+             WHERE id = $1`,
             [id],
           );
         }

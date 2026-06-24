@@ -22,6 +22,12 @@ _Most recent at top. Treated as the primary record for development tracking._
 - Benchmarked against Zendesk/Freshdesk: matches global standard.
 - DB: `business_hours_only boolean`, `business_hours_schedule jsonb` on `sla_policies`.
 
+**SLA Module — Steps 4–6: Holiday Calendar, First Reply Time, Smart Policy Matching**
+- **Holiday Calendar** (Step 4): Managers can now define public holidays at workspace level. SLA clocks pause on holiday dates — applies across ALL SLA policies. Holidays can recur yearly (e.g. Eid, national holidays). New tab on the SLA page. API: `GET/POST/PATCH/DELETE /api/v1/tickets/holidays`. DB: new `sla_holidays` table with RLS and `UNIQUE(tenant_id, date)` constraint. Benchmarked: matches Zendesk/Freshdesk standard.
+- **First Reply Time** (Step 5): New `first_replied_at` column on `tickets` table. Stamps when the agent posts their first public reply — tracked independently of the SLA `first_response_at` timer. Useful for pure performance metrics without SLA distortion.
+- **Smart Policy Matching** (Step 6): SLA policies now have `match_conditions` (jsonb: channels, departments, tags). When creating a ticket, the system picks the most specific matching policy — most conditions set = highest priority, with fallback to least-specific policy. Manager can set conditions via comma-separated fields in the policy editor. DB: `match_conditions jsonb NOT NULL DEFAULT '{}'` on `sla_policies` (migration 030).
+- Migration: `030_sla_enhancements.sql` applied.
+
 **SLA Module — Step 3: Pause on Pending**
 - New toggle on each SLA policy: "Pause SLA when waiting for customer."
 - When a ticket is set to Pending/Waiting status, the SLA clock pauses automatically; it resumes when the customer replies.
