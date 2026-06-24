@@ -227,6 +227,7 @@ export function settingsRoutes(db: DatabaseClient) {
           routing: {
             per_agent_ticket_limit: settings?.routing?.per_agent_ticket_limit ?? 0,
             routing_method:         settings?.routing?.routing_method ?? 'random_capacity',
+            bot_default_priority:   settings?.routing?.bot_default_priority ?? 'medium',
           },
           csat: {
             expiry_days: settings?.csat_expiry_days ?? 7,
@@ -235,19 +236,21 @@ export function settingsRoutes(db: DatabaseClient) {
       });
     });
 
-    fastify.patch('/routing', { preHandler: requireRole('super_admin', 'tenant_admin') }, async (req, reply) => {
+    fastify.patch('/routing', { preHandler: requireRole('super_admin', 'tenant_admin', 'manager') }, async (req, reply) => {
       const body = z.object({
         per_agent_ticket_limit: z.number().int().min(0).max(500).optional(), // 0 = unlimited
         routing_method:         z.enum(['random_capacity','round_robin','manual']).optional(),
         csat_expiry_days:       z.number().int().min(1).max(90).optional(),
+        bot_default_priority:   z.enum(['urgent','high','medium','low']).optional(),
       }).parse(req.body);
 
       await db.withSuperAdmin(async (client) => {
-        if (body.per_agent_ticket_limit !== undefined || body.routing_method !== undefined) {
+        if (body.per_agent_ticket_limit !== undefined || body.routing_method !== undefined || body.bot_default_priority !== undefined) {
           const current = (await client.query(`SELECT settings FROM tenants WHERE id = $1`, [req.tenant.id])).rows[0]?.settings ?? {};
           const routing = { ...(current?.routing ?? {}) };
           if (body.per_agent_ticket_limit !== undefined) routing.per_agent_ticket_limit = body.per_agent_ticket_limit;
           if (body.routing_method !== undefined)         routing.routing_method         = body.routing_method;
+          if (body.bot_default_priority !== undefined)   routing.bot_default_priority   = body.bot_default_priority;
           await client.query(
             `UPDATE tenants SET settings = jsonb_set(COALESCE(settings,'{}'), '{routing}', $1::jsonb) WHERE id = $2`,
             [JSON.stringify(routing), req.tenant.id],
@@ -572,12 +575,13 @@ export function settingsRoutes(db: DatabaseClient) {
         permissions:    z.record(z.string()).optional(),
         manager_id:     z.string().uuid().nullable().optional(),
         custom_role_id: z.string().uuid().nullable().optional(),
+        is_active:      z.boolean().optional(),
       });
       const parsed = PatchSchema.safeParse(req.body);
       if (!parsed.success) {
         return reply.code(400).send({ success: false, error: { code: 'INVALID_INPUT', message: parsed.error.issues[0]?.message ?? 'Invalid input' } });
       }
-      const { role, department, departmentType, permissions: customPermissions, manager_id, custom_role_id } = parsed.data;
+      const { role, department, departmentType, permissions: customPermissions, manager_id, custom_role_id, is_active } = parsed.data;
 
       const [user] = await db.withTenant(req.tenant.id, async (client) => {
         // Build dynamic update
@@ -623,13 +627,17 @@ export function settingsRoutes(db: DatabaseClient) {
           updates.push(`custom_role_id = $${i++}`);
           vals.push(custom_role_id);
         }
+        if (is_active !== undefined) {
+          updates.push(`is_active = $${i++}`);
+          vals.push(is_active);
+        }
 
         if (updates.length === 0) return [null];
 
         vals.push(userId);
         const result = await client.query(
           `UPDATE users SET ${updates.join(', ')}, updated_at = NOW()
-           WHERE id = $${i} RETURNING id, name, email, role, department, department_type, permissions, manager_id, custom_role_id`,
+           WHERE id = $${i} RETURNING id, name, email, role, department, department_type, permissions, manager_id, custom_role_id, is_active`,
           vals,
         );
         return result.rows;
@@ -703,7 +711,7 @@ export function settingsRoutes(db: DatabaseClient) {
       if (!newPassword || newPassword.length < 8) {
         return reply.code(400).send({ success: false, error: { code: 'WEAK_PASSWORD', message: 'Password must be at least 8 characters' } });
       }
-      const bcrypt = await import('bcryptjs');
+      const bcrypt = (await import('bcryptjs')).default;
       const [user] = await db.withTenant(req.tenant.id, async (client) => {
         const result = await client.query('SELECT password_hash FROM users WHERE id = $1', [req.user.sub]);
         return result.rows;

@@ -106,6 +106,14 @@ export class EmailService {
       return { provider: 'smtp', config: connectors.smtp as SmtpConfig };
     }
 
+    // System-level fallback: use platform SendGrid key when tenant has no connector
+    const sysKey   = process.env.SENDGRID_API_KEY;
+    const sysFrom  = process.env.SENDGRID_FROM_EMAIL;
+    const sysName  = process.env.SENDGRID_FROM_NAME;
+    if (sysKey && sysFrom) {
+      return { provider: 'sendgrid', config: { apiKey: sysKey, fromEmail: sysFrom, fromName: sysName } };
+    }
+
     return { provider: null, config: null };
   }
 
@@ -362,8 +370,8 @@ export class EmailService {
       subject: opts.subject,
       content: opts.bodyHtml
         ? [
-            { type: 'text/html', value: opts.bodyHtml },
             ...(opts.bodyText ? [{ type: 'text/plain', value: opts.bodyText }] : []),
+            { type: 'text/html', value: opts.bodyHtml },
           ]
         : [{ type: 'text/plain', value: opts.bodyText ?? '' }],
     };

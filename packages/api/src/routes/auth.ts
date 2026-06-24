@@ -5,6 +5,7 @@ import crypto from 'node:crypto';
 import type { DatabaseClient, RedisClient } from '@crm/core';
 import { EmailService } from '../services/email.service';
 import { SECTOR_MAP, getSector } from '@crm/shared';
+import { seedDefaultSlaPolicies } from './tickets';
 
 // ── Security constants ────────────────────────────────────────────────────────
 const BCRYPT_ROUNDS        = 14;          // PCI-DSS / ISO 27001 recommended
@@ -141,6 +142,9 @@ export function authRoutes(db: DatabaseClient, redis: RedisClient) {
 
         return { tenant: t, user: adminUser };
       });
+
+      // Seed default SLA policies for the new tenant
+      await seedDefaultSlaPolicies(db, tenant.id);
 
       const regJti  = crypto.randomBytes(16).toString('hex');
       const token   = await reply.jwtSign({
