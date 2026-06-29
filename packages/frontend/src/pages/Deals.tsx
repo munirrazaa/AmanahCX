@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Plus, DollarSign, Trophy, X, Loader2, ChevronDown,
@@ -38,6 +39,7 @@ function getStageType(name: string): 'new' | 'qualified' | 'proposal' | 'negotia
 export function Deals() {
   const qc = useQueryClient();
   const can = useCan();
+  const [searchParams] = useSearchParams();
   const [selectedPipeline, setSelectedPipeline] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [dragging, setDragging] = useState<any | null>(null);
@@ -63,6 +65,14 @@ export function Deals() {
   useEffect(() => {
     if (!selectedPipeline && pipelines?.[0]) setSelectedPipeline(pipelines[0].id);
   }, [pipelines, selectedPipeline]);
+
+  const openDealId = searchParams.get('open');
+  useEffect(() => {
+    if (!openDealId || selected?.id === openDealId) return;
+    api.get(`/api/v1/deals/${openDealId}`).then(r => {
+      if (r.data.data) setSelected(r.data.data);
+    }).catch(() => {});
+  }, [openDealId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const { data: board, isLoading } = useQuery({
     queryKey: ['board', selectedPipeline],

@@ -5,7 +5,7 @@ import {
   ArrowLeft, User, Building2, Mail, Phone, Tag,
   TrendingUp, CheckSquare, LifeBuoy,
   Edit2, Save, X, Loader2,
-  Clock, Calendar, PhoneCall,
+  Clock, Calendar, PhoneCall, CreditCard, ExternalLink, Plus, Star,
 } from 'lucide-react';
 import { api } from '../services/api';
 import { formatCurrency } from '../utils/format';
@@ -19,6 +19,7 @@ interface Contact {
   email: string;
   phone: string;
   mobile: string;
+  nic_number: string;
   job_title: string;
   status: string;
   source: string;
@@ -165,6 +166,7 @@ function EditModal({ contact, onClose }: { contact: Contact; onClose: () => void
 // ── Deals tab ─────────────────────────────────────────────────────────────────
 
 function DealsTab({ contactId }: { contactId: string }) {
+  const navigate = useNavigate();
   const { data } = useQuery({
     queryKey: ['contact-deals', contactId],
     queryFn: () => api.get(`/api/v1/deals?contactId=${contactId}`).then((r) => r.data.data ?? []),
@@ -183,7 +185,11 @@ function DealsTab({ contactId }: { contactId: string }) {
   return (
     <div className="space-y-2">
       {deals.map((deal) => (
-        <div key={deal.id} className="bg-white border border-gray-100 rounded-xl p-4 flex items-center justify-between hover:border-brand-200 transition-colors">
+        <button
+          key={deal.id}
+          onClick={() => navigate(`/deals?open=${deal.id}`)}
+          className="w-full bg-white border border-gray-100 rounded-xl p-4 flex items-center justify-between hover:border-brand-200 hover:shadow-sm transition-all text-left"
+        >
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium text-gray-900 truncate">{deal.name}</p>
             <p className="text-xs text-gray-400 mt-0.5">{deal.stage_name ?? '—'} · Close: {fmtDate(deal.close_date)}</p>
@@ -195,8 +201,9 @@ function DealsTab({ contactId }: { contactId: string }) {
             <span className="text-sm font-semibold text-brand-600">
               {deal.amount ? formatCurrency(deal.amount, deal.currency) : '—'}
             </span>
+            <ExternalLink className="w-3 h-3 text-gray-300" />
           </div>
-        </div>
+        </button>
       ))}
     </div>
   );
@@ -305,10 +312,70 @@ function EmailsTab({ contactId }: { contactId: string }) {
 
 // ── Tickets tab ───────────────────────────────────────────────────────────────
 
+function NewTicketModal({ contactId, onClose }: { contactId: string; onClose: () => void }) {
+  const qc = useQueryClient();
+  const [subject, setSubject]   = useState('');
+  const [priority, setPriority] = useState('medium');
+  const [dept, setDept]         = useState('');
+
+  const mut = useMutation({
+    mutationFn: () => api.post('/api/v1/tickets', { subject, priority, department: dept || undefined, contactId }).then(r => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['contact-tickets', contactId] });
+      onClose();
+    },
+  });
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+          <h2 className="text-sm font-semibold text-gray-900">New Ticket</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-700"><X className="w-4 h-4" /></button>
+        </div>
+        <div className="p-6 space-y-4">
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Subject <span className="text-red-500">*</span></label>
+            <input value={subject} onChange={e => setSubject(e.target.value)}
+              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-300"
+              placeholder="Describe the issue…" />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Priority</label>
+              <select value={priority} onChange={e => setPriority(e.target.value)}
+                className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-300">
+                {['low','medium','high','urgent'].map(p => <option key={p} value={p}>{p.charAt(0).toUpperCase()+p.slice(1)}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Department</label>
+              <input value={dept} onChange={e => setDept(e.target.value)}
+                className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-300"
+                placeholder="Optional" />
+            </div>
+          </div>
+          {mut.isError && <p className="text-xs text-red-600">Failed to create ticket. Try again.</p>}
+        </div>
+        <div className="px-6 pb-5 flex justify-end gap-2">
+          <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 border border-gray-200 rounded-xl">Cancel</button>
+          <button onClick={() => mut.mutate()} disabled={!subject.trim() || mut.isPending}
+            className="px-4 py-2 text-sm font-medium text-white bg-brand-500 hover:bg-brand-600 rounded-xl disabled:opacity-50 flex items-center gap-1.5">
+            {mut.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+            Create Ticket
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function TicketsTab({ contactId }: { contactId: string }) {
+  const navigate = useNavigate();
+  const [showNew, setShowNew] = useState(false);
   const { data } = useQuery({
     queryKey: ['contact-tickets', contactId],
-    queryFn: () => api.get(`/api/v1/tickets?contactId=${contactId}&pageSize=20`).then((r) => r.data.data ?? []),
+    queryFn: () => api.get(`/api/v1/contacts/${contactId}/tickets`).then((r) => r.data.data ?? []),
   });
   const tickets: any[] = data ?? [];
 
@@ -337,23 +404,35 @@ function TicketsTab({ contactId }: { contactId: string }) {
     return { text, cls };
   };
 
-  if (tickets.length === 0) {
-    return (
+  return (
+    <>
+    {showNew && <NewTicketModal contactId={contactId} onClose={() => setShowNew(false)} />}
+    <div className="space-y-2">
+      <div className="flex justify-end mb-3">
+        <button onClick={() => setShowNew(true)}
+          className="flex items-center gap-1.5 text-xs font-medium text-white bg-brand-500 hover:bg-brand-600 px-3 py-1.5 rounded-lg transition-colors">
+          <Plus className="w-3.5 h-3.5" /> New Ticket
+        </button>
+      </div>
+      {tickets.length === 0 && (
       <div className="text-center py-12 text-gray-400">
         <LifeBuoy className="w-8 h-8 mx-auto mb-2 opacity-40" />
         <p className="text-sm">No support tickets from this contact</p>
       </div>
-    );
-  }
-
-  return (
-    <div className="space-y-2">
-      {tickets.map((t) => (
-        <div key={t.id} className="bg-white border border-gray-100 rounded-xl p-4 flex items-center justify-between hover:border-brand-200 transition-colors">
+    )}
+    {tickets.length > 0 && tickets.map((t) => (
+        <button
+          key={t.id}
+          onClick={() => navigate(`/tickets?open=${t.id}`)}
+          className="w-full bg-white border border-gray-100 rounded-xl p-4 flex items-center justify-between hover:border-brand-200 hover:shadow-sm transition-all text-left"
+        >
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-0.5">
               <span className="text-xs font-mono text-gray-400">#{t.ticket_number}</span>
               <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${PRIORITY_COLORS[t.priority]}`}>{t.priority}</span>
+              {t.department && (
+                <span className="text-xs px-1.5 py-0.5 rounded-full bg-purple-50 text-purple-700 font-medium capitalize">{t.department}</span>
+              )}
             </div>
             <p className="text-sm font-medium text-gray-900 truncate">{t.subject}</p>
             <p className="text-xs text-gray-400 mt-0.5">{fmtRelative(t.created_at)}</p>
@@ -366,10 +445,12 @@ function TicketsTab({ contactId }: { contactId: string }) {
               const tat = tatLabel(t);
               return tat ? <span className={`text-[11px] font-medium ${tat.cls}`}>{tat.text}</span> : null;
             })()}
+            <ExternalLink className="w-3 h-3 text-gray-300 mt-0.5" />
           </div>
-        </div>
+        </button>
       ))}
     </div>
+    </>
   );
 }
 
@@ -394,6 +475,12 @@ export function ContactDetail() {
     enabled: !!id,
   });
   const contact: Contact | undefined = data;
+
+  const { data: csatData } = useQuery({
+    queryKey: ['contact-csat', id],
+    queryFn: () => api.get(`/api/v1/contacts/${id}/csat`).then(r => r.data.data),
+    enabled: !!id,
+  });
 
   if (isLoading) {
     return (
@@ -465,6 +552,12 @@ export function ContactDetail() {
               <span>{contact.mobile} (mobile)</span>
             </a>
           )}
+          {contact.nic_number && (
+            <div className="flex items-center gap-2.5 text-sm text-gray-700">
+              <CreditCard className="w-4 h-4 text-gray-400 shrink-0" />
+              <span className="font-mono text-xs tracking-wide">{contact.nic_number}</span>
+            </div>
+          )}
         </div>
 
         {/* Meta */}
@@ -491,6 +584,24 @@ export function ContactDetail() {
               {contact.tags.map((tag) => (
                 <span key={tag} className="text-xs px-2 py-0.5 bg-brand-50 text-brand-700 rounded-full">{tag}</span>
               ))}
+            </div>
+          </div>
+        )}
+
+        {/* CSAT summary */}
+        {csatData && csatData.count > 0 && (
+          <div className="px-5 py-4 border-b border-gray-100">
+            <p className="text-xs font-medium text-gray-500 mb-2 flex items-center gap-1">
+              <Star className="w-3 h-3" /> Customer Satisfaction
+            </p>
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-1">
+                {[1,2,3,4,5].map(n => (
+                  <Star key={n} className={`w-4 h-4 ${n <= Math.round(csatData.avg) ? 'text-amber-400 fill-amber-400' : 'text-gray-200 fill-gray-200'}`} />
+                ))}
+              </div>
+              <span className="text-sm font-bold text-gray-800">{csatData.avg}</span>
+              <span className="text-xs text-gray-400">({csatData.count} {csatData.count === 1 ? 'rating' : 'ratings'})</span>
             </div>
           </div>
         )}

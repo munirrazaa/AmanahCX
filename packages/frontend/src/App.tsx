@@ -30,6 +30,7 @@ import { SuperAdmin }       from './pages/SuperAdmin';
 import { VoiceAnalytics }   from './pages/VoiceAnalytics';
 import { Tickets }          from './pages/Tickets';
 import { TicketQueues }     from './pages/TicketQueues';
+import { Wallboard }        from './pages/Wallboard';
 import { TicketSla }        from './pages/TicketSla';
 import { Emails }           from './pages/Emails';
 import { VoiceBotConfig }  from './pages/VoiceBotConfig';
@@ -90,6 +91,71 @@ interface ActiveModule {
 }
 
 
+const AGENT_STATUSES = [
+  { value: 'online', label: 'Online',  dot: 'bg-emerald-400' },
+  { value: 'busy',   label: 'Busy',    dot: 'bg-red-400'     },
+  { value: 'away',   label: 'Away',    dot: 'bg-yellow-400'  },
+  { value: 'offline',label: 'Offline', dot: 'bg-gray-400'    },
+] as const;
+
+function AgentStatusPicker({ isTenantAdmin, isSuperAdmin }: { isTenantAdmin: boolean; isSuperAdmin: boolean }) {
+  const [status, setStatus] = React.useState<string>('offline');
+  const [open, setOpen]     = React.useState(false);
+  const ref = React.useRef<HTMLDivElement>(null);
+
+  // Load current status on mount
+  React.useEffect(() => {
+    if (isTenantAdmin || isSuperAdmin) return;
+    api.get('/api/v1/settings/me/status').then(r => {
+      if (r.data?.data?.status) setStatus(r.data.data.status);
+    }).catch(() => {});
+  }, [isTenantAdmin, isSuperAdmin]);
+
+  // Close on outside click
+  React.useEffect(() => {
+    const handler = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  if (isTenantAdmin || isSuperAdmin) return null;
+
+  const current = AGENT_STATUSES.find(s => s.value === status) ?? AGENT_STATUSES[3];
+
+  const pick = async (val: string) => {
+    setStatus(val);
+    setOpen(false);
+    await api.patch('/api/v1/settings/me/status', { status: val });
+  };
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-white/10 hover:bg-white/20 transition-colors"
+        title="Set your status"
+      >
+        <span className={`w-2 h-2 rounded-full shrink-0 ${current.dot}`} />
+        <span className="text-[10px] text-white/70 font-medium">{current.label}</span>
+      </button>
+      {open && (
+        <div className="absolute bottom-8 left-0 w-36 bg-white rounded-xl shadow-xl border border-gray-100 py-1 z-50">
+          {AGENT_STATUSES.map(s => (
+            <button
+              key={s.value}
+              onClick={() => pick(s.value)}
+              className={`w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-50 transition-colors ${status === s.value ? 'font-semibold text-gray-900' : 'text-gray-700'}`}
+            >
+              <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${s.dot}`} />
+              {s.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Sidebar() {
   const { user, tenant, logout } = useAuthStore();
   const isSuperAdmin  = useIsSuperAdmin();
@@ -126,8 +192,7 @@ function Sidebar() {
             </svg>
           </div>
           <div className="min-w-0">
-            <p className="text-sm font-bold text-white leading-tight truncate">Vivid Solutions</p>
-            <p className="text-[10px] text-brand-300 font-medium">&amp; Services</p>
+            <p className="text-sm font-bold text-white leading-tight truncate">AmanahCX</p>
           </div>
         </div>
 
@@ -439,6 +504,20 @@ function Sidebar() {
                   <BarChart3 className="w-3.5 h-3.5 shrink-0" />
                   Ticket Reports
                 </NavLink>
+                <NavLink to="/wallboard"
+                  className={({ isActive }) =>
+                    `flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs transition-all ${
+                      isActive ? 'text-white font-semibold' : 'text-white/50 hover:text-white hover:bg-white/10'
+                    }`
+                  }
+                  style={({ isActive }) => isActive ? {
+                    background: 'linear-gradient(135deg, rgba(41,171,226,0.2) 0%, rgba(77,139,60,0.1) 100%)',
+                    borderLeft: '2px solid #29ABE2',
+                  } : {}}
+                >
+                  <Users className="w-3.5 h-3.5 shrink-0" />
+                  Live Wallboard
+                </NavLink>
               </div>
             )}
           </div>
@@ -482,13 +561,13 @@ function Sidebar() {
         {/* User chip — always visible; avatar links to Personal Settings */}
         <div className="mt-2 px-2 py-2 rounded-xl bg-white/10 flex items-center gap-2">
           <NavLink to="/settings/personal" title="My Settings"
-            className="w-7 h-7 rounded-full shrink-0 flex items-center justify-center text-xs font-bold text-white hover:ring-2 hover:ring-white/40 transition-all"
+            className="relative w-7 h-7 rounded-full shrink-0 flex items-center justify-center text-xs font-bold text-white hover:ring-2 hover:ring-white/40 transition-all"
             style={{ background: 'linear-gradient(135deg, #29ABE2 0%, #4D8B3C 100%)' }}>
             {user?.name?.[0]?.toUpperCase()}
           </NavLink>
           <div className="flex-1 min-w-0">
             <p className="text-xs font-semibold text-white truncate">{user?.name}</p>
-            <p className="text-[10px] text-white/50 capitalize">{user?.role?.replace('_', ' ')}</p>
+            <AgentStatusPicker isTenantAdmin={isTenantAdmin} isSuperAdmin={isSuperAdmin} />
           </div>
           <NotificationBell />
           <button onClick={logout} title="Log out"
@@ -612,6 +691,7 @@ function AppLayout() {
           <Route path="/analytics"   element={op(<Analytics />)} />
           <Route path="/team-reports"    element={op(<TeamReports />)} />
           <Route path="/ticket-reports" element={op(<TicketReports />)} />
+          <Route path="/wallboard"      element={op(<Wallboard />)} />
           <Route path="/reports"        element={op(<Reports />)} />
           <Route path="/billing"     element={op(<Billing />)} />
           <Route path="/integrations" element={<Integrations />} />
