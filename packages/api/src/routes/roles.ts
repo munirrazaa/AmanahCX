@@ -200,12 +200,19 @@ export function defaultPermissions(baseRole: string): Record<string, boolean> {
       'activities:read': true,'activities:create': true,'activities:edit': true,'activities:complete': true,'activities:delete': false,
       'tickets:read': true,   'tickets:create': true,   'tickets:assign': false,'tickets:resolve': true,   'tickets:delete': false,
       'emails:read': true,    'emails:compose': true,   'emails:reply': true,   'emails:delete': false,
-      'analytics:read': false,'analytics:export': false,
+      'analytics:read': true, 'analytics:export': false,
       'voice:read': true,     'voice:call': true,        'voice:recordings': false,
       'voicebot:read': false, 'voicebot:configure': false,
       'integrations:read': false,'integrations:configure': false,
       'settings:read': false, 'settings:edit': false,
       'billing:read': false,  'billing:manage': false,
+    };
+
+    case 'policy_admin': return {
+      ...none,
+      'dashboard:read': true,
+      'tickets:read': true,
+      'settings:read': true,
     };
 
     case 'viewer':
@@ -225,7 +232,7 @@ export function defaultPermissions(baseRole: string): Record<string, boolean> {
 
 const ROLE_HIERARCHY: Record<string, number> = {
   super_admin: 50, platform_admin: 45, tenant_admin: 40,
-  manager: 30, agent: 20, viewer: 10,
+  manager: 30, policy_admin: 25, agent: 20, viewer: 10,
 };
 
 export function rolesRoutes(db: DatabaseClient) {
@@ -271,10 +278,11 @@ export function rolesRoutes(db: DatabaseClient) {
       }
 
       const SYSTEM_ROLES = [
-        { id: 'tenant_admin', defaultName: 'Admin',   description: 'Full workspace access',      color: '#dc2626', is_system: true, base_role: 'tenant_admin' },
-        { id: 'manager',      defaultName: 'Manager', description: 'Team management & records',  color: '#d97706', is_system: true, base_role: 'manager' },
-        { id: 'agent',        defaultName: 'Agent',   description: 'Day-to-day CRM operations',  color: '#2563eb', is_system: true, base_role: 'agent' },
-        { id: 'viewer',       defaultName: 'Viewer',  description: 'Read-only access',           color: '#6b7280', is_system: true, base_role: 'viewer' },
+        { id: 'tenant_admin',  defaultName: 'Admin',          description: 'Full workspace access',         color: '#dc2626', is_system: true, base_role: 'tenant_admin' },
+        { id: 'manager',       defaultName: 'Manager',        description: 'Team management & records',     color: '#d97706', is_system: true, base_role: 'manager' },
+        { id: 'policy_admin',  defaultName: 'Policy Admin',   description: 'SLA policy governance (independent)', color: '#7c3aed', is_system: true, base_role: 'policy_admin' },
+        { id: 'agent',         defaultName: 'Agent',          description: 'Day-to-day CRM operations',    color: '#2563eb', is_system: true, base_role: 'agent' },
+        { id: 'viewer',        defaultName: 'Viewer',         description: 'Read-only access',             color: '#6b7280', is_system: true, base_role: 'viewer' },
       ].map((r) => ({
         ...r,
         name: systemOverrides[r.base_role]?.name ?? r.defaultName,

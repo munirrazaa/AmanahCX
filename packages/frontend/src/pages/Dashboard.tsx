@@ -1224,10 +1224,14 @@ export function Dashboard() {
   const deptType   = (user as any)?.department_type ?? null;
   const deptCfg    = department ? (DEPT_CONFIG[department] ?? null) : null;
 
-  const { data, isLoading, dataUpdatedAt, refetch, isFetching } = useQuery({
+  const isViewer = role === 'viewer';
+
+  const { data, isLoading, isError, dataUpdatedAt, refetch, isFetching } = useQuery({
     queryKey: ['ops-dashboard'],
     queryFn: () => api.get('/api/v1/analytics/ops-dashboard').then(r => r.data.data),
     refetchInterval: 30_000,
+    enabled: !isViewer,
+    retry: false,
   });
 
   const isTenantAdmin = role === 'tenant_admin';
@@ -1247,6 +1251,8 @@ export function Dashboard() {
         { label: 'Voice Bot',      to: '/voice-bot',      icon: Bot,    color: C.purple },
         { label: 'Email Logs',     to: '/emails',         icon: Mail,   color: C.green  },
       ]
+    : isViewer
+    ? []
     : isManager
     ? [
         { label: 'New Ticket',     to: '/tickets',         icon: Ticket,      color: C.orange },
@@ -1322,9 +1328,15 @@ export function Dashboard() {
         )}
 
         {/* Role-aware content */}
-        {isLoading
+        {isViewer
+          ? <div className="flex flex-col items-center py-24 gap-3 text-gray-400">
+              <Shield className="w-10 h-10 opacity-30" />
+              <p className="text-base font-medium text-gray-500">View-only access</p>
+              <p className="text-sm text-gray-400">Your account can view messages only. Contact your admin to request additional access.</p>
+            </div>
+          : isLoading
           ? <Skeleton />
-          : !data
+          : (isError || !data)
           ? <div className="flex flex-col items-center py-20 gap-3 text-gray-400"><Loader2 className="w-8 h-8 animate-spin" /><p className="text-sm">Loading dashboard…</p></div>
           : isTenantAdmin
           ? <TenantAdminDashboard d={data} />

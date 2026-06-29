@@ -267,6 +267,7 @@ export function authRoutes(db: DatabaseClient, redis: RedisClient) {
         department: user.department ?? null,
         sector:     tenant.sector ?? 'other',
         permissions: effectivePermissions,
+        governed_departments: user.governed_departments ?? [],
         jti,
       });
 

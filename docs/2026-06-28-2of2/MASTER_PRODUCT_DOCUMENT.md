@@ -2,7 +2,7 @@
 **AI Operations Platform — Multi-Tenant CRM, Contact-Centre & Sales Suite**
 _Single source of truth for system requirements & behaviour. Update only affected sections on each change._
 
-Last updated: 2026-06-29 (ticket-contact linking UI, AmanahCX rebrand, dept-scoped manager filter, admin user invite with manager; + 7 CRM gap features)
+Last updated: 2026-06-24 (visibility guards, originator view, reports hub, complaints manager)
 
 ---
 
@@ -20,11 +20,7 @@ and team collaboration.
 1. **Entitlement (what is licensed):** super-admin licenses modules + features per tenant
    (`tenants.entitled_features`). Unlicensed features hidden in nav and refused by API.
 2. **Roles (who may act):** tenant admin assigns create/edit/delete per role (Admin, Manager,
-   Agent, Viewer + custom). Five system roles auto-seeded, including the **Policy Admin** governance role.
-   - `policy_admin` (ROLE_RANK 25) — independent governance role. Only role permitted to write SLA policies.
-     Has `governed_departments` scope (stored in JWT); if set, can only manage policies for those departments.
-     Managers and tenant_admin are hard-blocked from SLA writes. Policy Admin does NOT appear in operational
-     queues and is invisible to the rest of the org except the SLA Policies page.
+   Agent, Viewer + custom). Four system roles auto-seeded.
 3. **Record visibility (whose records):** hard filter by line-manager tree
    (`getVisibleUserIds`, `packages/api/src/lib/visibility.ts`) — agent = own; line manager = team;
    manager = department. Applies to contacts, deals, activities, companies, opportunities, dashboards,
@@ -84,10 +80,7 @@ across all policies. Recurring holidays (yearly) supported.
 **First reply time:** `tickets.first_replied_at` stamps the first agent public reply — separate
 from the SLA `first_response_at` timer, used as a pure performance metric.
 
-SLA policies and holiday calendar managed by **Policy Admins** at `/tickets/sla`.
-Policy Admin is the only role with write access to SLA policies (managers and tenant_admin are blocked).
-Each policy can be tagged to a department (`ticket_type`); a policy_admin with a `governed_departments`
-scope can only manage policies for their assigned departments.
+SLA policies and holiday calendar managed by Managers at `/tickets/sla`.
 
 ### 4.3 Sales ticket → pipeline deal
 A `sales` ticket, on acceptance (or via manual **Convert to Deal** button), creates a linked deal in the
@@ -137,78 +130,8 @@ endpoint; shows purple department badge per ticket.
 
 **Demo tenant line managers created:** Support Line Manager (`support.line.manager@demo.com`), Sales Line Manager (`sales.line.manager@demo.com`), Complaints Line Manager (`complaints.line.manager@demo.com`). All use password `Demo1234!`.
 
-**Department-scoped invite form:** `AdminUsers.tsx` InviteModal filters the manager dropdown by department and role tier. Creating an Agent → shows only Line Managers (managers who themselves have a `manager_id`). Creating a Manager → shows only Dept Managers (managers with `manager_id = null`). Changing department or role resets the manager selection. Warning shown if no managers found for the department. Backend `GET /api/v1/settings/team` updated to return `department` and `department_type` fields to enable client-side filtering.
+**Department-scoped invite form:** `AdminUsers.tsx` InviteModal filters the Line Manager dropdown to only show managers from the same department as the selected Department field. Changing department resets the manager selection. Warning shown if no managers found for the department. Backend `GET /api/v1/settings/team` updated to return `department` and `department_type` fields to enable client-side filtering.
 
-**Role display names in invite form:** The manager dropdown label resolves to the organisation's own display name for that tier via `resolveRoleName(member, roles)` — checks `custom_role_id` first, falls back to system role match. E.g. if a manager has custom role "Territory Manager" the dropdown label reads "Territory Manager" instead of "Line Manager". Role selector placed above manager dropdown so tier is chosen first.
-
-### 4.6 AmanahCX Platform Rebrand
-
-All occurrences of "Vivid Solutions & Services" replaced with "AmanahCX":
-- `Login.tsx` — left panel wordmark (h1), mobile header (h2), footer copyright
-- `App.tsx` — sidebar brand paragraph; removed "& Services" second line
-- `super-admin.ts` — onboarding email footer
-- `settings.ts` — invite email footer
-
-### 4.8 Ticket-Contact Linking (Mandatory Contact on Every Ticket)
-
-**Every ticket must be linked to a contact.** This is enforced in the UI at creation time.
-
-**Create Ticket form flow:** Contact search field is first. Agent types any identifier (name, email, phone, mobile, NIC) → live dropdown shows matching contacts → agent selects → reporter fields auto-fill (read-only). Form cannot be submitted without a contact selected.
-
-**API:** `POST /api/v1/tickets` already accepts `contactId`; it is stored as `contact_id` in the `tickets` table. The field is populated on every ticket created via the new form.
-
-**Contact search scope:** `GET /api/v1/contacts?search=...` searches name, email, phone, mobile, and NIC number (both list and count queries). Applies to the inline ticket form search and the main contacts list/search.
-
-**Why this matters:** Without `contact_id`, the Tickets tab on the Contact 360 page (`GET /api/v1/contacts/:id/tickets`) returns nothing — the callback workflow breaks. With it, any agent receiving a callback can find the customer by mobile/NIC and see every prior ticket instantly.
-
-**Industry benchmark:** Zendesk, Freshdesk, and Salesforce all require a contact record on every ticket. This is a non-negotiable standard for enterprise CRM demos.
-
-**NIC on Contact 360 profile panel:** `contacts.nic_number` now renders in the left panel alongside phone and mobile, with a card icon. Agents can visually verify a customer's national ID during a call without leaving the screen.
-
-**Clickable tickets on Contact 360:** Each ticket row in the Contact 360 Tickets tab is now interactive. Clicking navigates to `/tickets?open=<id>` using client-side React Router navigation. The Tickets page reads the `?open=` param on mount and opens the ticket detail panel immediately. An external link icon marks each row as clickable.
-
-### 4.7 Agent Dashboard Fix
+### 4.6 Agent Dashboard Fix
 
 Agent `myTickets` analytics query was broken by `deptTicketFilter` (`ticket_type = 'support'`) applied universally. Support agent tickets are seeded with `ticket_type = 'inquiry'`, causing the filter to return 0 results. Fixed by splitting the query: agents bypass the dept filter entirely; managers still use it. Agent default `analytics:read` permission also corrected from `false` to `true`.
-
-### 4.9 Seven CRM Gap Features (2026-06-29)
-
-These seven features close the gap between AmanahCX and enterprise CRMs like Zendesk, Freshdesk, and Salesforce Service Cloud.
-
-**4.9.1 Agent Status Presence**
-Agents set their availability (Online / Busy / Away / Offline) via a picker in the sidebar. A colored dot shows current status. Auto-assign (push routing) skips Offline and Away agents so tickets only land on available agents. Status is stored in `users.agent_status` with a timestamp (migration 032).
-
-**4.9.2 Live Supervisor Wallboard (`/wallboard`)**
-A real-time operations screen for managers showing: agent status grid with colored dots + active/breached ticket counts; summary strip (Online / Busy / Away / Offline totals); SLA breach alert banner; queue depth panel per department. Auto-refreshes every 30 seconds. Managers only (sidebar: Analytics → Live Wallboard).
-
-**4.9.3 New Ticket Quick Action on Contact 360**
-A "New Ticket" button appears in the Tickets tab on every contact page. Clicking opens an inline modal (subject, priority, department). The ticket is created already linked to the contact — no need to switch to the Tickets page.
-
-**4.9.4 Unified Timeline on Contact 360**
-The Timeline tab on the Contact 360 page now surfaces all four event types in one chronological feed: activities, voice calls, tickets, and deals. Each type has a distinct icon. Powered by an extended `GET /api/v1/contacts/:id/timeline` query.
-
-**4.9.5 CSAT Score on Contact 360 Profile Panel**
-When a contact has rated any resolved ticket, an aggregate star rating and response count appear in the left profile sidebar. Data joins `csat_surveys` → `tickets.contact_id`. Only shown when at least one rating exists.
-
-**4.9.6 Clickable Deals on Contact 360**
-Deal rows in the Contact 360 Deals tab are now interactive buttons. Clicking navigates to `/deals?open=<id>`. The Deals page reads `?open=` from the URL and auto-fetches + opens that deal's detail panel.
-
-**4.9.7 Per-Department Business Hour Profiles**
-A new "Business Hours" tab under SLA Policies lets managers create named schedules (e.g., "Support 9–6 Mon–Fri", "Sales 24/7") and assign them to specific departments. Each profile specifies open/close times per weekday. Closed days are explicitly marked. Powered by the `business_hour_profiles` table (migration 033) with full CRUD API.
-
-### 4.10 Ticket-Contact Linking UI + Platform Rebrand (2026-06-29)
-
-**Mandatory contact on every ticket (Create Ticket form)**
-Contact search is the first field in the Create Ticket modal. Agents cannot submit without selecting a contact. Once selected, Reporter Name, Email, and Phone auto-fill from the CRM record and become read-only. `contactId` is sent on every `POST /api/v1/tickets` call. This closes the workflow gap where tickets could be created without any customer link, breaking the Contact 360 Tickets tab.
-
-**URL-driven ticket panel**
-The Tickets page reads `?open=<id>` from the URL on load and opens that ticket's detail panel immediately. Enables deep-linking from Contact 360, email notifications, and any external system.
-
-**AmanahCX platform rebrand**
-Login page, card header, and copyright footer updated from "Vivid Solutions & Services" to "AmanahCX".
-
-**Department-scoped manager filter (invite flow)**
-When inviting a new team member (Settings → Team), the Line Manager dropdown filters to only show managers in the same department. Changing department resets the manager field. A warning appears if the selected department has no managers yet.
-
-**Admin Users — manager assignment on invite**
-The AdminUsers invite form includes a manager_id field. Managers are filtered by department and role. Custom role names are resolved and displayed correctly via `resolveRoleName` helper.

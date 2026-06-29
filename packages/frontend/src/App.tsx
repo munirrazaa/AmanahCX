@@ -9,7 +9,7 @@ import {
   FileSpreadsheet,
 } from 'lucide-react';
 import { useAuthStore } from './store/auth.store';
-import { useIsSuperAdmin, useIsAdmin, useIsTenantAdmin, useHasRole } from './hooks/useRole';
+import { useIsSuperAdmin, useIsAdmin, useIsTenantAdmin, useHasRole, useIsPolicyAdmin } from './hooks/useRole';
 import { useApplyAppearance } from './hooks/useApplyAppearance';
 import { api } from './services/api';
 import { NotificationBell } from './components/NotificationBell';
@@ -162,6 +162,7 @@ function Sidebar() {
   const isAdmin       = useIsAdmin();
   const isTenantAdmin = useIsTenantAdmin();
   const isManager     = useHasRole('manager');
+  const isPolicyAdmin = useIsPolicyAdmin();
   const [analyticsOpen, setAnalyticsOpen] = React.useState(true);
 
   // Fetch active modules from the API — drives the sidebar dynamically
@@ -523,7 +524,8 @@ function Sidebar() {
           </div>
         )}
 
-        {isManager && !isTenantAdmin && (
+        {/* SLA Policies — policy_admin only (governance role) */}
+        {isPolicyAdmin && (
           <NavLink to="/tickets/sla"
             className={({ isActive }) =>
               `flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm transition-all ${

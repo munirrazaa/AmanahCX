@@ -31,7 +31,7 @@ import { z } from 'zod';
 import { randomBytes } from 'node:crypto';
 import type { DatabaseClient, EventBus } from '@crm/core';
 import { CRM_EVENTS } from '@crm/core';
-import { requireScope } from '../middlewares/auth.middleware';
+import { requireScope, requireRole } from '../middlewares/auth.middleware';
 import { getVisibleUserIds } from '../lib/visibility';
 import { EmailService } from '../services/email.service';
 import { SmsService } from '@crm/core/sms.service';
@@ -117,6 +117,7 @@ const CreateSlaSchema = z.object({
     tags:        z.array(z.string()).optional(),
   }).optional(),
   isActive:            z.boolean().default(true),
+  ticketType:          z.enum(['sales','support','complaints']).nullable().optional(),
   reminderSchedule:    z.array(z.object({
     id:           z.string(),
     pct:          z.number().min(1).max(500),
@@ -501,6 +502,7 @@ async function assignByPushRouting(
          JOIN users u ON u.id = qm.user_id
          WHERE qm.queue_id = $1
            AND u.is_active = true
+           AND u.agent_status NOT IN ('offline','away')
            AND u.role IN ('agent','manager')
            AND u.id != $2`,
         [queueId, ticket.assignee_id ?? '00000000-0000-0000-0000-000000000000'],
@@ -517,6 +519,7 @@ async function assignByPushRouting(
         `SELECT id FROM users
          WHERE tenant_id = $1
            AND is_active = true
+           AND agent_status NOT IN ('offline','away')
            AND role IN ('agent','manager')
            AND id != $2`,
         [tenantId, ticket.assignee_id ?? '00000000-0000-0000-0000-000000000000'],
@@ -877,36 +880,66 @@ export function ticketRoutes(db: DatabaseClient, eventBus: EventBus) {
 
     // ── SLA policy CRUD ───────────────────────────────────────────────────
     fastify.get('/sla-policies', { preHandler: requireScope('tickets:read') }, async (req, reply) => {
+      const role = req.user?.role;
+      const governedDepts: string[] = (req.user as any)?.governed_departments ?? [];
+
       const policies = await db.withTenant(req.tenant.id, async (client) => {
+        // policy_admin sees only policies matching their governed departments
+        if (role === 'policy_admin' && governedDepts.length > 0) {
+          const r = await client.query(
+            `SELECT * FROM sla_policies
+             WHERE (ticket_type = ANY($1) OR ticket_type IS NULL)
+             ORDER BY priority DESC, name ASC`,
+            [governedDepts],
+          );
+          return r.rows;
+        }
         const r = await client.query('SELECT * FROM sla_policies ORDER BY priority DESC, name ASC');
         return r.rows;
       });
       return reply.send({ success: true, data: policies });
     });
 
-    fastify.post('/sla-policies', { preHandler: requireScope('tickets:write') }, async (req, reply) => {
+    fastify.post('/sla-policies', { preHandler: requireRole('policy_admin') }, async (req, reply) => {
       const body = CreateSlaSchema.parse(req.body);
+      const governedDepts: string[] = (req.user as any)?.governed_departments ?? [];
+      // Enforce scope: ticket_type must be within governed departments (or null if governing all)
+      const ticketType = body.ticketType ?? null;
+      if (ticketType && governedDepts.length > 0 && !governedDepts.includes(ticketType)) {
+        return reply.code(403).send({ success: false, error: { code: 'FORBIDDEN', message: 'Outside your governed departments' } });
+      }
       const [policy] = await db.withTenant(req.tenant.id, async (client) => {
         const r = await client.query(
            `INSERT INTO sla_policies
               (tenant_id, name, description, priority, first_response_hours, resolution_hours,
                reminder_pct, l1_escalation_pct, l2_escalation_pct, business_hours_only,
-               business_hours_schedule, pause_on_pending, match_conditions, is_active, reminder_schedule)
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *`,
+               business_hours_schedule, pause_on_pending, match_conditions, is_active, reminder_schedule, ticket_type)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING *`,
            [req.tenant.id, body.name, body.description ?? null, body.priority,
             body.firstResponseHours, body.resolutionHours,
             body.reminderPct, body.l1EscalationPct, body.l2EscalationPct,
             body.businessHoursOnly, JSON.stringify(body.businessHoursSchedule ?? {}),
             body.pauseOnPending, JSON.stringify(body.matchConditions ?? {}),
-            body.isActive, JSON.stringify(body.reminderSchedule ?? [])],
+            body.isActive, JSON.stringify(body.reminderSchedule ?? []), ticketType],
          );
         return r.rows;
       });
       return reply.code(201).send({ success: true, data: policy });
     });
 
-    fastify.patch('/sla-policies/:id', { preHandler: requireScope('tickets:write') }, async (req, reply) => {
+    fastify.patch('/sla-policies/:id', { preHandler: requireRole('policy_admin') }, async (req, reply) => {
       const { id } = req.params as { id: string };
+      const governedDepts: string[] = (req.user as any)?.governed_departments ?? [];
+      // Verify policy is within governed departments before allowing edit
+      if (governedDepts.length > 0) {
+        const existing = await db.withTenant(req.tenant.id, async (c) => {
+          const r = await c.query('SELECT ticket_type FROM sla_policies WHERE id = $1', [id]);
+          return r.rows[0];
+        });
+        if (existing?.ticket_type && !governedDepts.includes(existing.ticket_type)) {
+          return reply.code(403).send({ success: false, error: { code: 'FORBIDDEN', message: 'Outside your governed departments' } });
+        }
+      }
       const body = CreateSlaSchema.partial().parse(req.body);
       const [policy] = await db.withTenant(req.tenant.id, async (client) => {
         const r = await client.query(
@@ -925,6 +958,7 @@ export function ticketRoutes(db: DatabaseClient, eventBus: EventBus) {
              match_conditions        = COALESCE($12::jsonb, match_conditions),
              is_active               = COALESCE($13,        is_active),
              reminder_schedule       = COALESCE($14::jsonb, reminder_schedule),
+             ticket_type             = COALESCE($16,        ticket_type),
              updated_at              = NOW()
            WHERE id = $15 RETURNING *`,
           [body.name, body.description, body.priority, body.firstResponseHours,
@@ -934,7 +968,8 @@ export function ticketRoutes(db: DatabaseClient, eventBus: EventBus) {
            body.pauseOnPending ?? null,
            body.matchConditions !== undefined ? JSON.stringify(body.matchConditions) : null,
            body.isActive,
-           body.reminderSchedule !== undefined ? JSON.stringify(body.reminderSchedule) : null, id],
+           body.reminderSchedule !== undefined ? JSON.stringify(body.reminderSchedule) : null, id,
+           body.ticketType ?? null],
         );
         return r.rows;
       });
@@ -942,7 +977,7 @@ export function ticketRoutes(db: DatabaseClient, eventBus: EventBus) {
       return reply.send({ success: true, data: policy });
     });
 
-    fastify.delete('/sla-policies/:id', { preHandler: requireScope('tickets:write') }, async (req, reply) => {
+    fastify.delete('/sla-policies/:id', { preHandler: requireRole('policy_admin') }, async (req, reply) => {
       const { id } = req.params as { id: string };
       await db.withTenant(req.tenant.id, async (client) => {
         await client.query('UPDATE tickets SET sla_policy_id = NULL WHERE sla_policy_id = $1', [id]);
@@ -966,7 +1001,7 @@ export function ticketRoutes(db: DatabaseClient, eventBus: EventBus) {
       return reply.send({ success: true, data: holidays });
     });
 
-    fastify.post('/holidays', { preHandler: requireScope('tickets:write') }, async (req, reply) => {
+    fastify.post('/holidays', { preHandler: requireRole('policy_admin') }, async (req, reply) => {
       const body = HolidaySchema.parse(req.body);
       const [holiday] = await db.withTenant(req.tenant.id, async (client) => {
         const r = await client.query(
@@ -981,7 +1016,7 @@ export function ticketRoutes(db: DatabaseClient, eventBus: EventBus) {
       return reply.code(201).send({ success: true, data: holiday });
     });
 
-    fastify.patch('/holidays/:id', { preHandler: requireScope('tickets:write') }, async (req, reply) => {
+    fastify.patch('/holidays/:id', { preHandler: requireRole('policy_admin') }, async (req, reply) => {
       const { id } = req.params as { id: string };
       const body = HolidaySchema.partial().parse(req.body);
       const [holiday] = await db.withTenant(req.tenant.id, async (client) => {
@@ -999,7 +1034,7 @@ export function ticketRoutes(db: DatabaseClient, eventBus: EventBus) {
       return reply.send({ success: true, data: holiday });
     });
 
-    fastify.delete('/holidays/:id', { preHandler: requireScope('tickets:write') }, async (req, reply) => {
+    fastify.delete('/holidays/:id', { preHandler: requireRole('policy_admin') }, async (req, reply) => {
       const { id } = req.params as { id: string };
       await db.withTenant(req.tenant.id, async (client) => {
         await client.query('DELETE FROM sla_holidays WHERE id = $1', [id]);
@@ -1372,6 +1407,25 @@ export function ticketRoutes(db: DatabaseClient, eventBus: EventBus) {
       // Auto-set timestamps for status transitions
       if (body.status === 'resolved') { sets.push(`resolved_at = COALESCE(resolved_at, NOW())`); }
       if (body.status === 'closed')   { sets.push(`closed_at   = COALESCE(closed_at,   NOW())`); }
+
+      // SLA pause/resume on pending transitions
+      if (body.status) {
+        const [cur] = await db.withTenant(req.tenant.id, async (client) => {
+          const r = await client.query(`SELECT status, sla_paused_at, sla_pause_elapsed_s, sla_due_at FROM tickets WHERE id = $1`, [id]);
+          return r.rows;
+        });
+        if (cur) {
+          if (body.status === 'pending' && cur.status !== 'pending' && !cur.sla_paused_at) {
+            // Pause: record when we paused
+            sets.push(`sla_paused_at = NOW()`);
+          } else if (body.status !== 'pending' && cur.sla_paused_at) {
+            // Resume: add the elapsed pause time and shift sla_due_at forward, then clear paused_at
+            sets.push(`sla_pause_elapsed_s = sla_pause_elapsed_s + EXTRACT(EPOCH FROM (NOW() - sla_paused_at))::int`);
+            sets.push(`sla_due_at = sla_due_at + (NOW() - sla_paused_at)`);
+            sets.push(`sla_paused_at = NULL`);
+          }
+        }
+      }
 
       // Auto-reassign SLA policy when priority changes (and no explicit slaPolicyId given)
       if (body.priority && !body.slaPolicyId) {
@@ -2239,6 +2293,7 @@ ${note ? `<p><strong>Reason:</strong> ${note}</p>` : ''}
         data: { totals, agents, direct_reports: Number(direct_reports) },
       });
     });
+
   };
 }
 

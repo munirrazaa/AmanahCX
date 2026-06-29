@@ -3,7 +3,7 @@
 _Plain-language reference for workspace managers, agents, and admins.
 Updated automatically on every release. Each section covers one feature: who uses it, what it does, and exactly how to operate it._
 
-Last updated: 2026-06-29
+Last updated: 2026-06-24
 
 ---
 
@@ -31,7 +31,6 @@ Last updated: 2026-06-29
   - [Manager Reports](#manager-reports)
   - [Agent Reports](#agent-reports)
 - [Ops Dashboard — Live KPI Strip](#ops-dashboard--live-kpi-strip)
-- [Ticket-Contact Linking — Every Ticket Needs a Customer](#ticket-contact-linking--every-ticket-needs-a-customer)
 
 ---
 
@@ -84,19 +83,16 @@ The dashboard refreshes automatically every 30 seconds. A manual refresh button 
 ## SLA Policies — Response & Resolution Timers
 
 **Module:** Ticketing / Contact Centre
-**Who it affects:** Policy Admin (create & manage policies) · Agents (work under them) · Supervisors & Admins (receive escalation alerts)
+**Who it affects:** Managers (create & manage policies) · Agents (work under them) · Supervisors & Admins (receive escalation alerts)
 
 ### What it does
 An SLA (Service Level Agreement) policy sets the maximum time your team has to respond to and resolve a ticket. It also defines what happens if those deadlines are at risk — automatically reminding and escalating before a breach occurs.
-
-> **Governance note (added 2026-06-29):** SLA policies are now managed exclusively by the **Policy Admin** role. Managers and tenant admins cannot create, edit, or delete SLA policies. This is a deliberate separation of duties — the person setting the rules should not be the person measured against them.
 
 ### Who can do what
 
 | Role | Can do |
 |---|---|
-| **Policy Admin** | Create, edit, delete SLA policies (only role with this access) |
-| Manager | View tickets and SLA countdowns — cannot edit policies |
+| Manager | Create, edit, delete SLA policies |
 | Tenant Admin | View policies (cannot edit operational settings) |
 | Agent | Works under the policy assigned to their ticket — no direct access |
 | Supervisor / L1 | Receives escalation notifications when threshold is crossed |
@@ -453,7 +449,6 @@ Each workspace has a hierarchy of roles: Admin, Manager, Agent, Viewer, plus cus
 |---|---|
 | Tenant Admin | Workspace configuration only — no operational access |
 | Manager | Day-to-day operational management — queues, SLA, routing, team |
-| **Policy Admin** | SLA governance only — creates and manages SLA policies, no operational access |
 | Agent | Handles tickets, contacts, calls |
 | Viewer | Read-only access across modules |
 | Custom roles | Any combination defined by the tenant admin |
@@ -461,46 +456,7 @@ Each workspace has a hierarchy of roles: Admin, Manager, Agent, Viewer, plus cus
 ### Rules & limits
 - Tenant Admin is deliberately blocked from operational routes — they configure the workspace but do not handle tickets or customer data.
 - Permissions cannot exceed what the workspace is entitled to (licensing ceiling).
-- Five system roles are auto-seeded on workspace creation. Custom roles can be added but not system ones deleted.
-
----
-
-## Policy Admin — SLA Governance Role
-
-**Module:** Access Control / SLA Policies
-**Who it affects:** Tenant Admins (create policy_admin users) · Policy Admins (manage SLA policies)
-
-### What it does
-Policy Admin is a dedicated governance role for SLA policy management. It is completely separate from day-to-day operations: a policy admin does not handle tickets, contacts, or customers. Their sole job is to define and maintain the SLA rules that agents and managers work under.
-
-This separation ensures the person setting the SLA targets is not the same person measured against them — a standard governance best practice.
-
-### How to create a Policy Admin user
-
-1. Go to **Settings → Admin Users**.
-2. Click **Invite User**.
-3. Enter name and email.
-4. Under **Role**, select **Policy Admin**.
-5. The normal Department field disappears and is replaced with **Departments to Govern** checkboxes (Sales / Support / Complaints).
-6. Tick the departments this person will manage SLA policies for. Leave all unchecked to give them access to all departments.
-7. Send the invite. The user receives a welcome email with a temporary password.
-
-### What a Policy Admin can do
-
-| Can do | Cannot do |
-|---|---|
-| Create, edit, delete SLA policies | Handle tickets |
-| Tag each policy to a department | View contacts or deals |
-| View the SLA Policies page | Access routing, queues, or agent stats |
-
-### What others cannot do
-
-- **Managers** — blocked from creating or editing SLA policies. They work under the policies set by the policy admin.
-- **Tenant Admin** — blocked from SLA policy writes (admin separation of duties).
-
-### Example
-
-> JS Bank wants to ensure SLA targets are set by their Quality team, not their operations managers. The tenant admin creates a Policy Admin user for the QA lead and scopes them to "Support" and "Complaints". The QA lead logs in, sees only the SLA Policies page, and sets response/resolution targets. Managers see those targets applied to their tickets but cannot change them.
+- Four system roles are auto-seeded on workspace creation. Custom roles can be added but not system ones deleted.
 
 ---
 
@@ -753,212 +709,3 @@ When a customer calls in, the answering agent can open the contact record and im
 - "They also have a resolved Sales ticket from last month"
 
 This means better, faster service — no asking the customer to repeat themselves.
-
----
-
-## Line Managers — 3-Level Team Hierarchy
-
-### What it does
-Each operational department (Support, Sales, Complaints) now has a full 3-level reporting structure:
-- **Department Manager** (e.g. Support Manager) — sees the full department's data
-- **Line Manager** (e.g. Support Line Manager) — sees their own data and all their direct agents' data
-- **Agent** — sees only their own data
-
-Line managers are assigned per-department. A Support Line Manager only manages Support Agents; a Sales Line Manager only manages Sales Agents.
-
-### How to invite a user and assign their line manager
-
-1. Go to **Admin Panel → Users → Invite User**
-2. Fill in the new user's name and email
-3. Select their **Department** from the dropdown (e.g. Support)
-4. Select the **Role** (Agent or Manager) — the manager dropdown updates automatically based on this choice
-5. The manager dropdown shows your organisation's own label for that tier (e.g. "Territory Manager" or "Floor Manager") and lists only people from the same department at the right seniority level:
-   - Creating an **Agent** → shows Line Managers only
-   - Creating a **Manager** → shows Department Managers only
-6. Select the appropriate manager and click **Send Invite**
-
-> Selecting a different department or role automatically clears the manager selection, so you can never accidentally assign a manager from the wrong department or wrong tier.
-
-### Rules & limits
-- The manager dropdown label uses your organisation's custom role name if one is set (e.g. "Territory Manager" instead of "Line Manager")
-- The manager dropdown only shows users with the Manager role in the same department at the correct tier
-- If no managers exist yet for a department, a warning message is shown and the dropdown stays empty
-- Line managers see their reportees' dashboards, tickets, and reports automatically — no extra configuration needed
-- The 3-level hierarchy is recursive — a manager's manager also sees downward through the tree
-
-
----
-
-## Platform Branding — AmanahCX
-
-The platform is branded as **AmanahCX** across all customer-facing screens:
-- Login page (desktop wordmark, mobile header, footer copyright)
-- Main application sidebar
-- Invite emails sent to new team members
-- Onboarding emails sent when a new workspace is provisioned
-
----
-
-# Ticket-Contact Linking — Every Ticket Needs a Customer
-
-**Who uses this:** All agents and managers who create tickets.
-
-**What it does:** Every ticket must be linked to a contact record in the CRM. This lets any agent who receives a callback from that customer instantly see the full history — all previous tickets, calls, and deals — without asking the customer to repeat themselves.
-
-## How to create a ticket
-
-1. Click **New Ticket** from the Tickets page.
-2. The first field is **Customer Search**. Type the customer's name, email, phone number, mobile number, or NIC number.
-3. A dropdown shows matching contacts. Click the correct customer.
-4. The Reporter Name, Email, and Phone fields fill in automatically (read-only — they come from the CRM record).
-5. Fill in the remaining details: Channel, Issue/Subject, Priority, and Queue.
-6. Click **Create Ticket**.
-
-> You cannot submit the form without selecting a customer. This is intentional — a ticket without a linked contact cannot be found during a callback.
-
-## Finding a customer by callback number
-
-When a customer calls back and you only have their number:
-1. Start creating a new ticket.
-2. In the Customer Search field, type the phone or mobile number.
-3. The system searches across all contact fields — name, email, phone, mobile, and NIC.
-4. Select the customer and the ticket is pre-linked to their record.
-
-Alternatively, search for the customer from the Contacts page to review their full history before creating the ticket.
-
-## What agents see on a contact's record
-
-Open any contact → **Tickets tab** — shows every ticket linked to that customer across all departments (Support, Sales, Complaints), with the department shown as a colour badge. This view is available regardless of which department the agent belongs to.
-
-**Click any ticket to open it.** Each row is clickable — it takes you straight to the ticket's detail panel where you can read the conversation, add a note, or accept the ticket. No need to search manually in the Tickets page.
-
-**NIC on the profile panel.** The customer's National Identity Card number (if on file) appears in the left panel under their phone numbers. Agents can verify it during a call with a quick glance.
-
-No configuration is needed — this is the default platform name for all tenants.
-
----
-
-## Setting your agent status
-
-Your status tells the system (and your supervisor) whether you are available to take tickets.
-
-1. Look at the bottom of the left sidebar — there is a coloured dot next to your name.
-2. Click it to open the status picker.
-3. Choose your status:
-   - **Online** — you are available and will receive auto-assigned tickets.
-   - **Busy** — you are on a call or focused. No new auto-assignments.
-   - **Away** — short break. No new auto-assignments.
-   - **Offline** — end of shift. No new auto-assignments.
-4. Your status updates immediately. The system will not push new tickets to Offline or Away agents.
-
-> Supervisors and managers can see your status on the Live Wallboard in real time.
-
----
-
-## Live Wallboard (managers only)
-
-The Live Wallboard gives managers a real-time view of all agents and queue depth.
-
-**How to open it:** Sidebar → Analytics → Live Wallboard.
-
-**What you see:**
-- Summary strip: how many agents are Online, Busy, Away, or Offline right now.
-- Agent grid: each agent's status dot, active ticket count, and number of SLA breaches.
-- SLA alert banner: appears at the top if any agent has breached tickets — shows count and number of agents affected.
-- Queue depth panel: open, assigned, pending, and breached ticket counts for each department queue.
-
-The page refreshes automatically every 30 seconds. Use the **Refresh** button for an immediate update.
-
----
-
-## Raising a ticket from a customer record
-
-You no longer need to go to the Tickets page to raise a new ticket for a customer.
-
-1. Open the customer's contact page (search in Contacts or click their name anywhere in the system).
-2. Click the **Tickets** tab.
-3. Click **New Ticket** in the top-right of the tab.
-4. Fill in the subject, priority, and department (department is optional).
-5. Click **Create Ticket**.
-
-The ticket is automatically linked to this customer. It will appear in their Tickets tab instantly.
-
----
-
-## Viewing a customer's full history (unified timeline)
-
-The **Timeline** tab on a contact page now shows everything in one place:
-- Activities logged (calls, meetings, emails, notes, tasks)
-- Voice calls received
-- Support tickets opened
-- Deals created
-
-All sorted newest first. No need to jump between tabs to understand what happened with a customer.
-
----
-
-## Customer satisfaction rating on a contact
-
-If a customer has submitted CSAT ratings on any resolved tickets, a star rating appears in their profile panel (left sidebar on their contact page).
-
-- The average rating out of 5 is shown with filled stars.
-- The number of ratings is shown in brackets.
-- If no ratings exist yet, nothing is shown.
-
-This gives agents immediate context about the customer's satisfaction history before taking a call.
-
----
-
-## Opening a deal from a customer record
-
-1. Open the customer's contact page.
-2. Click the **Deals** tab.
-3. Click any deal row — it takes you straight to the deal's detail panel on the Deals board.
-
-An arrow icon on the right of each row confirms it is clickable.
-
----
-
-## Business hour profiles (managers only)
-
-Business hour profiles define when each department is open for work. SLA timers can be set to only count time during business hours.
-
-**How to set up a profile:**
-1. Go to **SLA Policies** (sidebar → SLA Policies).
-2. Click the **Business Hours** tab.
-3. Click **New Profile**.
-4. Give it a name (e.g., "Support 9–6 Mon–Fri").
-5. Enter which departments it applies to (leave blank to apply to all departments).
-6. Set the timezone.
-7. For each day of the week, check the box if the department is open and set the open and close times.
-8. Optionally mark it as the default profile.
-9. Click **Save Profile**.
-
-The profile is saved and visible to all managers. To edit or delete, use the pencil and bin icons on the profile card.
-
----
-
-## How to create a ticket (updated — contact is required)
-
-Every ticket must be linked to a customer contact before it can be saved.
-
-1. Go to **Tickets** and click **New Ticket**.
-2. The first field is **Customer Search**. Type the customer's name, phone, mobile, email, or NIC number.
-3. A dropdown shows matching contacts. Click the right one.
-4. Reporter Name, Email, and Phone fill in automatically and cannot be edited — they come from the CRM record.
-5. Fill in Channel, Subject, Priority, and Queue.
-6. Click **Create Ticket**.
-
-The ticket is linked to the contact from the moment it is created. It will immediately appear in that contact's Tickets tab.
-
----
-
-## Inviting a new team member — manager assignment
-
-When you invite someone to the platform, the system now filters the Line Manager dropdown to only show managers in the same department.
-
-1. Go to **Settings → Team** and click **Invite Member**.
-2. Select the department first.
-3. The Line Manager dropdown updates to show only managers in that department.
-4. If no managers exist for that department yet, a warning will tell you — assign a manager to that department before inviting agents into it.
-5. Fill in name, email, and role, then send the invite.

@@ -13,8 +13,10 @@ _All ideas, pending work, and deferred items. Prioritised against enterprise rea
 
 ### 1. Dashboard — Fix broken analytics / ops dashboard
 - **Verdict:** Do Now
-- **Status:** Done ✅ — 2026-06-29 (verified working for manager and agent roles; materialized views confirmed present; API returns data for all roles)
-- **Detail:** Originally hung due to missing materialized views. Views now exist (`mv_daily_ticket_stats`, `mv_daily_deal_stats`, etc.). Agent + manager dashboards both render correctly.
+- **Why:** The main screen every user lands on is broken. A broken dashboard in a demo kills the sale instantly. Every enterprise CRM has a working home screen.
+- **Benchmark:** Zendesk, Freshdesk, HubSpot all show live ticket counts, SLA status, and team performance on login.
+- **Status:** Not Started
+- **Detail:** `/api/v1/analytics/ops-dashboard` hangs because materialized views (`mv_daily_deal_stats` etc.) don't exist in some DBs. Must render for all roles.
 
 ### 2. SQL Injection Security Patch (Abdurrehman branch)
 - **Verdict:** Do Now
@@ -39,8 +41,10 @@ _All ideas, pending work, and deferred items. Prioritised against enterprise rea
 
 ### 5. Ticket Queue / Live Wallboard for supervisors
 - **Verdict:** Do Now
-- **Status:** Done ✅ — 2026-06-29
-- **Detail:** Live Wallboard page at `/wallboard` (Analytics → Live Wallboard, managers only). Shows agent status grid, summary strip, SLA breach alert banner, and queue depth panel. Auto-refreshes every 30 seconds.
+- **Why:** A contact centre without a live queue view is not a contact centre. Supervisors need to see waiting tickets, agent status, and queue depth in real time. Enterprise buyers demo this on day one.
+- **Benchmark:** Every CCaaS product (Genesys, Zendesk, Freshdesk) ships a supervisor wallboard.
+- **Status:** Referenced in product but no confirmed working UI
+- **Detail:** Real-time view of: tickets in queue, assigned vs. unassigned, agents online, SLA breach risk.
 
 ---
 
@@ -67,13 +71,15 @@ _All ideas, pending work, and deferred items. Prioritised against enterprise rea
 
 ### 9. Agent Status — Online / Away / Busy / Offline
 - **Verdict:** Do Soon
-- **Status:** Done ✅ — 2026-06-29
-- **Detail:** Agents set status from sidebar picker. Colored dot reflects status. Push routing skips Offline/Away agents. Migration 032.
+- **Why:** Routing logic depends on knowing which agents are available. Without this, tickets can be assigned to offline agents.
+- **Benchmark:** All CCaaS products ship presence/status as a core feature.
+- **Status:** Unknown — needs audit.
 
-### 10. Named Business Hour Profiles (per-department)
+### 10. Named Business Hour Profiles (per-department holiday calendars)
 - **Verdict:** Do Soon
-- **Status:** Done ✅ — 2026-06-29
-- **Detail:** Business Hours tab in SLA Policies. Managers create named schedules with per-day open/close times, scoped to departments. Migration 033.
+- **Why:** As discussed — call centres work on holidays, back-office doesn't. Current global holiday calendar is too blunt for enterprise. Will come up in enterprise trials with banks/telcos.
+- **Benchmark:** Zendesk, Freshdesk — business hour profiles each with own holiday list.
+- **Status:** Not Started
 
 ---
 
@@ -147,6 +153,5 @@ _All ideas, pending work, and deferred items. Prioritised against enterprise rea
 - Role display names in Invite form (org's own hierarchy names shown in manager dropdown label) — DONE 2026-06-28
 - AmanahCX platform rebrand (login, sidebar, email footers) — DONE 2026-06-28
 - Ticket-contact linking (mandatory contact on every ticket, contact search by phone/mobile/NIC) — DONE 2026-06-29
-- Policy Admin governance role — SLA write access isolated to policy_admin only; manager + tenant_admin blocked (403); governed_departments scope; ticket_type department tag on policies; purple badge on SLA card — DONE 2026-06-29
 - NIC number on Contact 360 profile panel — DONE 2026-06-29
 - Clickable tickets on Contact 360 (opens ticket panel directly) — DONE 2026-06-29

@@ -271,7 +271,8 @@ export function settingsRoutes(db: DatabaseClient) {
       const members = await db.withTenant(req.tenant.id, async (client) => {
         const result = await client.query(
           `SELECT u.id, u.name, u.email, u.role, u.permissions, u.is_active, u.created_at,
-                  u.last_login_at, u.custom_role_id, u.manager_id,
+                  u.last_login_at, u.custom_role_id, u.manager_id, u.department, u.department_type,
+                  u.agent_status, u.agent_status_updated_at,
                   m.name AS manager_name,
                   r.name AS role_name, r.color AS role_color
            FROM users u
@@ -436,39 +437,48 @@ export function settingsRoutes(db: DatabaseClient) {
         email:           z.string().email(),
         name:            z.string().max(100).optional(),
         // Tenant admins can only assign roles up to their own level; super_admin is never assignable here
-        role:            z.enum(['tenant_admin', 'manager', 'agent', 'viewer']).default('agent'),
-        custom_role_id:  z.string().uuid().optional(),
-        permissions:     z.record(z.string()).optional(),
-        department:      z.string().max(100).optional(),
+        role:                  z.enum(['tenant_admin', 'manager', 'agent', 'viewer', 'policy_admin']).default('agent'),
+        custom_role_id:        z.string().uuid().optional(),
+        permissions:           z.record(z.string()).optional(),
+        department:            z.string().max(100).optional(),
         // Gap 8: explicit dept type — prevents fragile keyword matching on ambiguous dept names
-        departmentType:  z.enum(DEPT_TYPES).optional(),
-        manager_id:      z.string().uuid().nullable().optional(),
+        departmentType:        z.enum(DEPT_TYPES).optional(),
+        manager_id:            z.string().uuid().nullable().optional(),
+        governed_departments:  z.array(z.string()).optional(),
       });
       const parsed = InviteSchema.safeParse(req.body);
       if (!parsed.success) {
         return reply.code(400).send({ success: false, error: { code: 'INVALID_INPUT', message: parsed.error.issues[0]?.message ?? 'Invalid input' } });
       }
-      const { email, name, role, custom_role_id, permissions: customPermissions, department, departmentType, manager_id } = parsed.data;
+      const { email, name, role, custom_role_id, permissions: customPermissions, department, departmentType, manager_id, governed_departments } = parsed.data;
 
       const displayName  = name?.trim() || email.split('@')[0];
       const assignedRole = role ?? 'agent';
+      // policy_admin: governance-only — can read tickets, nothing else operational
+      const policyAdminPerms: Record<string, string> = {
+        dashboard: 'view', tickets: 'view', settings: 'none',
+        contacts: 'none', companies: 'none', deals: 'none',
+        activities: 'none', emails: 'none', voice: 'none',
+        voicebot: 'none', analytics: 'none', integrations: 'none', billing: 'none',
+      };
       // Explicit permissions override department defaults; department defaults override role defaults
-      const rawPerms = customPermissions ?? departmentPermissions(department, assignedRole, departmentType);
+      const rawPerms = customPermissions
+        ?? (assignedRole === 'policy_admin' ? policyAdminPerms : departmentPermissions(department, assignedRole, departmentType));
       // Enforce: any module not licensed by super admin is forced to 'none'
       const perms = await applyModuleLicensing(req.tenant.id, rawPerms);
 
       // 1. Create (or update) user account with role + permissions + department
       const [user] = await db.withTenant(req.tenant.id, async (client) => {
         const result = await client.query(
-          `INSERT INTO users (tenant_id, email, name, role, password_hash, permissions, custom_role_id, department, department_type, manager_id)
-           VALUES ($1, $2, $3, $4, 'INVITE_PENDING', $5, $6, $7, $8, $9)
+          `INSERT INTO users (tenant_id, email, name, role, password_hash, permissions, custom_role_id, department, department_type, manager_id, governed_departments)
+           VALUES ($1, $2, $3, $4, 'INVITE_PENDING', $5, $6, $7, $8, $9, $10)
            ON CONFLICT (tenant_id, email) DO UPDATE
              SET role = EXCLUDED.role, name = EXCLUDED.name,
                  permissions = EXCLUDED.permissions, custom_role_id = EXCLUDED.custom_role_id,
                  department = EXCLUDED.department, department_type = EXCLUDED.department_type,
-                 manager_id = EXCLUDED.manager_id
-           RETURNING id, email, name, role, permissions, custom_role_id, department, department_type, manager_id`,
-          [req.tenant.id, email, displayName, assignedRole, JSON.stringify(perms), custom_role_id ?? null, department ?? null, departmentType ?? null, manager_id ?? null],
+                 manager_id = EXCLUDED.manager_id, governed_departments = EXCLUDED.governed_departments
+           RETURNING id, email, name, role, permissions, custom_role_id, department, department_type, manager_id, governed_departments`,
+          [req.tenant.id, email, displayName, assignedRole, JSON.stringify(perms), custom_role_id ?? null, department ?? null, departmentType ?? null, manager_id ?? null, governed_departments ?? []],
         );
         return result.rows;
       });
@@ -538,7 +548,7 @@ export function settingsRoutes(db: DatabaseClient) {
                 </p>
               </div>
               <p style="text-align:center;color:#9ca3af;font-size:11px;margin-top:20px;">
-                © ${new Date().getFullYear()} Vivid Solutions &amp; Services. If you didn't expect this invitation, you can ignore this email.
+                © ${new Date().getFullYear()} AmanahCX. If you didn't expect this invitation, you can ignore this email.
               </p>
             </div>
           `,
@@ -739,6 +749,49 @@ export function settingsRoutes(db: DatabaseClient) {
         });
       }
       return reply.send({ success: true });
+    });
+
+    // GET /api/v1/settings/me/status — return current agent status
+    fastify.get('/me/status', async (req, reply) => {
+      const [row] = await db.withTenant(req.tenant.id, async (client) => {
+        const r = await client.query(`SELECT agent_status FROM users WHERE id = $1`, [req.user.sub]);
+        return r.rows;
+      });
+      return reply.send({ success: true, data: { status: row?.agent_status ?? 'offline' } });
+    });
+
+    // PATCH /api/v1/settings/me/status — agent sets their own presence status
+    fastify.patch('/me/status', async (req, reply) => {
+      const { status } = req.body as { status: string };
+      const valid = ['online', 'away', 'busy', 'offline'];
+      if (!valid.includes(status)) {
+        return reply.code(400).send({ success: false, error: { code: 'INVALID_STATUS', message: `Status must be one of: ${valid.join(', ')}` } });
+      }
+      await db.withTenant(req.tenant.id, async (client) => {
+        await client.query(
+          `UPDATE users SET agent_status = $1, agent_status_updated_at = NOW() WHERE id = $2`,
+          [status, req.user.sub],
+        );
+      });
+      return reply.send({ success: true, data: { status } });
+    });
+
+    // GET /api/v1/settings/team/online — managers see who is online right now
+    fastify.get('/team/online', { preHandler: requireRole('super_admin', 'tenant_admin', 'manager') }, async (req, reply) => {
+      const members = await db.withTenant(req.tenant.id, async (client) => {
+        const result = await client.query(
+          `SELECT u.id, u.name, u.email, u.role, u.department, u.agent_status, u.agent_status_updated_at,
+                  r.name AS role_name, r.color AS role_color
+           FROM users u
+           LEFT JOIN roles r ON r.id = u.custom_role_id
+           WHERE u.role NOT IN ('super_admin','tenant_admin')
+           ORDER BY
+             CASE u.agent_status WHEN 'online' THEN 1 WHEN 'busy' THEN 2 WHEN 'away' THEN 3 ELSE 4 END,
+             u.name ASC`,
+        );
+        return result.rows;
+      });
+      return reply.send({ success: true, data: members });
     });
   };
 }

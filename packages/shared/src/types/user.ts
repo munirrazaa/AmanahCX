@@ -1,4 +1,4 @@
-export type UserRole = 'super_admin' | 'platform_admin' | 'tenant_admin' | 'manager' | 'agent' | 'viewer' | 'readonly';
+export type UserRole = 'super_admin' | 'platform_admin' | 'tenant_admin' | 'manager' | 'agent' | 'viewer' | 'readonly' | 'policy_admin';
 
 export interface User {
   id: string;
@@ -40,4 +40,6 @@ export interface AuthToken {
   sector?: string;
   /** Module-level permission map from users.permissions column (e.g. { deals: "view", tickets: "full" }) */
   permissions?: Record<string, string>;
+  /** policy_admin only: which ticket departments this user governs */
+  governed_departments?: string[];
 }

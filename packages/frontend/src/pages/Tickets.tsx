@@ -37,6 +37,7 @@ import {
 } from 'lucide-react';
 import { api } from '../services/api';
 import { useCan } from '../hooks/useRole';
+import { useAuthStore } from '../store/auth.store';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 interface Ticket {
@@ -815,6 +816,17 @@ function TicketPanel({ ticketId, onClose }: { ticketId: string; onClose: () => v
     onSuccess: () => { setCrossNote(''); setShowNoteBox(false); invalidate(); },
   });
 
+  const milestoneMutation = useMutation({
+    mutationFn: async (stepId: string) => {
+      const steps: Array<{id:string;label:string;order:number;completed:boolean;completed_at?:string}> = t?.milestones ?? [];
+      const updated = steps.map(s => s.id === stepId
+        ? { ...s, completed: !s.completed, completed_at: !s.completed ? new Date().toISOString() : undefined }
+        : s);
+      return api.patch(`/api/v1/tickets/${ticketId}/milestones`, { steps: updated });
+    },
+    onSuccess: invalidate,
+  });
+
   const handleReply = (c: Comment) => {
     setReplyTo(c);
     inputRef.current?.focus();
@@ -1129,6 +1141,48 @@ function TicketPanel({ ticketId, onClose }: { ticketId: string; onClose: () => v
             </div>
           )}
 
+          {/* Milestone checklist */}
+          {t.milestones && t.milestones.length > 0 && (() => {
+            const steps: Array<{id:string;label:string;order:number;completed:boolean;completed_at?:string}> = t.milestones;
+            const done = steps.filter(s => s.completed).length;
+            const pct  = Math.round((done / steps.length) * 100);
+            return (
+              <div className="bg-white rounded-xl p-3">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold">Milestones</p>
+                  <span className="text-[10px] text-gray-400">{done}/{steps.length} steps · {pct}%</span>
+                </div>
+                <div className="h-1 bg-gray-100 rounded-full overflow-hidden mb-3">
+                  <div className={`h-full rounded-full transition-all ${pct === 100 ? 'bg-green-500' : 'bg-brand-500'}`} style={{ width: `${pct}%` }} />
+                </div>
+                <div className="space-y-1.5">
+                  {steps.sort((a,b) => a.order - b.order).map(step => (
+                    <button
+                      key={step.id}
+                      onClick={() => !milestoneMutation.isPending && milestoneMutation.mutate(step.id)}
+                      disabled={milestoneMutation.isPending}
+                      className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-left transition-colors ${
+                        step.completed ? 'bg-green-50 hover:bg-green-100' : 'bg-gray-50 hover:bg-gray-100'
+                      }`}
+                    >
+                      <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors ${
+                        step.completed ? 'border-green-500 bg-green-500' : 'border-gray-300'
+                      }`}>
+                        {step.completed && <CheckCircle className="w-3 h-3 text-white" />}
+                      </div>
+                      <span className={`text-xs flex-1 ${step.completed ? 'text-green-700 line-through' : 'text-gray-700'}`}>
+                        {step.label}
+                      </span>
+                      {step.completed_at && (
+                        <span className="text-[10px] text-gray-400 shrink-0">{fmtDate(step.completed_at)}</span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
+
           {/* Escalation history */}
           {t.escalations?.length > 0 && (
             <div className="space-y-2">
@@ -1298,7 +1352,9 @@ const TABS: { id: Tab; label: string }[] = [
 
 export function Tickets() {
   const can = useCan();
+  const { user } = useAuthStore();
   const qc  = useQueryClient();
+  const deptLabel = user?.department ? `${user.department} Tickets` : 'Tickets';
 
   const [searchParams] = useSearchParams();
   const [tab, setTab]           = useState<Tab>('all');
@@ -1363,7 +1419,7 @@ export function Tickets() {
               <LifeBuoy className="w-5 h-5 text-brand-400" />
             </div>
             <div>
-              <h1 className="text-lg font-bold text-gray-900">Support Tickets</h1>
+              <h1 className="text-lg font-bold text-gray-900">{deptLabel}</h1>
               <p className="text-xs text-gray-400">Manually created tickets</p>
             </div>
           </div>

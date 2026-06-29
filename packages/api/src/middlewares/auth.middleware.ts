@@ -101,6 +101,7 @@ const ROLE_LEVEL: Record<string, number> = {
   super_admin:  50,
   tenant_admin: 40,
   manager:      30,
+  policy_admin: 25,
   agent:        20,
   viewer:       10,
 };

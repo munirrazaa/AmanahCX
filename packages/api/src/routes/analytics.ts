@@ -373,7 +373,21 @@ export function analyticsRoutes(db: DatabaseClient) {
 
       // ── Ticket summary totals ────────────────────────────────────────────
       const myTickets = await db.withTenant(tenantId, async (client) => {
-        const [sql1, params1] = resolveDept(`
+        // Agents: no dept filter — their tickets span any ticket_type (inquiry, complaint etc)
+        // Managers: keep dept filter so team aggregates stay scoped to their department
+        const agentTicketSql = `
+          SELECT
+            COUNT(*)                                                              AS total,
+            COUNT(*) FILTER (WHERE status NOT IN ('resolved','closed'))          AS active,
+            COUNT(*) FILTER (WHERE status = 'open')                              AS open,
+            COUNT(*) FILTER (WHERE status IN ('accepted','in_progress'))         AS in_progress,
+            COUNT(*) FILTER (WHERE status = 'pending')                           AS pending,
+            COUNT(*) FILTER (WHERE status = 'resolved' AND updated_at::date = CURRENT_DATE) AS resolved_today,
+            COUNT(*) FILTER (WHERE sla_due_at < NOW() AND status NOT IN ('resolved','closed')) AS sla_breached
+          FROM tickets
+          WHERE 1=1 ${scopeAssigneeSql}`;
+
+        const [mgrSql, mgrParams] = resolveDept(`
           SELECT
             COUNT(*)                                                              AS total,
             COUNT(*) FILTER (WHERE status NOT IN ('resolved','closed'))          AS active,
@@ -385,17 +399,19 @@ export function analyticsRoutes(db: DatabaseClient) {
           FROM tickets
           WHERE 1=1 ${scopeAssigneeSql} ${deptTicketFilter}
         `, []);
-        const r = await client.query(sql1, params1);
 
-        // Per-user breakdown: assigned-to-me vs created-by-me (always useful regardless of scope)
-        const [sql2, params2] = resolveDept(`
+        const r = isManager
+          ? await client.query(mgrSql, mgrParams)
+          : await client.query(agentTicketSql);
+
+        // Per-user breakdown: assigned-to-me vs created-by-me (no dept filter — always own tickets)
+        const o = await client.query(`
           SELECT
             COUNT(*) FILTER (WHERE assignee_id = $1 AND status NOT IN ('resolved','closed')) AS assigned_to_me,
             COUNT(*) FILTER (WHERE created_by  = $1)                                          AS created_by_me
           FROM tickets
-          WHERE (assignee_id = $1 OR created_by = $1) ${deptTicketFilter}
+          WHERE (assignee_id = $1 OR created_by = $1)
         `, [userId]);
-        const o = await client.query(sql2, params2);
 
         return { ...r.rows[0], ...o.rows[0] };
       });
@@ -956,6 +972,44 @@ export function analyticsRoutes(db: DatabaseClient) {
         return reply.send(csv);
       }
 
+      return reply.send({ success: true, data: rows });
+    });
+
+    // GET /api/v1/analytics/agent-load — active + breached ticket count per agent (wallboard)
+    fastify.get('/agent-load', { preHandler: requireRole('super_admin','tenant_admin','manager') }, async (req, reply) => {
+      const rows = await db.withTenant(req.tenant.id, async (client) => {
+        const r = await client.query(
+          `SELECT
+             t.assignee_id AS agent_id,
+             COUNT(*) FILTER (WHERE t.status NOT IN ('resolved','closed')) AS active_tickets,
+             COUNT(*) FILTER (WHERE t.is_overdue = true AND t.status NOT IN ('resolved','closed')) AS breached_tickets
+           FROM tickets t
+           WHERE t.assignee_id IS NOT NULL
+           GROUP BY t.assignee_id`,
+        );
+        return r.rows;
+      });
+      return reply.send({ success: true, data: rows });
+    });
+
+    // GET /api/v1/analytics/queue-stats — open/assigned/pending/breached per queue (wallboard)
+    fastify.get('/queue-stats', { preHandler: requireRole('super_admin','tenant_admin','manager') }, async (req, reply) => {
+      const rows = await db.withTenant(req.tenant.id, async (client) => {
+        const r = await client.query(
+          `SELECT
+             tq.name AS queue_name,
+             tq.department,
+             COUNT(*) FILTER (WHERE t.status = 'open')        AS open,
+             COUNT(*) FILTER (WHERE t.status = 'assigned')    AS assigned,
+             COUNT(*) FILTER (WHERE t.status = 'pending')     AS pending,
+             COUNT(*) FILTER (WHERE t.is_overdue = true AND t.status NOT IN ('resolved','closed')) AS breached
+           FROM ticket_queues tq
+           LEFT JOIN tickets t ON t.queue_id = tq.id
+           GROUP BY tq.id, tq.name, tq.department
+           ORDER BY tq.name ASC`,
+        );
+        return r.rows;
+      });
       return reply.send({ success: true, data: rows });
     });
 

@@ -11,11 +11,12 @@ import { MilestoneSettings } from './MilestoneSettings';
 import { useAuthStore } from '../store/auth.store';
 import { useIsAdmin } from '../hooks/useRole';
 
-type Tab = 'workspace' | 'tags';
+type Tab = 'workspace' | 'tags' | 'milestones';
 
 const TABS: { id: Tab; label: string; icon: any }[] = [
-  { id: 'workspace', label: 'General',  icon: Building2 },
-  { id: 'tags',      label: 'Tags',     icon: Tag       },
+  { id: 'workspace',  label: 'General',     icon: Building2 },
+  { id: 'tags',       label: 'Tags',        icon: Tag       },
+  { id: 'milestones', label: 'Milestones',  icon: Layers    },
 ];
 
 function WorkspaceSettings() {
@@ -1092,8 +1093,9 @@ export function ModulesSettings() {
 }
 
 const TAB_CONTENT: Record<Tab, React.FC> = {
-  workspace: WorkspaceSettings,
-  tags:      TagsSettings,
+  workspace:  WorkspaceSettings,
+  tags:       TagsSettings,
+  milestones: MilestoneSettings,
 };
 
 export function Settings() {

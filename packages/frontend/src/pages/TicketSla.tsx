@@ -33,6 +33,7 @@ interface SlaPolicy {
   match_conditions: { channels?: string[]; departments?: string[]; tags?: string[] };
   is_active: boolean;
   reminder_schedule: ReminderStep[];
+  ticket_type?: string | null;
 }
 
 interface Holiday {
@@ -87,6 +88,37 @@ const NOTIFY_LABELS: Record<string, string> = {
 };
 
 function uid() { return Math.random().toString(36).slice(2, 10); }
+
+// ── Inline confirm dialog (replaces window.confirm) ────────────────────────
+function ConfirmDialog({ message, onConfirm, onCancel }: {
+  message: string; onConfirm: () => void; onCancel: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 space-y-4">
+        <div className="flex items-start gap-3">
+          <div className="w-9 h-9 rounded-full bg-red-100 flex items-center justify-center shrink-0">
+            <Trash2 className="w-4 h-4 text-red-600" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-gray-900">Confirm deletion</p>
+            <p className="text-sm text-gray-500 mt-0.5">{message}</p>
+          </div>
+        </div>
+        <div className="flex gap-2 pt-1">
+          <button onClick={onCancel}
+            className="flex-1 px-4 py-2 text-sm font-medium border border-gray-200 text-gray-700 rounded-xl hover:bg-gray-50">
+            Cancel
+          </button>
+          <button onClick={onConfirm}
+            className="flex-1 px-4 py-2 text-sm font-medium bg-red-600 text-white rounded-xl hover:bg-red-700">
+            Delete
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 function fmtHours(h: number) {
   if (h < 24) return `${h}h`;
   const d = Math.floor(h / 24), r = h % 24;
@@ -255,6 +287,7 @@ function SlaModal({ policy, onClose }: { policy?: SlaPolicy; onClose: () => void
     matchChannels:      (policy?.match_conditions?.channels    ?? []).join(', '),
     matchDepartments:   (policy?.match_conditions?.departments ?? []).join(', '),
     matchTags:          (policy?.match_conditions?.tags        ?? []).join(', '),
+    ticketType:         policy?.ticket_type ?? '',
   });
 
   // Business hours schedule — load from policy or use defaults
@@ -363,6 +396,17 @@ function SlaModal({ policy, onClose }: { policy?: SlaPolicy; onClose: () => void
                 <input type="checkbox" checked={form.isActive} onChange={setCheck('isActive')} className="rounded accent-brand-600" />
                 Policy is active
               </label>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Department</label>
+              <select value={form.ticketType} onChange={set('ticketType')}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-brand-400">
+                <option value="">All departments</option>
+                <option value="sales">Sales</option>
+                <option value="support">Support</option>
+                <option value="complaints">Complaints</option>
+              </select>
+              <p className="text-xs text-gray-400 mt-1">Scope this policy to a specific department</p>
             </div>
           </div>
 
@@ -593,6 +637,7 @@ function PolicyCard({ p, onEdit, onDelete, canEdit }: {
               {pc.label}
             </span>
             <h3 className="font-semibold text-gray-900">{p.name}</h3>
+            {p.ticket_type && <span className="text-xs text-purple-700 bg-purple-50 border border-purple-100 px-2 py-0.5 rounded-full capitalize">{p.ticket_type}</span>}
             {!p.is_active      && <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">Inactive</span>}
             {p.business_hours_only && (() => {
               const sched = p.business_hours_schedule ?? {};
@@ -742,9 +787,10 @@ function BotDefaultPriority() {
 // ── Holiday Calendar ─────────────────────────────────────────────────────────
 function HolidayCalendar({ canEdit }: { canEdit: boolean }) {
   const qc = useQueryClient();
-  const [showForm, setShowForm]   = useState(false);
-  const [editHol,  setEditHol]    = useState<Holiday | undefined>(undefined);
-  const [form, setForm]           = useState({ name: '', date: '', recurring: true });
+  const [showForm, setShowForm]         = useState(false);
+  const [editHol,  setEditHol]          = useState<Holiday | undefined>(undefined);
+  const [confirmHol, setConfirmHol]     = useState<Holiday | undefined>(undefined);
+  const [form, setForm]                 = useState({ name: '', date: '', recurring: true });
 
   const { data: holidays = [], isLoading } = useQuery<Holiday[]>({
     queryKey: ['sla-holidays'],
@@ -808,13 +854,22 @@ function HolidayCalendar({ canEdit }: { canEdit: boolean }) {
               {canEdit && (
                 <div className="flex gap-1">
                   <button onClick={() => openEdit(h)} className="p-1.5 text-gray-400 hover:text-brand-600 hover:bg-brand-50 rounded-lg"><Pencil className="w-4 h-4" /></button>
-                  <button onClick={() => { if (confirm(`Delete holiday "${h.name}"?`)) delMut.mutate(h.id); }}
+                  <button onClick={() => setConfirmHol(h)}
                     className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg"><Trash2 className="w-4 h-4" /></button>
                 </div>
               )}
             </div>
           ))}
         </div>
+      )}
+
+      {/* Delete confirm */}
+      {confirmHol && (
+        <ConfirmDialog
+          message={`Delete "${confirmHol.name}"? This cannot be undone.`}
+          onConfirm={() => { delMut.mutate(confirmHol.id); setConfirmHol(undefined); }}
+          onCancel={() => setConfirmHol(undefined)}
+        />
       )}
 
       {/* Add/Edit modal */}
@@ -857,199 +912,14 @@ function HolidayCalendar({ canEdit }: { canEdit: boolean }) {
   );
 }
 
-// ── Business Hour Profiles ────────────────────────────────────────────────────
-
-const BH_DAYS = ['mon','tue','wed','thu','fri','sat','sun'];
-const BH_DAY_LABELS: Record<string, string> = { mon:'Mon', tue:'Tue', wed:'Wed', thu:'Thu', fri:'Fri', sat:'Sat', sun:'Sun' };
-
-const BH_DEFAULT_SCHEDULE = Object.fromEntries(
-  BH_DAYS.map(d => [d, d === 'sat' || d === 'sun' ? null : { open: '09:00', close: '17:00' }])
-);
-
-interface BhProfile {
-  id: string;
-  name: string;
-  departments: string[];
-  timezone: string;
-  schedule: Record<string, { open: string; close: string } | null>;
-  is_default: boolean;
-}
-
-function BhProfileModal({ profile, onClose }: { profile?: BhProfile; onClose: () => void }) {
-  const qc = useQueryClient();
-  const [name,    setName]    = useState(profile?.name ?? '');
-  const [depts,   setDepts]   = useState((profile?.departments ?? []).join(', '));
-  const [tz,      setTz]      = useState(profile?.timezone ?? 'UTC');
-  const [isDef,   setIsDef]   = useState(profile?.is_default ?? false);
-  const [sched,   setSched]   = useState<Record<string, { open: string; close: string } | null>>(
-    profile?.schedule ?? BH_DEFAULT_SCHEDULE
-  );
-
-  const mut = useMutation({
-    mutationFn: () => {
-      const body = { name, departments: depts.split(',').map(s => s.trim()).filter(Boolean), timezone: tz, schedule: sched, is_default: isDef };
-      return profile
-        ? api.patch(`/api/v1/tickets/business-hour-profiles/${profile.id}`, body)
-        : api.post('/api/v1/tickets/business-hour-profiles', body);
-    },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['bh-profiles'] }); onClose(); },
-  });
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-y-auto max-h-[90vh]">
-        <div className="flex items-center justify-between px-6 py-4 border-b">
-          <h2 className="text-sm font-semibold text-gray-900">{profile ? 'Edit' : 'New'} Business Hour Profile</h2>
-          <button onClick={onClose}><X className="w-4 h-4 text-gray-400" /></button>
-        </div>
-        <div className="p-6 space-y-4">
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Profile Name *</label>
-            <input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Support 9–6 Mon–Fri"
-              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-300" />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Departments (comma-separated, blank = all)</label>
-            <input value={depts} onChange={e => setDepts(e.target.value)} placeholder="Support, Sales"
-              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-300" />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Timezone</label>
-            <input value={tz} onChange={e => setTz(e.target.value)} placeholder="UTC"
-              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-300" />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-2">Weekly Schedule</label>
-            <div className="space-y-2">
-              {BH_DAYS.map(day => {
-                const slot = sched[day];
-                return (
-                  <div key={day} className="flex items-center gap-3">
-                    <input type="checkbox" checked={!!slot} onChange={e => setSched(s => ({ ...s, [day]: e.target.checked ? { open:'09:00', close:'17:00' } : null }))}
-                      className="w-4 h-4 rounded accent-brand-500" />
-                    <span className="w-8 text-xs font-medium text-gray-600">{BH_DAY_LABELS[day]}</span>
-                    {slot ? (
-                      <>
-                        <input type="time" value={slot.open}  onChange={e => setSched(s => ({ ...s, [day]: { ...s[day]!, open: e.target.value } }))}
-                          className="border border-gray-200 rounded-lg px-2 py-1 text-xs" />
-                        <span className="text-xs text-gray-400">to</span>
-                        <input type="time" value={slot.close} onChange={e => setSched(s => ({ ...s, [day]: { ...s[day]!, close: e.target.value } }))}
-                          className="border border-gray-200 rounded-lg px-2 py-1 text-xs" />
-                      </>
-                    ) : <span className="text-xs text-gray-400 italic">Closed</span>}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-          <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
-            <input type="checkbox" checked={isDef} onChange={e => setIsDef(e.target.checked)} className="w-4 h-4 accent-brand-500" />
-            Set as default profile
-          </label>
-          {mut.isError && <p className="text-xs text-red-600">Failed to save. Try again.</p>}
-        </div>
-        <div className="px-6 pb-5 flex justify-end gap-2">
-          <button onClick={onClose} className="px-4 py-2 text-sm border border-gray-200 rounded-xl text-gray-600">Cancel</button>
-          <button onClick={() => mut.mutate()} disabled={!name.trim() || mut.isPending}
-            className="px-4 py-2 text-sm font-medium text-white bg-brand-500 hover:bg-brand-600 rounded-xl disabled:opacity-50">
-            {mut.isPending ? 'Saving…' : 'Save Profile'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function BusinessHoursTab({ canEdit }: { canEdit: boolean }) {
-  const qc = useQueryClient();
-  const [showCreate, setShowCreate] = useState(false);
-  const [editing, setEditing]       = useState<BhProfile | undefined>();
-
-  const { data = [], isLoading } = useQuery<BhProfile[]>({
-    queryKey: ['bh-profiles'],
-    queryFn: () => api.get('/api/v1/tickets/business-hour-profiles').then(r => r.data.data ?? []),
-  });
-
-  const deleteMut = useMutation({
-    mutationFn: (id: string) => api.delete(`/api/v1/tickets/business-hour-profiles/${id}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['bh-profiles'] }),
-  });
-
-  if (isLoading) return <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-brand-400" /></div>;
-
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-gray-500">Define when each department is open. SLA timers only tick during active business hours.</p>
-        {canEdit && (
-          <button onClick={() => setShowCreate(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-brand-600 text-white rounded-xl text-sm font-medium hover:bg-brand-700">
-            <Plus className="w-4 h-4" /> New Profile
-          </button>
-        )}
-      </div>
-
-      {data.length === 0 ? (
-        <div className="text-center py-12 text-gray-400">
-          <Clock className="w-8 h-8 mx-auto mb-2 opacity-40" />
-          <p className="text-sm">No business hour profiles yet</p>
-          <p className="text-xs mt-1">SLA timers run 24/7 until a profile is created</p>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {data.map(p => {
-            const openDays = BH_DAYS.filter(d => !!p.schedule[d]);
-            return (
-              <div key={p.id} className="bg-white border border-gray-200 rounded-xl p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-semibold text-gray-900">{p.name}</span>
-                    {p.is_default && <span className="text-xs px-2 py-0.5 bg-brand-50 text-brand-700 rounded-full">Default</span>}
-                  </div>
-                  {canEdit && (
-                    <div className="flex items-center gap-1">
-                      <button onClick={() => setEditing(p)} className="p-1.5 text-gray-400 hover:text-brand-600 rounded-lg hover:bg-brand-50"><Pencil className="w-3.5 h-3.5" /></button>
-                      <button onClick={() => deleteMut.mutate(p.id)} className="p-1.5 text-gray-400 hover:text-red-500 rounded-lg hover:bg-red-50"><Trash2 className="w-3.5 h-3.5" /></button>
-                    </div>
-                  )}
-                </div>
-                <div className="flex flex-wrap gap-1.5 mb-2">
-                  {openDays.map(d => {
-                    const slot = p.schedule[d]!;
-                    return (
-                      <span key={d} className="text-xs bg-emerald-50 text-emerald-700 border border-emerald-100 px-2 py-0.5 rounded-full">
-                        {BH_DAY_LABELS[d]} {slot.open}–{slot.close}
-                      </span>
-                    );
-                  })}
-                  {BH_DAYS.filter(d => !p.schedule[d]).map(d => (
-                    <span key={d} className="text-xs bg-gray-50 text-gray-400 border border-gray-100 px-2 py-0.5 rounded-full">{BH_DAY_LABELS[d]} closed</span>
-                  ))}
-                </div>
-                <div className="flex gap-3 text-xs text-gray-400">
-                  <span>TZ: {p.timezone}</span>
-                  {p.departments.length > 0 && <span>Depts: {p.departments.join(', ')}</span>}
-                  {p.departments.length === 0 && <span className="italic">All departments</span>}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {(showCreate || editing) && (
-        <BhProfileModal profile={editing} onClose={() => { setShowCreate(false); setEditing(undefined); }} />
-      )}
-    </div>
-  );
-}
 
 export function TicketSla() {
   const can = useCan();
   const qc  = useQueryClient();
-  const [tab,        setTab]        = useState<'policies' | 'holidays' | 'business_hours'>('policies');
-  const [editing,    setEditing]    = useState<SlaPolicy | undefined>(undefined);
-  const [showCreate, setShowCreate] = useState(false);
+  const [tab,           setTab]          = useState<'policies' | 'holidays'>('policies');
+  const [editing,       setEditing]      = useState<SlaPolicy | undefined>(undefined);
+  const [showCreate,    setShowCreate]   = useState(false);
+  const [confirmPolicy, setConfirmPolicy] = useState<SlaPolicy | undefined>(undefined);
 
   const { data = [], isLoading } = useQuery<SlaPolicy[]>({
     queryKey: ['sla-policies'],
@@ -1085,12 +955,12 @@ export function TicketSla() {
 
       {/* Tabs */}
       <div className="flex gap-1 bg-gray-100 rounded-xl p-1 w-fit">
-        {(['policies', 'holidays', 'business_hours'] as const).map(t => (
+        {(['policies', 'holidays'] as const).map(t => (
           <button key={t} onClick={() => setTab(t)}
             className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${
               tab === t ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'
             }`}>
-            {t === 'policies' ? '⏱ Policies' : t === 'holidays' ? '🗓 Holidays' : '🕐 Business Hours'}
+            {t === 'policies' ? '⏱ Policies' : '🗓 Holidays'}
           </button>
         ))}
       </div>
@@ -1128,7 +998,7 @@ export function TicketSla() {
                 <PolicyCard key={p.id} p={p}
                   canEdit={can.manageSla}
                   onEdit={() => setEditing(p)}
-                  onDelete={() => { if (confirm(`Delete policy "${p.name}"?`)) deleteMutation.mutate(p.id); }}
+                  onDelete={() => setConfirmPolicy(p)}
                 />
               ))}
               {data.length === 0 && (
@@ -1146,12 +1016,19 @@ export function TicketSla() {
       )}
 
       {tab === 'holidays'       && <HolidayCalendar canEdit={can.manageSla} />}
-      {tab === 'business_hours' && <BusinessHoursTab canEdit={can.manageSla} />}
 
       {(showCreate || editing) && (
         <SlaModal
           policy={editing}
           onClose={() => { setShowCreate(false); setEditing(undefined); }}
+        />
+      )}
+
+      {confirmPolicy && (
+        <ConfirmDialog
+          message={`Delete policy "${confirmPolicy.name}"? This cannot be undone.`}
+          onConfirm={() => { deleteMutation.mutate(confirmPolicy.id); setConfirmPolicy(undefined); }}
+          onCancel={() => setConfirmPolicy(undefined)}
         />
       )}
     </div>

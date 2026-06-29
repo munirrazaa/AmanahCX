@@ -84,7 +84,7 @@ function resolveRoleName(member: Member, roles: Role[]): string {
 
 // ── Invite User Modal ─────────────────────────────────────────────────────────
 function InviteModal({ roles, onClose, onSuccess }: { roles: Role[]; onClose: () => void; onSuccess: () => void }) {
-  const [form, setForm] = useState({ name: '', email: '', role_key: 'system:agent', department_id: '', manager_id: '' });
+  const [form, setForm] = useState({ name: '', email: '', role_key: 'system:agent', department_id: '', manager_id: '', governed_departments: [] as string[] });
   const [error, setError] = useState('');
 
   const { data: departments = [] } = useQuery<Department[]>({
@@ -100,6 +100,8 @@ function InviteModal({ roles, onClose, onSuccess }: { roles: Role[]; onClose: ()
   const systemRoles = roles.filter((r: any) => r.is_system && r.base_role !== 'tenant_admin');
   const customRoles = roles.filter((r: any) => !r.is_system);
 
+  const isPolicyAdminRole = form.role_key === 'system:policy_admin';
+
   const mut = useMutation({
     mutationFn: () => {
       const { role, custom_role_id } = parseRoleKey(form.role_key, roles);
@@ -109,16 +111,17 @@ function InviteModal({ roles, onClose, onSuccess }: { roles: Role[]; onClose: ()
         name: form.name || undefined,
         role,
         custom_role_id,
-        department: dept?.name,
-        departmentType: dept?.department_type,
-        manager_id: form.manager_id || undefined,
+        department: isPolicyAdminRole ? undefined : dept?.name,
+        departmentType: isPolicyAdminRole ? undefined : dept?.department_type,
+        manager_id: isPolicyAdminRole ? undefined : (form.manager_id || undefined),
+        governed_departments: isPolicyAdminRole ? form.governed_departments : undefined,
       });
     },
     onSuccess: () => { onSuccess(); onClose(); },
     onError: (e: any) => setError(e.response?.data?.error?.message ?? 'Failed to send invite'),
   });
 
-  const canSubmit = form.email && form.department_id && !mut.isPending;
+  const canSubmit = form.email && (isPolicyAdminRole || form.department_id) && !mut.isPending;
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
@@ -147,6 +150,7 @@ function InviteModal({ roles, onClose, onSuccess }: { roles: Role[]; onClose: ()
               className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
             />
           </div>
+          {!isPolicyAdminRole && (
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1.5 uppercase tracking-wide">Department *</label>
             <select
@@ -158,6 +162,7 @@ function InviteModal({ roles, onClose, onSuccess }: { roles: Role[]; onClose: ()
               {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
             </select>
           </div>
+          )}
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1.5 uppercase tracking-wide">Role *</label>
             <select
@@ -178,6 +183,35 @@ function InviteModal({ roles, onClose, onSuccess }: { roles: Role[]; onClose: ()
             </select>
             <p className="text-xs text-gray-400 mt-1">Controls what this member can see and do</p>
           </div>
+          {isPolicyAdminRole ? (
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1.5 uppercase tracking-wide">
+                Departments to Govern <span className="text-gray-400 font-normal normal-case">(select one or more)</span>
+              </label>
+              <div className="flex flex-col gap-2 px-3 py-3 border border-gray-200 rounded-xl">
+                {(['Sales', 'Support', 'Complaints'] as const).map(dept => (
+                  <label key={dept} className="flex items-center gap-2.5 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={form.governed_departments.includes(dept.toLowerCase())}
+                      onChange={e => {
+                        const key = dept.toLowerCase();
+                        setForm(f => ({
+                          ...f,
+                          governed_departments: e.target.checked
+                            ? [...f.governed_departments, key]
+                            : f.governed_departments.filter(d => d !== key),
+                        }));
+                      }}
+                      className="w-4 h-4 rounded border-gray-300 text-blue-500"
+                    />
+                    <span className="text-sm text-gray-700">{dept}</span>
+                  </label>
+                ))}
+              </div>
+              <p className="text-xs text-gray-400 mt-1">This user can only create or edit SLA policies for selected departments. Leave all unchecked to allow all departments.</p>
+            </div>
+          ) : (
           <div>
             {(() => {
               const selectedDept = departments.find(d => d.id === form.department_id);
@@ -212,6 +246,7 @@ function InviteModal({ roles, onClose, onSuccess }: { roles: Role[]; onClose: ()
               );
             })()}
           </div>
+          )}
           {error && (
             <div className="flex items-center gap-2 px-3 py-2.5 bg-red-50 text-red-700 rounded-xl text-sm border border-red-100">
               <AlertTriangle className="w-4 h-4 shrink-0" />{error}

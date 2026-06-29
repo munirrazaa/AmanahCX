@@ -43,17 +43,21 @@ export function ticketAnalyticsRoutes(db: DatabaseClient) {
     fastify.get('/trends', { preHandler }, async (req, reply) => {
       const q = TrendsQuerySchema.parse(req.query);
       const tenantId = req.tenant.id;
+      const role = req.user?.role;
+      const isManager = ['manager','tenant_admin','super_admin'].includes(role);
+      const userId = req.user?.sub;
 
       // queueId can't be pre-aggregated in the MV — fall back to live query
-      if (q.queueId) {
+      if (q.queueId || !isManager) {
         const filters: string[] = [];
         const params: any[] = [q.period, q.days, tenantId];
         let p = 4;
         if (q.priority)    { filters.push(`priority = $${p++}`);    params.push(q.priority); }
         if (q.channel)     { filters.push(`channel = $${p++}`);     params.push(q.channel); }
         if (q.ticketType)  { filters.push(`ticket_type = $${p++}`); params.push(q.ticketType); }
-        filters.push(`queue_id = $${p++}`); params.push(q.queueId);
-        const filterSql = 'AND ' + filters.join(' AND ');
+        if (q.queueId)     { filters.push(`queue_id = $${p++}`);    params.push(q.queueId); }
+        if (!isManager)    { filters.push(`assignee_id = $${p++}`); params.push(userId); }
+        const filterSql = filters.length ? 'AND ' + filters.join(' AND ') : '';
 
         const rows = await db.withTenant(tenantId, async (c) => {
           const r = await c.query(`
@@ -145,6 +149,8 @@ export function ticketAnalyticsRoutes(db: DatabaseClient) {
     fastify.get('/heatmap', { preHandler }, async (req, reply) => {
       const q = HeatmapQuerySchema.parse(req.query);
       const tenantId = req.tenant.id;
+      const isManager = ['manager','tenant_admin','super_admin'].includes(req.user?.role);
+      const assigneeFilter = isManager ? '' : `AND assignee_id = '${req.user?.sub}'`;
 
       // Top tags by frequency
       const tagRows = await db.withTenant(tenantId, async (c) => {
@@ -161,7 +167,7 @@ export function ticketAnalyticsRoutes(db: DatabaseClient) {
               END
             )::numeric, 1)::float8                               AS avg_resolution_hrs
           FROM tickets, unnest(tags) AS tag
-          WHERE created_at >= NOW() - ($1 || ' days')::INTERVAL
+          WHERE created_at >= NOW() - ($1 || ' days')::INTERVAL ${assigneeFilter}
           GROUP BY tag
           ORDER BY total DESC
           LIMIT $2
@@ -175,7 +181,7 @@ export function ticketAnalyticsRoutes(db: DatabaseClient) {
           SELECT reporter_email, COUNT(*) AS ticket_count
           FROM tickets
           WHERE reporter_email IS NOT NULL
-            AND created_at >= NOW() - ($1 || ' days')::INTERVAL
+            AND created_at >= NOW() - ($1 || ' days')::INTERVAL ${assigneeFilter}
           GROUP BY reporter_email
           HAVING COUNT(*) > 1
           ORDER BY ticket_count DESC
@@ -189,7 +195,7 @@ export function ticketAnalyticsRoutes(db: DatabaseClient) {
         const r = await c.query(`
           SELECT ticket_type, COUNT(*) AS total
           FROM tickets
-          WHERE created_at >= NOW() - ($1 || ' days')::INTERVAL
+          WHERE created_at >= NOW() - ($1 || ' days')::INTERVAL ${assigneeFilter}
           GROUP BY ticket_type
           ORDER BY total DESC
         `, [q.days]);
@@ -201,7 +207,7 @@ export function ticketAnalyticsRoutes(db: DatabaseClient) {
         const r = await c.query(`
           SELECT channel, COUNT(*) AS total
           FROM tickets
-          WHERE created_at >= NOW() - ($1 || ' days')::INTERVAL
+          WHERE created_at >= NOW() - ($1 || ' days')::INTERVAL ${assigneeFilter}
           GROUP BY channel
           ORDER BY total DESC
         `, [q.days]);
@@ -219,6 +225,8 @@ export function ticketAnalyticsRoutes(db: DatabaseClient) {
     fastify.get('/resolution', { preHandler }, async (req, reply) => {
       const q = ResolutionQuerySchema.parse(req.query);
       const tenantId = req.tenant.id;
+      const isManager = ['manager','tenant_admin','super_admin'].includes(req.user?.role);
+      const assigneeFilter = isManager ? '' : `AND assignee_id = '${req.user?.sub}'`;
 
       const rows = await db.withTenant(tenantId, async (c) => {
         const r = await c.query(`
@@ -255,7 +263,7 @@ export function ticketAnalyticsRoutes(db: DatabaseClient) {
               ROUND(100.0 * COUNT(*) FILTER (WHERE escalation_level >= 1)
                 / NULLIF(COUNT(*), 0), 1)::float8                          AS escalation_rate_pct
             FROM tickets
-            WHERE created_at >= NOW() - ($2 || ' days')::INTERVAL
+            WHERE created_at >= NOW() - ($2 || ' days')::INTERVAL ${assigneeFilter}
             GROUP BY 1
           )
           SELECT

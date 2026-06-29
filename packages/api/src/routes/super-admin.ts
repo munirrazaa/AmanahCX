@@ -356,7 +356,7 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
                 <p style="color:#9ca3af;font-size:12px;margin:0;text-align:center;">Or visit: <a href="${loginUrl}" style="color:#29ABE2;">${loginUrl}</a></p>
                 <p style="color:#ef4444;font-size:12px;margin:16px 0 0;text-align:center;">Please change your password immediately after logging in.</p>
               </div>
-              <p style="text-align:center;color:#9ca3af;font-size:11px;margin-top:20px;">© ${new Date().getFullYear()} Vivid Solutions &amp; Services.</p>
+              <p style="text-align:center;color:#9ca3af;font-size:11px;margin-top:20px;">© ${new Date().getFullYear()} AmanahCX.</p>
             </div>
           `,
           bodyText: `Hi ${body.adminName},\n\nYour workspace "${body.name}" is ready.\n\nEmail: ${body.adminEmail}\nTemporary Password: ${tempPassword}\n\nLog in here: ${loginUrl}\n\nPlease change your password immediately after logging in.`,

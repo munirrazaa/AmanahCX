@@ -6,6 +6,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus, Trash2, Loader2, GripVertical, CheckCircle2, X, Save } from 'lucide-react';
 import { api } from '../services/api';
+import { useAuthStore } from '../store/auth.store';
 
 interface Step { id: string; label: string; description?: string; order: number; }
 interface Template { id?: string; ticket_type: string; name: string; steps: Step[]; }
@@ -83,6 +84,8 @@ function StepEditor({ steps, onChange }: { steps: Step[]; onChange: (s: Step[]) 
 
 export function MilestoneSettings() {
   const qc = useQueryClient();
+  const { user } = useAuthStore();
+  const canEdit = ['tenant_admin', 'super_admin'].includes(user?.role ?? '');
   const [activeType, setActiveType] = useState('complaint');
   const [steps, setSteps] = useState<Record<string, Step[]>>({});
   const [names, setNames] = useState<Record<string, string>>({});
@@ -155,8 +158,9 @@ export function MilestoneSettings() {
             <label className="text-xs font-medium text-gray-600 mb-1 block">Template Name</label>
             <input
               value={names[activeType] ?? TICKET_TYPES.find(t => t.value === activeType)?.label ?? ''}
-              onChange={e => setNames(prev => ({ ...prev, [activeType]: e.target.value }))}
-              className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-brand-400 w-full max-w-sm"
+              onChange={e => canEdit && setNames(prev => ({ ...prev, [activeType]: e.target.value }))}
+              readOnly={!canEdit}
+              className={`border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none w-full max-w-sm ${canEdit ? 'focus:border-brand-400' : 'bg-gray-50 cursor-default'}`}
               placeholder="Template name..."
             />
           </div>
@@ -166,30 +170,46 @@ export function MilestoneSettings() {
               <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Steps</p>
               <p className="text-xs text-gray-400">Agents check off each step — customers notified on completion</p>
             </div>
-            <StepEditor
-              steps={getSteps(activeType)}
-              onChange={s => setSteps(prev => ({ ...prev, [activeType]: s }))}
-            />
+            {canEdit ? (
+              <StepEditor
+                steps={getSteps(activeType)}
+                onChange={s => setSteps(prev => ({ ...prev, [activeType]: s }))}
+              />
+            ) : (
+              <div className="space-y-2">
+                {getSteps(activeType).map((step, idx) => (
+                  <div key={step.id} className="flex items-center gap-2 bg-gray-50 rounded-xl p-2.5">
+                    <div className="w-5 h-5 rounded-full bg-brand-100 text-brand-700 text-[10px] font-bold flex items-center justify-center shrink-0">
+                      {idx + 1}
+                    </div>
+                    <span className="text-sm text-gray-700">{step.label}</span>
+                    {step.description && <span className="text-xs text-gray-400 ml-2">{step.description}</span>}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
-          <div className="flex items-center justify-between pt-3 border-t border-gray-100">
-            <button
-              onClick={() => setSteps(prev => ({ ...prev, [activeType]: DEFAULT_STEPS[activeType] ?? [] }))}
-              className="text-xs text-gray-400 hover:text-gray-600">
-              Reset to defaults
-            </button>
-            <button
-              onClick={() => saveMutation.mutate(activeType)}
-              disabled={saveMutation.isPending}
-              className="flex items-center gap-2 px-4 py-2 bg-brand-600 text-white rounded-xl text-sm font-medium hover:bg-brand-700 disabled:opacity-50">
-              {saveMutation.isPending
-                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                : saved[activeType]
-                  ? <CheckCircle2 className="w-3.5 h-3.5" />
-                  : <Save className="w-3.5 h-3.5" />}
-              {saved[activeType] ? 'Saved!' : 'Save Template'}
-            </button>
-          </div>
+          {canEdit && (
+            <div className="flex items-center justify-between pt-3 border-t border-gray-100">
+              <button
+                onClick={() => setSteps(prev => ({ ...prev, [activeType]: DEFAULT_STEPS[activeType] ?? [] }))}
+                className="text-xs text-gray-400 hover:text-gray-600">
+                Reset to defaults
+              </button>
+              <button
+                onClick={() => saveMutation.mutate(activeType)}
+                disabled={saveMutation.isPending}
+                className="flex items-center gap-2 px-4 py-2 bg-brand-600 text-white rounded-xl text-sm font-medium hover:bg-brand-700 disabled:opacity-50">
+                {saveMutation.isPending
+                  ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  : saved[activeType]
+                    ? <CheckCircle2 className="w-3.5 h-3.5" />
+                    : <Save className="w-3.5 h-3.5" />}
+                {saved[activeType] ? 'Saved!' : 'Save Template'}
+              </button>
+            </div>
+          )}
         </div>
       )}
 

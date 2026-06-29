@@ -301,16 +301,43 @@ export function contactRoutes(db: DatabaseClient, eventBus: EventBus) {
       return reply.code(204).send();
     });
 
+    // GET all tickets for a contact — no visibility scoping (Contact 360 context)
+    fastify.get('/:id/tickets', { preHandler: requireScope('contacts:read') }, async (req, reply) => {
+      const { id } = req.params as { id: string };
+      const tickets = await db.withTenant(req.tenant.id, async (client) => {
+        const result = await client.query(
+          `SELECT t.id, t.ticket_number, t.subject, t.status, t.priority, t.ticket_type as type,
+                  u.department, t.created_at, t.accepted_at, t.resolved_at,
+                  t.assignee_id, u.name as assignee_name,
+                  t.sla_due_at, t.resolved_at
+           FROM tickets t
+           LEFT JOIN users u ON t.assignee_id = u.id
+           WHERE t.contact_id = $1
+           ORDER BY t.created_at DESC
+           LIMIT 50`,
+          [id],
+        );
+        return result.rows;
+      });
+      return reply.send({ success: true, data: tickets });
+    });
+
     // GET contact timeline (activities + calls)
     fastify.get('/:id/timeline', { preHandler: requireScope('contacts:read') }, async (req, reply) => {
       const { id } = req.params as { id: string };
       const timeline = await db.withTenant(req.tenant.id, async (client) => {
         const result = await client.query(
-          `SELECT 'activity' as type, id, type as subtype, subject, created_at, owner_id, metadata
+          `SELECT 'activity'   AS type, id, type AS subtype, subject,                  created_at, owner_id,   metadata::text AS metadata
            FROM activities WHERE contact_id = $1
            UNION ALL
-           SELECT 'voice_call' as type, id, direction as subtype, outcome as subject, started_at as created_at, agent_id as owner_id, transcript as metadata
+           SELECT 'voice_call' AS type, id, direction AS subtype, outcome AS subject,  started_at AS created_at, agent_id AS owner_id, transcript AS metadata
            FROM voice_calls WHERE contact_id = $1
+           UNION ALL
+           SELECT 'ticket'     AS type, id, status AS subtype, subject,                created_at, assigned_to AS owner_id, NULL
+           FROM tickets WHERE contact_id = $1
+           UNION ALL
+           SELECT 'deal'       AS type, id, stage_name AS subtype, name AS subject,    created_at, owner_id,   NULL
+           FROM deals WHERE contact_id = $1
            ORDER BY created_at DESC
            LIMIT 100`,
           [id],
@@ -320,12 +347,32 @@ export function contactRoutes(db: DatabaseClient, eventBus: EventBus) {
 
       return reply.send({ success: true, data: timeline });
     });
+
+    // GET contact CSAT summary — avg rating + recent responses across all tickets
+    fastify.get('/:id/csat', { preHandler: requireScope('contacts:read') }, async (req, reply) => {
+      const { id } = req.params as { id: string };
+      const data = await db.withTenant(req.tenant.id, async (client) => {
+        const result = await client.query(
+          `SELECT cs.rating, cs.comment, cs.responded_at, t.subject AS ticket_subject, t.ticket_number
+           FROM csat_surveys cs
+           JOIN tickets t ON t.id = cs.ticket_id
+           WHERE t.contact_id = $1 AND cs.rating IS NOT NULL
+           ORDER BY cs.responded_at DESC
+           LIMIT 20`,
+          [id],
+        );
+        const rows = result.rows;
+        const avg = rows.length > 0 ? rows.reduce((s: number, r: any) => s + r.rating, 0) / rows.length : null;
+        return { avg: avg ? Math.round(avg * 10) / 10 : null, count: rows.length, responses: rows };
+      });
+      return reply.send({ success: true, data });
+    });
   };
 }
 
 function buildListQuery(query: any, offset: number, scopeClause = ''): string {
   let idx = 1;
-  const searchClause  = query.search  ? `AND (c.first_name || ' ' || COALESCE(c.last_name,'') || ' ' || COALESCE(c.email,'')) ILIKE $${idx++}` : '';
+  const searchClause  = query.search  ? `AND (c.first_name || ' ' || COALESCE(c.last_name,'') || ' ' || COALESCE(c.email,'') || ' ' || COALESCE(c.phone,'') || ' ' || COALESCE(c.mobile,'') || ' ' || COALESCE(c.nic_number,'')) ILIKE $${idx++}` : '';
   const statusClause  = query.status  ? `AND c.status = $${idx++}` : '';
   const ownerClause   = query.ownerId ? `AND c.owner_id = $${idx++}` : '';
   const limitClause   = `LIMIT $${idx++} OFFSET $${idx}`;
@@ -346,7 +393,7 @@ function buildListQuery(query: any, offset: number, scopeClause = ''): string {
 
 function buildCountQuery(query: any, scopeClause = ''): string {
   let idx = 1;
-  const searchClause  = query.search  ? `AND (first_name || ' ' || COALESCE(last_name,'') || ' ' || COALESCE(email,'')) ILIKE $${idx++}` : '';
+  const searchClause  = query.search  ? `AND (first_name || ' ' || COALESCE(last_name,'') || ' ' || COALESCE(email,'') || ' ' || COALESCE(phone,'') || ' ' || COALESCE(mobile,'') || ' ' || COALESCE(nic_number,'')) ILIKE $${idx++}` : '';
   const statusClause  = query.status  ? `AND status = $${idx++}` : '';
   const ownerClause   = query.ownerId ? `AND owner_id = $${idx++}` : '';
   return `SELECT COUNT(*) FROM contacts WHERE 1=1 ${scopeClause} ${searchClause} ${statusClause} ${ownerClause}`;
