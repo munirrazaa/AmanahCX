@@ -237,7 +237,7 @@ function InviteModal({ onClose }: { onClose: () => void }) {
           {/* Department (Gap 8: structured type dropdown) */}
           <div>
             <label className="text-xs font-medium text-gray-600 mb-1 block">Department <span className="text-gray-400 font-normal">(optional)</span></label>
-            <input value={department} onChange={(e) => setDepartment(e.target.value)}
+            <input value={department} onChange={(e) => { setDepartment(e.target.value); setManagerId(''); }}
               placeholder="e.g. Customer Support, Sales"
               className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg outline-none focus:border-brand-400 mb-2" />
             {deptTypes.length > 0 && (
@@ -260,13 +260,18 @@ function InviteModal({ onClose }: { onClose: () => void }) {
           {/* Line Manager */}
           <div>
             <label className="text-xs font-medium text-gray-600 mb-1 block">Line Manager <span className="text-gray-400 font-normal">(optional)</span></label>
-            <select value={managerId} onChange={(e) => setManagerId(e.target.value)}
+            <select value={managerId} onChange={(e) => { setManagerId(e.target.value); }}
               className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg outline-none focus:border-brand-400">
               <option value="">— No line manager —</option>
-              {allMembers.filter((m: any) => m.role !== 'super_admin').map((m: any) => (
-                <option key={m.id} value={m.id}>{m.name} ({m.role_name ?? m.role})</option>
-              ))}
+              {allMembers
+                .filter((m: any) => m.role === 'manager' && (!department || m.department?.toLowerCase() === department.toLowerCase()))
+                .map((m: any) => (
+                  <option key={m.id} value={m.id}>{m.name} ({m.department ?? m.role})</option>
+                ))}
             </select>
+            {department && allMembers.filter((m: any) => m.role === 'manager' && m.department?.toLowerCase() === department.toLowerCase()).length === 0 && (
+              <p className="text-[11px] text-amber-600 mt-1">No managers found for the "{department}" department yet.</p>
+            )}
           </div>
 
           {/* Role selection */}
@@ -433,9 +438,11 @@ function MemberRow({ member, currentUserId, isAdmin, allMembers }: {
               className="text-xs border border-brand-300 rounded-lg px-2 py-1 outline-none focus:border-brand-500 bg-white max-w-[140px]"
             >
               <option value="">No manager</option>
-              {allMembers.filter((m: any) => m.id !== member.id && m.role !== 'super_admin').map((m: any) => (
-                <option key={m.id} value={m.id}>{m.name}</option>
-              ))}
+              {allMembers
+                .filter((m: any) => m.id !== member.id && m.role === 'manager' && (!member.department || m.department?.toLowerCase() === member.department?.toLowerCase()))
+                .map((m: any) => (
+                  <option key={m.id} value={m.id}>{m.name}</option>
+                ))}
             </select>
           ) : (
             <button

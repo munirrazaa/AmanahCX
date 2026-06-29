@@ -71,14 +71,30 @@ function parseRoleKey(key: string, allRoles: Role[]): { role: string; custom_rol
   return { role: key.replace('system:', '') };
 }
 
+// Returns the organisation's display name for a member's role (custom or system)
+function resolveRoleName(member: Member, roles: Role[]): string {
+  if (member.custom_role_id) {
+    const r = roles.find(r => r.id === member.custom_role_id);
+    if (r) return r.name;
+  }
+  const sr = roles.find((r: any) => r.is_system && (r as any).base_role === member.role);
+  if (sr) return sr.name;
+  return member.role.charAt(0).toUpperCase() + member.role.slice(1);
+}
+
 // ── Invite User Modal ─────────────────────────────────────────────────────────
 function InviteModal({ roles, onClose, onSuccess }: { roles: Role[]; onClose: () => void; onSuccess: () => void }) {
-  const [form, setForm] = useState({ name: '', email: '', role_key: 'system:agent', department_id: '' });
+  const [form, setForm] = useState({ name: '', email: '', role_key: 'system:agent', department_id: '', manager_id: '' });
   const [error, setError] = useState('');
 
   const { data: departments = [] } = useQuery<Department[]>({
     queryKey: ['departments'],
     queryFn: async () => (await api.get('/api/v1/departments')).data.data,
+  });
+
+  const { data: allMembers = [] } = useQuery<Member[]>({
+    queryKey: ['admin-users'],
+    queryFn: async () => (await api.get('/api/v1/settings/team')).data.data,
   });
 
   const systemRoles = roles.filter((r: any) => r.is_system && r.base_role !== 'tenant_admin');
@@ -95,6 +111,7 @@ function InviteModal({ roles, onClose, onSuccess }: { roles: Role[]; onClose: ()
         custom_role_id,
         department: dept?.name,
         departmentType: dept?.department_type,
+        manager_id: form.manager_id || undefined,
       });
     },
     onSuccess: () => { onSuccess(); onClose(); },
@@ -134,7 +151,7 @@ function InviteModal({ roles, onClose, onSuccess }: { roles: Role[]; onClose: ()
             <label className="block text-xs font-semibold text-gray-600 mb-1.5 uppercase tracking-wide">Department *</label>
             <select
               value={form.department_id}
-              onChange={e => setForm(f => ({ ...f, department_id: e.target.value }))}
+              onChange={e => setForm(f => ({ ...f, department_id: e.target.value, manager_id: '' }))}
               className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 bg-white"
             >
               <option value="">— Select department —</option>
@@ -145,7 +162,7 @@ function InviteModal({ roles, onClose, onSuccess }: { roles: Role[]; onClose: ()
             <label className="block text-xs font-semibold text-gray-600 mb-1.5 uppercase tracking-wide">Role *</label>
             <select
               value={form.role_key}
-              onChange={e => setForm(f => ({ ...f, role_key: e.target.value }))}
+              onChange={e => setForm(f => ({ ...f, role_key: e.target.value, manager_id: '' }))}
               className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 bg-white"
             >
               {systemRoles.map(r => (
@@ -160,6 +177,40 @@ function InviteModal({ roles, onClose, onSuccess }: { roles: Role[]; onClose: ()
               )}
             </select>
             <p className="text-xs text-gray-400 mt-1">Controls what this member can see and do</p>
+          </div>
+          <div>
+            {(() => {
+              const selectedDept = departments.find(d => d.id === form.department_id);
+              const isCreatingAgent = form.role_key === 'system:agent';
+              const isCreatingManager = form.role_key === 'system:manager';
+              const deptManagers = allMembers.filter((m: any) => {
+                if (m.role !== 'manager') return false;
+                if (form.department_id && selectedDept && m.department?.toLowerCase() !== selectedDept.name?.toLowerCase()) return false;
+                if (isCreatingAgent) return !!m.manager_id;
+                if (isCreatingManager) return !m.manager_id;
+                return true;
+              });
+              const fallbackLabel = isCreatingAgent ? 'Line Manager' : isCreatingManager ? 'Department Manager' : 'Manager';
+              const label = deptManagers.length > 0 ? resolveRoleName(deptManagers[0], roles) : fallbackLabel;
+              return (
+                <>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1.5 uppercase tracking-wide">{label} <span className="text-gray-400 font-normal normal-case">(optional)</span></label>
+                  <select
+                    value={form.manager_id}
+                    onChange={e => setForm(f => ({ ...f, manager_id: e.target.value }))}
+                    className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 bg-white"
+                  >
+                    <option value="">— Select {label} —</option>
+                    {deptManagers.map((m: any) => (
+                      <option key={m.id} value={m.id}>{m.name}</option>
+                    ))}
+                  </select>
+                  {form.department_id && deptManagers.length === 0 && (
+                    <p className="text-[11px] text-amber-600 mt-1">No {label.toLowerCase()} found for this department yet.</p>
+                  )}
+                </>
+              );
+            })()}
           </div>
           {error && (
             <div className="flex items-center gap-2 px-3 py-2.5 bg-red-50 text-red-700 rounded-xl text-sm border border-red-100">

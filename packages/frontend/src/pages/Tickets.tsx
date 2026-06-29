@@ -23,7 +23,8 @@
  *  └─────────────────────────────────────────────────┘
  */
 
-import { useState, useMemo, useRef, useEffect } from 'react';
+import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Plus, Search, Clock, CheckCircle, AlertTriangle,
@@ -415,6 +416,18 @@ function TicketCard({
 // ── Create ticket modal ────────────────────────────────────────────────────
 function CreateTicketModal({ queues, onClose }: { queues: Queue[]; onClose: () => void }) {
   const qc = useQueryClient();
+
+  // Contact search state
+  const [contactSearch, setContactSearch]   = useState('');
+  const [showDropdown, setShowDropdown]     = useState(false);
+  const [selectedContact, setSelectedContact] = useState<{ id: string; name: string; email: string; phone: string; mobile: string } | null>(null);
+
+  const { data: contactResults } = useQuery({
+    queryKey: ['contact-search', contactSearch],
+    queryFn: () => api.get(`/api/v1/contacts?search=${encodeURIComponent(contactSearch)}&limit=8`).then(r => r.data.data ?? []),
+    enabled: contactSearch.length >= 2,
+  });
+
   const [form, setForm] = useState({
     subject: '', description: '', priority: 'medium',
     queueId: '', reporterName: '', reporterEmail: '', reporterPhone: '',
@@ -423,16 +436,17 @@ function CreateTicketModal({ queues, onClose }: { queues: Queue[]; onClose: () =
 
   const mutation = useMutation({
     mutationFn: () => api.post('/api/v1/tickets', {
-      subject:       form.subject,
-      description:   form.description || undefined,
-      priority:      form.priority,
-      channel:       'manual',
-      queueId:       form.queueId       || undefined,
+      subject:          form.subject,
+      description:      form.description || undefined,
+      priority:         form.priority,
+      channel:          'manual',
+      queueId:          form.queueId          || undefined,
+      contactId:        selectedContact?.id   || undefined,
       reporterName:     form.reporterName     || undefined,
       reporterEmail:    form.reporterEmail    || undefined,
-      reporterPhone:     form.reporterPhone     || undefined,
-      reporterWhatsapp:  form.reporterWhatsapp  || undefined,
-      preferredChannel:  form.preferredChannel,
+      reporterPhone:    form.reporterPhone    || undefined,
+      reporterWhatsapp: form.reporterWhatsapp || undefined,
+      preferredChannel: form.preferredChannel,
     }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['tickets'] });
@@ -444,10 +458,28 @@ function CreateTicketModal({ queues, onClose }: { queues: Queue[]; onClose: () =
   const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
     setForm(f => ({ ...f, [k]: e.target.value }));
 
+  function pickContact(c: any) {
+    const name = [c.first_name, c.last_name].filter(Boolean).join(' ');
+    setSelectedContact({ id: c.id, name, email: c.email ?? '', phone: c.phone ?? '', mobile: c.mobile ?? '' });
+    setForm(f => ({
+      ...f,
+      reporterName:  name,
+      reporterEmail: c.email  ?? f.reporterEmail,
+      reporterPhone: c.phone  ?? c.mobile ?? f.reporterPhone,
+    }));
+    setContactSearch('');
+    setShowDropdown(false);
+  }
+
+  function clearContact() {
+    setSelectedContact(null);
+    setForm(f => ({ ...f, reporterName: '', reporterEmail: '', reporterPhone: '' }));
+  }
+
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
-      <div className="bg-white border border-gray-200 rounded-2xl shadow-xl w-full max-w-lg">
-        <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-gray-200">
+      <div className="bg-white border border-gray-200 rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-gray-200 sticky top-0 bg-white z-10">
           <h2 className="font-semibold text-gray-900 flex items-center gap-2">
             <LifeBuoy className="w-4 h-4 text-brand-400" /> New Support Ticket
           </h2>
@@ -455,16 +487,80 @@ function CreateTicketModal({ queues, onClose }: { queues: Queue[]; onClose: () =
         </div>
 
         <div className="p-6 space-y-4">
-          {/* Reporter section */}
+
+          {/* ── Contact search ─────────────────────────────────────── */}
           <div>
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Reporter Details</p>
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
+              Customer <span className="text-red-400">*</span>
+            </p>
+
+            {selectedContact ? (
+              <div className="flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl border border-brand-300 bg-brand-50">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-7 h-7 rounded-full bg-brand-500 text-white text-xs font-bold flex items-center justify-center shrink-0">
+                    {selectedContact.name.charAt(0).toUpperCase()}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-gray-900 truncate">{selectedContact.name}</p>
+                    <p className="text-xs text-gray-500 truncate">{selectedContact.email || selectedContact.phone}</p>
+                  </div>
+                </div>
+                <button onClick={clearContact} className="text-gray-400 hover:text-red-500 shrink-0">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            ) : (
+              <div className="relative">
+                <input
+                  value={contactSearch}
+                  onChange={e => { setContactSearch(e.target.value); setShowDropdown(true); }}
+                  onFocus={() => setShowDropdown(true)}
+                  placeholder="Search by name, phone, mobile, NIC or email…"
+                  className="w-full bg-white border border-gray-200 text-gray-900 placeholder-gray-400 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-brand-400"
+                />
+                {showDropdown && contactSearch.length >= 2 && (
+                  <div className="absolute z-20 top-full mt-1 w-full bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
+                    {(contactResults as any[])?.length > 0 ? (
+                      (contactResults as any[]).map((c: any) => {
+                        const name = [c.first_name, c.last_name].filter(Boolean).join(' ');
+                        return (
+                          <button key={c.id} type="button" onMouseDown={() => pickContact(c)}
+                            className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-gray-50 text-left border-b border-gray-100 last:border-0">
+                            <div className="w-7 h-7 rounded-full bg-brand-100 text-brand-700 text-xs font-bold flex items-center justify-center shrink-0">
+                              {name.charAt(0).toUpperCase()}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium text-gray-900 truncate">{name}</p>
+                              <p className="text-xs text-gray-400 truncate">{[c.email, c.phone || c.mobile].filter(Boolean).join(' · ')}</p>
+                            </div>
+                            <span className="ml-auto text-[10px] text-gray-400 shrink-0 capitalize">{c.status}</span>
+                          </button>
+                        );
+                      })
+                    ) : (
+                      <p className="px-3 py-3 text-sm text-gray-400">No contacts found. Fill in details below or <a href="/contacts" className="text-brand-500 underline">create contact first</a>.</p>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Reporter section — pre-filled if contact selected */}
+          <div>
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
+              {selectedContact ? 'Reporter Details (pre-filled)' : 'Reporter Details (if no contact found)'}
+            </p>
             <div className="grid grid-cols-2 gap-3">
               <input value={form.reporterName} onChange={set('reporterName')} placeholder="Full Name"
-                className="col-span-2 bg-white border border-gray-200 text-gray-900 placeholder-gray-400 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-brand-400" />
+                readOnly={!!selectedContact}
+                className={`col-span-2 border text-gray-900 placeholder-gray-400 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-brand-400 ${selectedContact ? 'bg-gray-50 border-gray-100 text-gray-500' : 'bg-white border-gray-200'}`} />
               <input value={form.reporterEmail} onChange={set('reporterEmail')} placeholder="Email address" type="email"
-                className="bg-white border border-gray-200 text-gray-900 placeholder-gray-400 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-brand-400" />
+                readOnly={!!selectedContact}
+                className={`border text-gray-900 placeholder-gray-400 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-brand-400 ${selectedContact ? 'bg-gray-50 border-gray-100 text-gray-500' : 'bg-white border-gray-200'}`} />
               <input value={form.reporterPhone} onChange={set('reporterPhone')} placeholder="Phone / SMS number"
-                className="bg-white border border-gray-200 text-gray-900 placeholder-gray-400 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-brand-400" />
+                readOnly={!!selectedContact}
+                className={`border text-gray-900 placeholder-gray-400 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-brand-400 ${selectedContact ? 'bg-gray-50 border-gray-100 text-gray-500' : 'bg-white border-gray-200'}`} />
               <input value={form.reporterWhatsapp} onChange={set('reporterWhatsapp')} placeholder="WhatsApp number (if different)"
                 className="col-span-2 bg-white border border-gray-200 text-gray-900 placeholder-gray-400 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-brand-400" />
             </div>
@@ -473,7 +569,6 @@ function CreateTicketModal({ queues, onClose }: { queues: Queue[]; onClose: () =
           {/* Preferred response channel */}
           <div>
             <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Preferred Response Channel</p>
-            <p className="text-xs text-gray-400 mb-2">How would the customer like to receive replies?</p>
             <div className="grid grid-cols-3 gap-2">
               {([
                 { val: 'email',    label: 'Email',    icon: '✉️',  desc: 'Reply by email' },
@@ -483,9 +578,7 @@ function CreateTicketModal({ queues, onClose }: { queues: Queue[]; onClose: () =
                 <button key={val} type="button"
                   onClick={() => setForm(f => ({ ...f, preferredChannel: val }))}
                   className={`flex flex-col items-center gap-1 p-3 rounded-xl border-2 transition-all text-center ${
-                    form.preferredChannel === val
-                      ? 'border-brand-500 bg-brand-50'
-                      : 'border-gray-200 hover:border-gray-300'
+                    form.preferredChannel === val ? 'border-brand-500 bg-brand-50' : 'border-gray-200 hover:border-gray-300'
                   }`}>
                   <span className="text-lg">{icon}</span>
                   <span className={`text-xs font-semibold ${form.preferredChannel === val ? 'text-brand-700' : 'text-gray-700'}`}>{label}</span>
@@ -528,9 +621,15 @@ function CreateTicketModal({ queues, onClose }: { queues: Queue[]; onClose: () =
               </select>
             </div>
           </div>
+
+          {!selectedContact && (
+            <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5">
+              No customer selected — ticket will not be linked to a contact record. Future agents won't see this ticket on the customer's profile.
+            </p>
+          )}
         </div>
 
-        <div className="px-6 pb-5 flex gap-2">
+        <div className="px-6 pb-5 flex gap-2 sticky bottom-0 bg-white pt-3 border-t border-gray-100">
           <button onClick={onClose} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-500 hover:bg-gray-50">Cancel</button>
           <button onClick={() => mutation.mutate()} disabled={!form.subject || mutation.isPending}
             className="flex-1 py-2.5 bg-brand-600 text-white rounded-xl text-sm font-semibold hover:bg-brand-500 disabled:opacity-40 flex items-center justify-center gap-2">
@@ -672,10 +771,11 @@ function TicketPanel({ ticketId, onClose }: { ticketId: string; onClose: () => v
   const remarksEndRef                 = useRef<HTMLDivElement>(null);
   const inputRef                      = useRef<HTMLTextAreaElement>(null);
 
-  const { data: t, isLoading } = useQuery<TicketDetail>({
+  const { data: t, isLoading, isError } = useQuery<TicketDetail>({
     queryKey: ['ticket', ticketId],
     queryFn: async () => (await api.get(`/api/v1/tickets/${ticketId}`)).data.data,
     refetchInterval: 20_000,
+    retry: false,
   });
 
   const allComments = t?.comments ?? [];
@@ -708,8 +808,8 @@ function TicketPanel({ ticketId, onClose }: { ticketId: string; onClose: () => v
   });
 
   // Cross-dept note mutation — available to any agent including view-only originators
-  const [crossNote, setCrossNote] = React.useState('');
-  const [showNoteBox, setShowNoteBox] = React.useState(false);
+  const [crossNote, setCrossNote] = useState('');
+  const [showNoteBox, setShowNoteBox] = useState(false);
   const noteMutation = useMutation({
     mutationFn: () => api.post(`/api/v1/tickets/${ticketId}/notes`, { body: crossNote }),
     onSuccess: () => { setCrossNote(''); setShowNoteBox(false); invalidate(); },
@@ -720,11 +820,21 @@ function TicketPanel({ ticketId, onClose }: { ticketId: string; onClose: () => v
     inputRef.current?.focus();
   };
 
-  if (isLoading || !t) return (
+  if (isLoading || (!t && !isError)) return (
     <div className="fixed inset-0 z-40 flex justify-end">
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
       <div className="relative w-full max-w-lg bg-gray-50 border-l border-gray-200 flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-gray-500" />
+      </div>
+    </div>
+  );
+
+  if (isError || !t) return (
+    <div className="fixed inset-0 z-40 flex justify-end">
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full max-w-lg bg-gray-50 border-l border-gray-200 flex flex-col items-center justify-center gap-3 text-center p-8">
+        <p className="text-gray-500 text-sm">Ticket not found or you don't have access.</p>
+        <button onClick={onClose} className="text-sm text-brand-600 hover:underline">Close</button>
       </div>
     </div>
   );
@@ -1190,11 +1300,12 @@ export function Tickets() {
   const can = useCan();
   const qc  = useQueryClient();
 
+  const [searchParams] = useSearchParams();
   const [tab, setTab]           = useState<Tab>('all');
   const [search, setSearch]     = useState('');
   const [priority, setPriority] = useState('');
   const [showCreate, setCreate] = useState(false);
-  const [selectedId, setSelect] = useState<string | null>(null);
+  const [selectedId, setSelect] = useState<string | null>(() => searchParams.get('open'));
 
   // Derive API params
   const params = useMemo(() => {
