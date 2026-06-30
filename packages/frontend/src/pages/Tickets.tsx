@@ -33,7 +33,7 @@ import {
   LifeBuoy, PhoneCall, ChevronRight,
   Calendar, TrendingUp, ShieldAlert, Timer,
   Circle, ArrowRightLeft, CornerUpLeft, StickyNote,
-  Reply, CreditCard,
+  Reply, CreditCard, Pencil, Trash2,
 } from 'lucide-react';
 import { api } from '../services/api';
 import { useCan } from '../hooks/useRole';
@@ -93,6 +93,8 @@ interface TicketDetail extends Ticket {
   csatSurvey: CsatSurveyData | null;
   comments: Comment[];
   escalations: any[];
+  queue_id?: string;
+  milestones?: Array<{id:string;label:string;order:number;completed:boolean;completed_at?:string}>;
   // Warm-transfer fields
   prev_assignee_id?: string;
   prev_assignee_name?: string;
@@ -101,6 +103,7 @@ interface TicketDetail extends Ticket {
   manager_overridden_at?: string;
   manager_override_note?: string;
   age_seconds?: number;
+  observer_mode?: boolean;
 }
 
 interface Stats {
@@ -624,15 +627,15 @@ function CreateTicketModal({ queues, onClose }: { queues: Queue[]; onClose: () =
           </div>
 
           {!selectedContact && (
-            <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5">
-              No customer selected — ticket will not be linked to a contact record. Future agents won't see this ticket on the customer's profile.
+            <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2.5">
+              A customer must be selected before a ticket can be created. Search for the customer above.
             </p>
           )}
         </div>
 
         <div className="px-6 pb-5 flex gap-2 sticky bottom-0 bg-white pt-3 border-t border-gray-100">
           <button onClick={onClose} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-500 hover:bg-gray-50">Cancel</button>
-          <button onClick={() => mutation.mutate()} disabled={!form.subject || mutation.isPending}
+          <button onClick={() => mutation.mutate()} disabled={!form.subject || !selectedContact || mutation.isPending}
             className="flex-1 py-2.5 bg-brand-600 text-white rounded-xl text-sm font-semibold hover:bg-brand-500 disabled:opacity-40 flex items-center justify-center gap-2">
             {mutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
             Create Ticket
@@ -774,7 +777,10 @@ function TicketPanel({ ticketId, onClose }: { ticketId: string; onClose: () => v
 
   const { data: t, isLoading, isError } = useQuery<TicketDetail>({
     queryKey: ['ticket', ticketId],
-    queryFn: async () => (await api.get(`/api/v1/tickets/${ticketId}`)).data.data,
+    queryFn: async () => {
+      const res = await api.get(`/api/v1/tickets/${ticketId}`);
+      return { ...res.data.data, observer_mode: res.data.observer_mode };
+    },
     refetchInterval: 20_000,
     retry: false,
   });
@@ -826,6 +832,61 @@ function TicketPanel({ ticketId, onClose }: { ticketId: string; onClose: () => v
     },
     onSuccess: invalidate,
   });
+
+  // Manager inline edit state
+  const [editOpen, setEditOpen]         = useState(false);
+  const [editPriority, setEditPriority] = useState('');
+  const [editAssignee, setEditAssignee] = useState('');
+  const [editQueue, setEditQueue]       = useState('');
+  const [editStatus, setEditStatus]     = useState('');
+  const [priorityReason, setPriorityReason] = useState('');
+  const [assigneeReason, setAssigneeReason] = useState('');
+  const [deleteConfirm, setDeleteConfirm] = useState(false);
+
+  const { data: teamMembers } = useQuery<Array<{ id: string; name: string; role: string }>>({
+    queryKey: ['team-members'],
+    queryFn: () => api.get('/api/v1/settings/team').then(r => r.data.data ?? []),
+    enabled: editOpen,
+  });
+  const { data: queuesForEdit } = useQuery<Queue[]>({
+    queryKey: ['ticket-queues'],
+    queryFn: () => api.get('/api/v1/tickets/queues').then(r => r.data.data ?? []),
+    enabled: editOpen,
+  });
+
+  // Priority is SLA-governed: changing it re-routes the SLA clock, so a reason is
+  // required before saving (separate, auditable governance action — see tickets.ts).
+  const priorityChanged = !!editPriority && editPriority !== (t?.priority ?? '');
+  // Reassignment (e.g. emergency reroute) gets the same distinct audit entry, but
+  // the reason is optional — a nicety for post-incident review, not a compliance gate.
+  const assigneeChanged = !!editAssignee && editAssignee !== (t?.assignee_id ?? '');
+
+  const editMutation = useMutation({
+    mutationFn: () => api.patch(`/api/v1/tickets/${ticketId}`, {
+      ...(editPriority  ? { priority:   editPriority }  : {}),
+      ...(editAssignee  ? { assigneeId:  editAssignee }  : {}),
+      ...(editQueue     ? { queueId:     editQueue }     : {}),
+      ...(editStatus    ? { status:      editStatus }    : {}),
+      ...(priorityChanged ? { priorityChangeReason: priorityReason } : {}),
+      ...(assigneeChanged && assigneeReason ? { assigneeChangeReason: assigneeReason } : {}),
+    }),
+    onSuccess: () => { setEditOpen(false); setPriorityReason(''); setAssigneeReason(''); invalidate(); },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: () => api.delete(`/api/v1/tickets/${ticketId}`),
+    onSuccess: () => { onClose(); invalidate(); },
+  });
+
+  const openEdit = () => {
+    setEditPriority(t?.priority ?? '');
+    setEditAssignee(t?.assignee_id ?? '');
+    setEditQueue(t?.queue_id ?? '');
+    setEditStatus(t?.status ?? '');
+    setPriorityReason('');
+    setAssigneeReason('');
+    setEditOpen(true);
+  };
 
   const handleReply = (c: Comment) => {
     setReplyTo(c);
@@ -892,10 +953,128 @@ function TicketPanel({ ticketId, onClose }: { ticketId: string; onClose: () => v
             </div>
             <h2 className="text-sm font-semibold text-gray-900 leading-snug">{t.subject}</h2>
           </div>
-          <button onClick={onClose} className="ml-3 p-1 text-gray-500 hover:text-gray-500 shrink-0">
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-1 ml-3 shrink-0">
+            {/* Manager+ can edit at any status */}
+            {can.deleteRecords && !t.is_originated_by_me && !t.observer_mode && (
+              <button onClick={openEdit} title="Edit ticket fields"
+                className="p-1.5 rounded-lg text-gray-400 hover:text-brand-600 hover:bg-brand-50 transition-colors">
+                <Pencil className="w-4 h-4" />
+              </button>
+            )}
+            {/* Tenant admin hard delete — closed tickets only */}
+            {(can.role === 'tenant_admin' || can.role === 'super_admin') && t.status === 'closed' && (
+              <button onClick={() => setDeleteConfirm(true)} title="Permanently delete closed ticket"
+                className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors">
+                <Trash2 className="w-4 h-4" />
+              </button>
+            )}
+            <button onClick={onClose} className="p-1 text-gray-500 hover:text-gray-700">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
+
+        {/* ── INLINE EDIT PANEL (manager+) ─────────────────────────────── */}
+        {editOpen && (
+          <div className="mx-4 mt-3 rounded-xl border border-brand-200 bg-brand-50 px-4 py-3 shrink-0 space-y-3">
+            <p className="text-xs font-semibold text-brand-800">Edit ticket fields</p>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-[10px] text-brand-600 font-medium uppercase tracking-wider">Priority</label>
+                <select value={editPriority} onChange={e => setEditPriority(e.target.value)}
+                  className="mt-0.5 w-full text-xs border border-brand-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-brand-400">
+                  {['urgent','high','medium','low'].map(p => (
+                    <option key={p} value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-[10px] text-brand-600 font-medium uppercase tracking-wider">Status</label>
+                <select value={editStatus} onChange={e => setEditStatus(e.target.value)}
+                  className="mt-0.5 w-full text-xs border border-brand-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-brand-400">
+                  {['open','assigned','accepted','in_progress','pending','resolved','closed'].map(s => (
+                    <option key={s} value={s}>{s.replace('_',' ').replace(/\b\w/g, c => c.toUpperCase())}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-[10px] text-brand-600 font-medium uppercase tracking-wider">Assignee</label>
+                <select value={editAssignee} onChange={e => setEditAssignee(e.target.value)}
+                  className="mt-0.5 w-full text-xs border border-brand-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-brand-400">
+                  <option value="">— keep current —</option>
+                  {(teamMembers ?? []).filter(m => ['agent','manager'].includes(m.role)).map(m => (
+                    <option key={m.id} value={m.id}>{m.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-[10px] text-brand-600 font-medium uppercase tracking-wider">Queue</label>
+                <select value={editQueue} onChange={e => setEditQueue(e.target.value)}
+                  className="mt-0.5 w-full text-xs border border-brand-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-brand-400">
+                  <option value="">— keep current —</option>
+                  {(queuesForEdit ?? []).map(q => (
+                    <option key={q.id} value={q.id}>{q.name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            {priorityChanged && (
+              <div>
+                <label className="text-[10px] text-brand-600 font-medium uppercase tracking-wider">
+                  Reason for priority change (required — SLA governance)
+                </label>
+                <textarea value={priorityReason} onChange={e => setPriorityReason(e.target.value)}
+                  rows={2} placeholder="e.g. Customer escalated, business-critical outage…"
+                  className="mt-0.5 w-full text-xs border border-brand-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-brand-400" />
+              </div>
+            )}
+            {assigneeChanged && (
+              <div>
+                <label className="text-[10px] text-brand-600 font-medium uppercase tracking-wider">
+                  Reason for reassignment (optional — helps post-incident review)
+                </label>
+                <textarea value={assigneeReason} onChange={e => setAssigneeReason(e.target.value)}
+                  rows={2} placeholder="e.g. Original agent unavailable, emergency reroute…"
+                  className="mt-0.5 w-full text-xs border border-brand-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-brand-400" />
+              </div>
+            )}
+            {editMutation.isError && (
+              <p className="text-[11px] text-red-500">{(editMutation.error as any)?.response?.data?.error?.message ?? 'Update failed.'}</p>
+            )}
+            <div className="flex gap-2">
+              <button onClick={() => editMutation.mutate()}
+                disabled={editMutation.isPending || (priorityChanged && !priorityReason.trim())}
+                className="text-xs font-semibold bg-brand-600 hover:bg-brand-700 text-white rounded-lg px-3 py-1.5 disabled:opacity-50 transition-colors">
+                {editMutation.isPending ? 'Saving…' : 'Save changes'}
+              </button>
+              <button onClick={() => setEditOpen(false)}
+                className="text-xs font-semibold border border-gray-200 text-gray-600 hover:bg-gray-100 rounded-lg px-3 py-1.5 transition-colors">
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ── DELETE CONFIRM (tenant admin) ────────────────────────────── */}
+        {deleteConfirm && (
+          <div className="mx-4 mt-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 shrink-0">
+            <p className="text-xs font-semibold text-red-800 mb-1">Permanently delete this ticket?</p>
+            <p className="text-[11px] text-red-600 mb-3">This action cannot be undone. All comments and history will be lost.</p>
+            {deleteMutation.isError && (
+              <p className="text-[11px] text-red-500 mb-2">{(deleteMutation.error as any)?.response?.data?.error?.message ?? 'Delete failed.'}</p>
+            )}
+            <div className="flex gap-2">
+              <button onClick={() => deleteMutation.mutate()} disabled={deleteMutation.isPending}
+                className="text-xs font-semibold bg-red-600 hover:bg-red-700 text-white rounded-lg px-3 py-1.5 disabled:opacity-50 transition-colors">
+                {deleteMutation.isPending ? 'Deleting…' : 'Yes, delete permanently'}
+              </button>
+              <button onClick={() => setDeleteConfirm(false)}
+                className="text-xs font-semibold border border-gray-200 text-gray-600 hover:bg-gray-100 rounded-lg px-3 py-1.5 transition-colors">
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* SLA bar */}
         {slaInfo && !['resolved','closed'].includes(t.status) && (

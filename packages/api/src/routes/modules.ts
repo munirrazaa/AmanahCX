@@ -12,17 +12,28 @@ import type { ModuleRegistry } from '@crm/core';
 // tenant isn't entitled to its feature. Paths not listed here are always shown
 // (overview pages like /sales/dashboard, or surfaces not gated by licensing).
 const NAV_FEATURE_MAP: Record<string, string> = {
-  '/contacts':        'crm.contacts',
-  '/companies':       'crm.companies',
-  '/deals':           'crm.deals',
-  '/activities':      'crm.activities',
-  '/sales/invoices':  'sales.invoices',
-  '/sales/contacts':  'sales.contacts',
-  '/sales/payments':  'sales.payments',
-  '/sales/reports':   'sales.reports',
-  '/sales/templates': 'sales.templates',
-  '/sales/builder':   'sales.templates',
-  '/sales/settings':  'sales.settings',
+  // Core CRM
+  '/contacts':             'crm.contacts',
+  '/companies':            'crm.companies',
+  '/deals':                'crm.deals',
+  '/activities':           'crm.activities',
+  '/emails/analytics':     'emails.inbox',
+  // Ticketing
+  '/tickets':              'ticketing.tickets',
+  '/tickets/queues':       'ticketing.tickets',
+  '/tickets/sla':          'ticketing.sla',
+  // Voice Bot
+  '/voice-bot':            'voice_bot.config',
+  '/voice-bot/calls':      'voice_bot.calls',
+  '/voice-bot/tickets':    'voice_bot.calls',
+  // Sales & Invoicing
+  '/sales/invoices':       'sales.invoices',
+  '/sales/contacts':       'sales.contacts',
+  '/sales/payments':       'sales.payments',
+  '/sales/reports':        'sales.reports',
+  '/sales/templates':      'sales.templates',
+  '/sales/builder':        'sales.templates',
+  '/sales/settings':       'sales.settings',
 };
 
 // Remove nav items whose licensed feature the tenant doesn't have, then drop any

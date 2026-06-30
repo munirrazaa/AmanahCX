@@ -17,7 +17,7 @@ import {
   UserCheck, Inbox, RefreshCw, CalendarCheck, Mail,
   ClipboardList, FileText, UserPlus, Clock, Shield,
   ToggleLeft, ToggleRight, Wifi, WifiOff, UserX,
-  TrendingDown, Hash, Tag, ChevronRight, Zap, AlertOctagon,
+  TrendingDown, Hash, Tag, ChevronRight, Zap, AlertOctagon, UserCircle2,
 } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -542,11 +542,13 @@ function TeamBreakdownTable({ agents }: { agents: any[] }) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════
-// MANAGER VIEW  — Bot Section + Human Section side by side
+// MANAGER VIEW  — 3 sections: My Activity | Team Activity | Voice Bot
 // ══════════════════════════════════════════════════════════════════════════
 function ManagerDashboard({ d, department, deptType }: { d: any; department: string | null; deptType: string | null }) {
   const bot   = d.botStats   ?? {};
   const human = d.humanStats ?? {};
+  const myTickets = d.myTickets ?? {};
+  const myCalls   = d.callStats  ?? {};
 
   const { data: teamData } = useQuery({
     queryKey: ['manager-team-dashboard'],
@@ -612,7 +614,52 @@ function ManagerDashboard({ d, department, deptType }: { d: any; department: str
   };
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
+
+      {/* ══ SECTION 1: MY ACTIVITY ══════════════════════════════════════════ */}
+      <div>
+        <div className="flex items-center gap-2 mb-3">
+          <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: `${C.cyan}18` }}>
+            <UserCircle2 className="w-4 h-4" style={{ color: C.cyan }} />
+          </div>
+          <h2 className="font-bold text-gray-800 text-base">My Activity</h2>
+          <span className="text-xs text-gray-400 font-normal">— your own tickets and calls</span>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
+            <p className="text-xs text-gray-400 mb-1">Active Tickets</p>
+            <p className="text-2xl font-bold text-gray-900">{myTickets.active ?? '—'}</p>
+            <p className="text-xs text-gray-400 mt-0.5">assigned to me</p>
+          </div>
+          <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
+            <p className="text-xs text-gray-400 mb-1">Resolved Today</p>
+            <p className="text-2xl font-bold" style={{ color: C.green }}>{myTickets.resolved_today ?? '—'}</p>
+            <p className="text-xs text-gray-400 mt-0.5">by me today</p>
+          </div>
+          <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
+            <p className="text-xs text-gray-400 mb-1">SLA Breached</p>
+            <p className="text-2xl font-bold" style={{ color: Number(myTickets.sla_breached ?? 0) > 0 ? C.red : C.green }}>
+              {myTickets.sla_breached ?? '—'}
+            </p>
+            <p className="text-xs text-gray-400 mt-0.5">on my tickets</p>
+          </div>
+          <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
+            <p className="text-xs text-gray-400 mb-1">Calls Today</p>
+            <p className="text-2xl font-bold text-gray-900">{myCalls.calls_today ?? '—'}</p>
+            <p className="text-xs text-gray-400 mt-0.5">{myCalls.completed_today ?? 0} completed</p>
+          </div>
+        </div>
+      </div>
+
+      {/* ══ SECTION 2: TEAM ACTIVITY ════════════════════════════════════════ */}
+      <div>
+        <div className="flex items-center gap-2 mb-3">
+          <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: `${C.gold}18` }}>
+            <Users className="w-4 h-4" style={{ color: C.gold }} />
+          </div>
+          <h2 className="font-bold text-gray-800 text-base">Team Activity</h2>
+          <span className="text-xs text-gray-400 font-normal">— all supervisors + agents in your reporting hierarchy</span>
+        </div>
 
       {/* ── Live Ops KPI strip (Zendesk/Freshdesk-grade) ──── */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
@@ -684,6 +731,17 @@ function ManagerDashboard({ d, department, deptType }: { d: any; department: str
           <TeamBreakdownTable agents={teamData.agents ?? []} />
         </>
       )}
+      </div>{/* end Team Activity section */}
+
+      {/* ══ SECTION 3: VOICE BOT ACTIVITY ══════════════════════════════════ */}
+      <div>
+        <div className="flex items-center gap-2 mb-3">
+          <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: `${C.purple}18` }}>
+            <Bot className="w-4 h-4" style={{ color: C.purple }} />
+          </div>
+          <h2 className="font-bold text-gray-800 text-base">Voice Bot Activity</h2>
+          <span className="text-xs text-gray-400 font-normal">— automated interactions, containment rate, escalations</span>
+        </div>
 
       {/* ── Two-column panels: Bot | Human ─────────────────── */}
       <div className="grid grid-cols-2 gap-5">
@@ -930,6 +988,7 @@ function ManagerDashboard({ d, department, deptType }: { d: any; department: str
           </div>
         </div>
       )}
+      </div>{/* end Voice Bot Activity section */}
     </div>
   );
 }

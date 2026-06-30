@@ -187,7 +187,7 @@ export function defaultPermissions(baseRole: string): Record<string, boolean> {
       'voice:read': true,     'voice:call': true,        'voice:recordings': true,
       'voicebot:read': true,  'voicebot:configure': false,
       'integrations:read': true, 'integrations:configure': false,
-      'settings:read': true,  'settings:edit': false,
+      'settings:read': false, 'settings:edit': false,
       'billing:read': false,  'billing:manage': false,
     };
 

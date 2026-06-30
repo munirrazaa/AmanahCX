@@ -58,6 +58,8 @@ import { SalesSettingsPage } from './pages/sales/SalesSettings';
 import { TeamReports }       from './pages/TeamReports';
 import { TicketReports }     from './pages/TicketReports';
 import { Reports }           from './pages/Reports';
+import { EmailAnalytics }    from './pages/EmailAnalytics';
+import { IntegrationHealth } from './pages/IntegrationHealth';
 import { TeamMessaging }     from './pages/TeamMessaging';
 import CsatSurvey            from './pages/CsatSurvey';
 
@@ -252,6 +254,10 @@ function Sidebar() {
               className={({ isActive }) => `flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm transition-all ${isActive ? 'text-white font-semibold' : 'text-white/60 hover:text-white hover:bg-white/10'}`}
               style={({ isActive }) => isActive ? { background: 'linear-gradient(135deg, rgba(41,171,226,0.25) 0%, rgba(77,139,60,0.15) 100%)', borderLeft: '2px solid #29ABE2' } : {}}
             ><Clock className="w-4 h-4 shrink-0" />Routing & SLA</NavLink>
+            <NavLink to="/tickets"
+              className={({ isActive }) => `flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm transition-all ${isActive ? 'text-white font-semibold' : 'text-white/60 hover:text-white hover:bg-white/10'}`}
+              style={({ isActive }) => isActive ? { background: 'linear-gradient(135deg, rgba(41,171,226,0.25) 0%, rgba(77,139,60,0.15) 100%)', borderLeft: '2px solid #29ABE2' } : {}}
+            ><LifeBuoy className="w-4 h-4 shrink-0" />Tickets</NavLink>
 
             {/* Security section */}
             <p className="px-3 pt-3 pb-1 text-[10px] font-bold text-brand-300/60 uppercase tracking-widest">Security</p>
@@ -337,7 +343,7 @@ function Sidebar() {
                 {gatedLinks.map(({ to, label, icon }) => {
                   const Icon = resolveIcon(icon);
                   return (
-                    <NavLink key={to} to={to}
+                    <NavLink key={to} to={to} end
                       className={({ isActive }) =>
                         `flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm transition-all ${
                           isActive ? 'text-white font-semibold' : 'text-white/60 hover:text-white hover:bg-white/10'
@@ -353,6 +359,23 @@ function Sidebar() {
                     </NavLink>
                   );
                 })}
+                {/* Integration Health — sub-link under Integrations */}
+                {!isTenantAdmin && isAdmin && (
+                  <NavLink to="/integrations/health"
+                    className={({ isActive }) =>
+                      `flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm transition-all ${
+                        isActive ? 'text-white font-semibold' : 'text-white/60 hover:text-white hover:bg-white/10'
+                      }`
+                    }
+                    style={({ isActive }) => isActive ? {
+                      background: 'linear-gradient(135deg, rgba(41,171,226,0.25) 0%, rgba(77,139,60,0.15) 100%)',
+                      borderLeft: '2px solid #29ABE2',
+                    } : {}}
+                  >
+                    {(() => { const I = resolveIcon('Activity'); return <I className="w-4 h-4 shrink-0" />; })()}
+                    Integration Health
+                  </NavLink>
+                )}
               </div>
             </>
           );
@@ -680,10 +703,12 @@ function AppLayout() {
           <Route path="/deals"       element={op(<Deals />)} />
           <Route path="/voice"           element={op(<VoiceCalls />)} />
           <Route path="/voice/analytics" element={op(<VoiceAnalytics />)} />
-          <Route path="/tickets"         element={op(<Tickets />)} />
+          {/* Tickets: tenant admin gets read-only observer access (backend enforces OBSERVER_ONLY on writes) */}
+          <Route path="/tickets"         element={<Tickets />} />
           <Route path="/tickets/queues"  element={op(<TicketQueues />)} />
           <Route path="/tickets/sla"     element={op(<TicketSla />)} />
-          <Route path="/emails"          element={op(<Emails />)} />
+          <Route path="/emails"            element={op(<Emails />)} />
+          <Route path="/emails/analytics" element={op(<EmailAnalytics />)} />
           <Route path="/messages"        element={<TeamMessaging />} />
           <Route path="/voice-bot"         element={op(<VoiceBotConfig />)} />
           <Route path="/voice-bot/calls"   element={op(<VoiceBotCalls />)} />
@@ -696,7 +721,8 @@ function AppLayout() {
           <Route path="/wallboard"      element={op(<Wallboard />)} />
           <Route path="/reports"        element={op(<Reports />)} />
           <Route path="/billing"     element={op(<Billing />)} />
-          <Route path="/integrations" element={<Integrations />} />
+          <Route path="/integrations"        element={<Integrations />} />
+          <Route path="/integrations/health" element={<IntegrationHealth />} />
           <Route path="/settings"          element={<Settings />} />
           <Route path="/settings/personal" element={<PersonalSettings />} />
           <Route path="/settings/notifications" element={<AdminPageWrapper title="Notifications" subtitle="Control which alerts and emails you receive"><NotificationsPage /></AdminPageWrapper>} />

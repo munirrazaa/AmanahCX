@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import type { DatabaseClient, TenantService } from '@crm/core';
 import type { Plan } from '@crm/shared';
+import { getSector } from '@crm/shared';
 import { requireRole } from '../middlewares/auth.middleware';
 import { defaultPermissions } from './roles';
 import { ensureDefaultPipeline } from '../lib/default-pipeline';
@@ -29,6 +30,19 @@ export const MODULE_CATALOG = [
       { key: 'crm.companies',  label: 'Companies' },
       { key: 'crm.deals',      label: 'Deals & Pipeline' },
       { key: 'crm.activities', label: 'Activities & Tasks' },
+    ] },
+  { key: 'ticketing', label: 'Ticketing & Support', always: false, included_in_plans: ['starter','professional','enterprise'],
+    description: 'Multi-department helpdesk with SLA timers, queues, routing and CSAT.',
+    features: [
+      { key: 'ticketing.tickets',  label: 'Tickets & Queues' },
+      { key: 'ticketing.sla',      label: 'SLA Policies' },
+      { key: 'ticketing.csat',     label: 'CSAT Surveys' },
+    ] },
+  { key: 'voice_bot', label: 'Voice Bot', always: false, included_in_plans: ['professional','enterprise'],
+    description: 'AI voice layer over SIP — connects Retell AI, Vapi or Bland.ai.',
+    features: [
+      { key: 'voice_bot.calls',    label: 'Inbound Calls & Transcripts' },
+      { key: 'voice_bot.config',   label: 'Bot Configuration' },
     ] },
   { key: 'sales', label: 'Sales & Invoicing', always: false, included_in_plans: ['professional','enterprise'],
     description: 'Quote-to-cash: invoicing, payments and sales reporting.',
@@ -84,7 +98,38 @@ const CreateTenantSchema = z.object({
   // The agreed feature-areas within the licensed modules (e.g. ['crm.contacts','sales.invoices']).
   entitledFeatures: z.array(z.string()).default([]),
   roles:         z.array(RolePayloadSchema).optional(),
+  sector:        z.string().default('other'),
 });
+
+async function seedSectorFields(db: DatabaseClient, tenantId: string, sector: string) {
+  const cfg = getSector(sector as any);
+  const entityFieldMap = [
+    { entity: 'contact', fields: cfg.fields ?? [] },
+    { entity: 'company', fields: (cfg as any).companyFields ?? [] },
+    { entity: 'deal',    fields: (cfg as any).dealFields    ?? [] },
+    { entity: 'ticket',  fields: (cfg as any).ticketFields  ?? [] },
+  ];
+  await db.withSuperAdmin(async (client) => {
+    for (const { entity, fields } of entityFieldMap) {
+      for (const field of fields as any[]) {
+        await client.query(
+          `INSERT INTO custom_field_definitions
+             (tenant_id, entity, name, label, field_type, options, is_required, sort_order)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+           ON CONFLICT (tenant_id, entity, name) DO NOTHING`,
+          [
+            tenantId, entity,
+            field.name, field.label, field.field_type,
+            field.options ? JSON.stringify(field.options) : null,
+            field.is_required ?? false, field.sort_order ?? 0,
+          ],
+        );
+      }
+    }
+    // Also update the sector column
+    await client.query('UPDATE tenants SET sector = $1 WHERE id = $2', [sector, tenantId]);
+  });
+}
 
 // Generate a readable but strong temporary password e.g. "Wм-7Kp2q-Rt9x".
 function generateTempPassword(): string {
@@ -295,6 +340,9 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
       await db.withSuperAdmin(async (client) => {
         await ensureDefaultPipeline(client, tenant.id);
       });
+
+      // Seed sector-specific custom fields for all entity types
+      await seedSectorFields(db, tenant.id, body.sector);
 
       // Provision the first tenant admin so the new customer can log in immediately.
       // If no password was supplied, generate a temporary one and return it once.
@@ -1059,6 +1107,8 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
       });
       if (!updated) return reply.code(404).send({ success: false, error: { code: 'NOT_FOUND', message: 'Tenant not found' } });
       await tenantService.invalidateCacheById(id);
+      // Re-seed sector fields when sector is changed (adds new fields; existing ones are kept via ON CONFLICT DO NOTHING)
+      if (body.sector) await seedSectorFields(db, id, body.sector);
       return reply.send({ success: true, data: updated });
     });
 

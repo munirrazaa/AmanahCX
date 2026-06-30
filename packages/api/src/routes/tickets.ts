@@ -31,10 +31,11 @@ import { z } from 'zod';
 import { randomBytes } from 'node:crypto';
 import type { DatabaseClient, EventBus } from '@crm/core';
 import { CRM_EVENTS } from '@crm/core';
-import { requireScope, requireRole } from '../middlewares/auth.middleware';
+import { requireScope, requireRole, requireEntitlement } from '../middlewares/auth.middleware';
 import { getVisibleUserIds } from '../lib/visibility';
 import { EmailService } from '../services/email.service';
 import { SmsService } from '@crm/core/sms.service';
+import { getSector } from '@crm/shared';
 
 // ── Schemas ────────────────────────────────────────────────────────────────
 const CreateTicketSchema = z.object({
@@ -61,7 +62,7 @@ const UpdateTicketSchema = z.object({
   subject:        z.string().min(1).optional(),
   description:    z.string().optional(),
   priority:       z.enum(['urgent','high','medium','low']).optional(),
-  status:         z.enum(['open','assigned','accepted','in_progress','pending','resolved','closed']).optional(),
+  status:         z.enum(['open','assigned','accepted','in_progress','pending','resolved','closed','cancelled','cancel_requested']).optional(),
   queueId:        z.string().uuid().nullable().optional(),
   slaPolicyId:    z.string().uuid().nullable().optional(),
   contactId:      z.string().uuid().nullable().optional(),
@@ -70,6 +71,8 @@ const UpdateTicketSchema = z.object({
   tags:           z.array(z.string()).optional(),
   resolutionNote: z.string().optional(),
   customFields:   z.record(z.unknown()).optional(),
+  priorityChangeReason: z.string().min(1).optional(),
+  assigneeChangeReason: z.string().min(1).optional(),
 });
 
 const ListQuerySchema = z.object({
@@ -646,6 +649,10 @@ export function ticketRoutes(db: DatabaseClient, eventBus: EventBus) {
 
   return async function (fastify: FastifyInstance) {
 
+    // Gate entire plugin — tenant must be entitled to ticketing.tickets or ticketing.sla.
+    // Legacy tenants (no entitled_features recorded) are allowed through unchanged.
+    fastify.addHook('preHandler', requireEntitlement('ticketing.tickets', 'ticketing.sla', 'ticketing.csat'));
+
     // ── Stats (dashboard) ─────────────────────────────────────────────────
     fastify.get('/stats', { preHandler: requireScope('tickets:read') }, async (req, reply) => {
       const tenantId = req.tenant.id;
@@ -660,13 +667,15 @@ export function ticketRoutes(db: DatabaseClient, eventBus: EventBus) {
              COUNT(*) FILTER (WHERE status IN ('accepted','in_progress'))        AS in_progress,
              COUNT(*) FILTER (WHERE status = 'pending')                         AS pending,
              COUNT(*) FILTER (WHERE status = 'resolved')                        AS resolved,
+             COUNT(*) FILTER (WHERE status = 'cancel_requested')               AS cancel_requested,
+             COUNT(*) FILTER (WHERE status = 'cancelled')                      AS cancelled,
              COUNT(*) FILTER (WHERE assignee_id = $1
-                               AND status NOT IN ('resolved','closed'))         AS mine,
+                               AND status NOT IN ('resolved','closed','cancelled'))  AS mine,
              COUNT(*) FILTER (WHERE sla_due_at < NOW()
-                               AND status NOT IN ('resolved','closed'))         AS overdue,
+                               AND status NOT IN ('resolved','closed','cancelled'))  AS overdue,
              COUNT(*) FILTER (WHERE sla_due_at >= NOW()
                                AND accepted_at IS NOT NULL
-                               AND status NOT IN ('resolved','closed'))         AS within_tat,
+                               AND status NOT IN ('resolved','closed','cancelled'))  AS within_tat,
              COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '24 hours') AS created_today,
              COUNT(*) FILTER (WHERE status IN ('accepted','in_progress')
                                AND assignee_id IS NOT NULL)                     AS claimed
@@ -1045,6 +1054,16 @@ export function ticketRoutes(db: DatabaseClient, eventBus: EventBus) {
     // ── Create ticket (manual) ────────────────────────────────────────────
     fastify.post('/', { preHandler: requireScope('tickets:write') }, async (req, reply) => {
       const body       = CreateTicketSchema.parse(req.body);
+
+      // Every ticket must be linked to a contact — enforced here and on the frontend.
+      // Voice bot tickets always provide a contactId (auto-created from caller phone).
+      if (!body.contactId && body.channel !== 'voice_bot') {
+        return reply.code(400).send({
+          success: false,
+          error: { code: 'CONTACT_REQUIRED', message: 'A contact must be selected before creating a ticket.' },
+        });
+      }
+
       const tenantId   = req.tenant.id;
       const ticketNum  = await nextTicketNumber(db, tenantId);
       const sla        = await findSlaPolicy(db, tenantId, body.slaPolicyId, body.priority, {
@@ -1177,6 +1196,26 @@ export function ticketRoutes(db: DatabaseClient, eventBus: EventBus) {
       return reply.code(201).send({ success: true, data: ticket });
     });
 
+    // ── Hard delete ticket (tenant_admin / super_admin, closed tickets only) ─
+    fastify.delete('/:id', { preHandler: requireRole('super_admin', 'tenant_admin') }, async (req, reply) => {
+      const { id } = req.params as { id: string };
+      const [ticket] = await db.withTenant(req.tenant.id, async (client) => {
+        const r = await client.query(`SELECT id, status, ticket_number FROM tickets WHERE id = $1`, [id]);
+        return r.rows;
+      });
+      if (!ticket) return reply.code(404).send({ success: false, error: { code: 'NOT_FOUND', message: 'Ticket not found' } });
+      if (ticket.status !== 'closed') {
+        return reply.code(409).send({
+          success: false,
+          error: { code: 'NOT_CLOSED', message: `Only closed tickets can be permanently deleted. This ticket is currently "${ticket.status}".` },
+        });
+      }
+      await db.withTenant(req.tenant.id, async (client) => {
+        await client.query(`DELETE FROM tickets WHERE id = $1`, [id]);
+      });
+      return reply.send({ success: true, data: { deleted: ticket.ticket_number } });
+    });
+
     // ── List tickets ──────────────────────────────────────────────────────
     fastify.get('/', { preHandler: requireScope('tickets:read') }, async (req, reply) => {
       const query    = ListQuerySchema.parse(req.query);
@@ -1191,7 +1230,9 @@ export function ticketRoutes(db: DatabaseClient, eventBus: EventBus) {
       // Visibility guard: agents see only their tickets; managers see full reportee hierarchy.
       // Cross-dept originator view: also show tickets this user created that have been
       // accepted by another department (read-only — enforced at write time).
-      const visibleIds = await db.withTenant(tenantId, (client) =>
+      // tenant_admin is the one exception: dedicated read-only observer access sees ALL
+      // tickets tenant-wide (writes still blocked elsewhere with OBSERVER_ONLY).
+      const visibleIds = req.user.role === 'tenant_admin' ? null : await db.withTenant(tenantId, (client) =>
         getVisibleUserIds(client, userId, req.user.role),
       );
       if (visibleIds !== null) {
@@ -1275,6 +1316,8 @@ export function ticketRoutes(db: DatabaseClient, eventBus: EventBus) {
           pageSize: query.pageSize,
           total: count,
           totalPages: Math.ceil(count / query.pageSize),
+          // observer_mode: tenant_admin sees all tickets in read-only observation mode (separate from operations)
+          observer_mode: req.user.role === 'tenant_admin',
         },
       });
     });
@@ -1355,7 +1398,7 @@ export function ticketRoutes(db: DatabaseClient, eventBus: EventBus) {
         return r.rows;
       });
 
-      return reply.send({ success: true, data: { ...ticket, comments, escalations, voiceBotCall, csatSurvey: csatSurvey ?? null } });
+      return reply.send({ success: true, data: { ...ticket, comments, escalations, voiceBotCall, csatSurvey: csatSurvey ?? null }, observer_mode: req.user.role === 'tenant_admin' });
     });
 
     // ── Update ticket ─────────────────────────────────────────────────────
@@ -1365,9 +1408,14 @@ export function ticketRoutes(db: DatabaseClient, eventBus: EventBus) {
       const userId = req.user.sub;
       const role   = req.user.role;
 
+      // Tenant admin is observer-only on tickets — they do not participate in operations
+      if (role === 'tenant_admin') {
+        return reply.code(403).send({ success: false, error: { code: 'OBSERVER_ONLY', message: 'Tenant admins have read-only observer access to tickets. Operational changes must be made by managers or agents.' } });
+      }
+
       // Originator read-only guard: if the ticket was created by this user but accepted
       // by a different department, they have view-only access — block writes.
-      if (role !== 'super_admin' && role !== 'tenant_admin' && role !== 'manager') {
+      if (role !== 'super_admin' && role !== 'manager') {
         const visibleIds = await db.withTenant(req.tenant.id, (client) =>
           getVisibleUserIds(client, userId, role),
         );
@@ -1385,6 +1433,31 @@ export function ticketRoutes(db: DatabaseClient, eventBus: EventBus) {
               error: { code: 'ORIGINATOR_READONLY', message: 'This ticket has been accepted by another department. You have read-only access as the originator.' },
             });
           }
+        }
+      }
+
+      // Priority is SLA-governed, not a free-text field: changing it (especially
+      // escalating to urgent) re-routes the SLA clock, so require a reason and
+      // record it as a distinct, auditable governance action — separate from
+      // routine field edits like queue/status. Reassignment (e.g. emergency
+      // reroute to another agent) gets the same distinct-audit-entry treatment,
+      // but the reason stays optional — it's an audit-quality nicety for
+      // post-incident review, not a compliance gate like priority is.
+      let priorityBefore: string | undefined;
+      let assigneeBefore: string | null | undefined;
+      if (body.priority || 'assigneeId' in body) {
+        const [cur] = await db.withTenant(req.tenant.id, async (client) => {
+          const r = await client.query(`SELECT priority, assignee_id FROM tickets WHERE id = $1`, [id]);
+          return r.rows;
+        });
+        if (!cur) return reply.code(404).send({ success: false, error: { code: 'NOT_FOUND', message: 'Ticket not found' } });
+        priorityBefore = cur.priority;
+        assigneeBefore = cur.assignee_id;
+        if (body.priority && priorityBefore !== body.priority && !body.priorityChangeReason) {
+          return reply.code(400).send({
+            success: false,
+            error: { code: 'PRIORITY_REASON_REQUIRED', message: 'Changing ticket priority requires a reason (SLA-governance action).' },
+          });
         }
       }
 
@@ -1446,7 +1519,8 @@ export function ticketRoutes(db: DatabaseClient, eventBus: EventBus) {
       await eventBus.publish(req.tenant.id, CRM_EVENTS.TICKET_CREATED, { ticket, changes: body });
 
       // Audit log — field update
-      const changedFields = Object.keys(body).filter(k => (body as any)[k] !== undefined);
+      const changedFields = Object.keys(body)
+        .filter(k => k !== 'priorityChangeReason' && k !== 'assigneeChangeReason' && (body as any)[k] !== undefined);
       if (changedFields.length > 0) {
         await auditLog(db, {
           tenantId:  req.tenant.id,
@@ -1454,6 +1528,35 @@ export function ticketRoutes(db: DatabaseClient, eventBus: EventBus) {
           actorId:   req.user.sub,
           action:    body.status ? 'status_changed' : 'field_updated',
           newValue:  Object.fromEntries(changedFields.map(k => [k, (body as any)[k]])),
+        });
+      }
+
+      // Distinct, auditable governance entry for SLA-tier (priority) changes — kept
+      // separate from the generic field_updated entry above so reviewers can filter
+      // for escalation history specifically.
+      if (body.priority && priorityBefore && priorityBefore !== body.priority) {
+        await auditLog(db, {
+          tenantId:  req.tenant.id,
+          ticketId:  ticket.id,
+          actorId:   req.user.sub,
+          action:    'priority_changed',
+          oldValue:  { priority: priorityBefore },
+          newValue:  { priority: body.priority },
+          meta:      { reason: body.priorityChangeReason },
+        });
+      }
+
+      // Distinct audit entry for reassignment (e.g. emergency reroute to another
+      // agent) — reason is optional, captured for post-incident review only.
+      if ('assigneeId' in body && assigneeBefore !== body.assigneeId) {
+        await auditLog(db, {
+          tenantId:  req.tenant.id,
+          ticketId:  ticket.id,
+          actorId:   req.user.sub,
+          action:    'assignee_changed',
+          oldValue:  { assigneeId: assigneeBefore ?? null },
+          newValue:  { assigneeId: body.assigneeId ?? null },
+          meta:      body.assigneeChangeReason ? { reason: body.assigneeChangeReason } : {},
         });
       }
 
@@ -1870,6 +1973,71 @@ ${note ? `<p><strong>Reason:</strong> ${note}</p>` : ''}
       // CSAT survey — fire and forget (Gap 4: read configurable expiry from tenant settings)
       const csatExpiry = (req.tenant as any)?.settings?.csat_expiry_days ?? 7;
       await sendCsatSurvey(db, emailSvc, eventBus, { ...ticket, tenant_id: tenantId }, APP_URL, csatExpiry);
+
+      return reply.send({ success: true, data: ticket });
+    });
+
+    // ── Cancel ticket ─────────────────────────────────────────────────────
+    // Agent → sets status to 'cancel_requested' (supervisor/manager must approve)
+    // Manager/Supervisor → sets status to 'cancelled' directly
+    fastify.post('/:id/cancel', { preHandler: requireScope('tickets:write') }, async (req, reply) => {
+      const { id }   = req.params as { id: string };
+      const tenantId = req.tenant.id;
+      const userId   = req.user.sub;
+      const body     = z.object({ reason: z.string().min(1).optional() }).parse(req.body ?? {});
+
+      const userRole = req.user.role;
+      const isManager = ['super_admin','tenant_admin','manager'].includes(userRole);
+      const newStatus = isManager ? 'cancelled' : 'cancel_requested';
+
+      const [ticket] = await db.withTenant(tenantId, async (client) => {
+        const existing = await client.query(`SELECT status FROM tickets WHERE id = $1`, [id]);
+        if (!existing.rows[0]) return [];
+        const current = existing.rows[0].status;
+        if (['cancelled','closed'].includes(current)) {
+          return [{ __error: `Ticket is already ${current}` }];
+        }
+        const r = await client.query(
+          `UPDATE tickets
+           SET status = $1, updated_at = NOW(),
+               resolution_note = COALESCE($2, resolution_note)
+           WHERE id = $3 RETURNING *`,
+          [newStatus, body.reason ?? null, id],
+        );
+        return r.rows;
+      });
+
+      if (!ticket) return reply.code(404).send({ success: false, error: { code: 'NOT_FOUND', message: 'Ticket not found' } });
+      if (ticket.__error) return reply.code(409).send({ success: false, error: { code: 'CONFLICT', message: ticket.__error } });
+
+      const actorName = await db.withSuperAdmin(async (c) => {
+        const r = await c.query('SELECT name FROM users WHERE id = $1', [userId]);
+        return r.rows[0]?.name ?? 'Unknown';
+      });
+
+      if (!isManager) {
+        // Notify managers that an agent has requested cancellation
+        const managers = await db.withSuperAdmin(async (c) => {
+          const r = await c.query(
+            `SELECT id FROM users WHERE tenant_id = $1 AND role IN ('manager','tenant_admin') AND is_active = true`,
+            [tenantId],
+          );
+          return r.rows.map((u: any) => u.id as string);
+        });
+        if (managers.length > 0) {
+          await notify(db, tenantId, managers, 'ticket_cancel_requested',
+            `Cancel requested: ${ticket.ticket_number}`,
+            `${actorName} requested cancellation of "${ticket.subject}"${body.reason ? ': ' + body.reason : ''}.`, id);
+        }
+      }
+
+      await auditLog(db, {
+        tenantId, ticketId: id,
+        actorId: userId, actorName,
+        action: 'status_changed',
+        oldValue: { status: ticket.status },
+        newValue: { status: newStatus, reason: body.reason },
+      });
 
       return reply.send({ success: true, data: ticket });
     });
@@ -2701,12 +2869,36 @@ const DEFAULT_SLA_POLICIES = [
   },
 ];
 
-export async function seedDefaultSlaPolicies(db: any, tenantId: string): Promise<void> {
+export async function seedDefaultSlaPolicies(db: any, tenantId: string, sector?: string): Promise<void> {
+  // Build sector-aware SLA policies if slaDefaults are configured for the sector
+  let policies = DEFAULT_SLA_POLICIES;
+  if (sector && sector !== 'other') {
+    const cfg = getSector(sector as any);
+    const slaDefaults = (cfg as any).slaDefaults as Array<{
+      priority: string; name: string; description: string;
+      first_response_hours: number; resolution_hours: number; business_hours_only: boolean;
+    }> | undefined;
+    if (slaDefaults?.length) {
+      policies = slaDefaults.map((s, i) => ({
+        ...s,
+        reminder_pct: 75,
+        l1_escalation_pct: 100,
+        l2_escalation_pct: 150,
+        reminder_schedule: [
+          { id: `${s.priority}1`, pct: 50,  level: 'reminder', label: '50% Warning — Notify Agent',           notifyTarget: 'assignee' },
+          { id: `${s.priority}2`, pct: 75,  level: 'reminder', label: '75% Warning — Urgent Alert to Agent',  notifyTarget: 'assignee' },
+          { id: `${s.priority}3`, pct: 100, level: 'l1',       label: 'SLA Breached — Escalate to Managers',  notifyTarget: 'managers' },
+          { id: `${s.priority}4`, pct: 150, level: 'l2',       label: 'Critical Breach — Notify All Admins',  notifyTarget: 'admins'  },
+        ],
+      }));
+    }
+  }
+
   await db.withTenant(tenantId, async (client: any) => {
     const existing = await client.query('SELECT COUNT(*) FROM sla_policies WHERE tenant_id = $1', [tenantId]);
     if (parseInt(existing.rows[0].count) > 0) return; // already seeded
 
-    for (const p of DEFAULT_SLA_POLICIES) {
+    for (const p of policies) {
       await client.query(
         `INSERT INTO sla_policies
            (tenant_id, name, description, priority, first_response_hours, resolution_hours,

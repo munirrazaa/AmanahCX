@@ -22,8 +22,9 @@ export class CRMPlatformModule implements PlatformModule {
     { path: '/companies',  label: 'Companies',  icon: 'Building2',    permissionKey: 'companies:read'  },
     { path: '/deals',      label: 'Deals',      icon: 'TrendingUp',   permissionKey: 'deals:read'      },
     { path: '/activities', label: 'Activities', icon: 'CheckSquare',  permissionKey: 'activities:read' },
-    { path: '/emails',     label: 'Emails',     icon: 'Mail',         permissionKey: 'emails:read'     },
-    { path: '/analytics',  label: 'Analytics',  icon: 'BarChart3',    permissionKey: 'analytics:read'  },
+    { path: '/emails',           label: 'Emails',          icon: 'Mail',      permissionKey: 'emails:read'     },
+    { path: '/emails/analytics', label: 'Email Analytics', icon: 'BarChart2', permissionKey: 'emails:read'     },
+    { path: '/analytics',        label: 'Analytics',       icon: 'BarChart3', permissionKey: 'analytics:read'  },
   ];
 
   async onLoad(_ctx: ModuleContext): Promise<void> {

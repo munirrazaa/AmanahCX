@@ -31,7 +31,7 @@ import { createHmac } from 'crypto';
 import { z } from 'zod';
 import type { DatabaseClient, EventBus } from '@crm/core';
 import { CRM_EVENTS } from '@crm/core';
-import { requireScope, requireRole } from '../middlewares/auth.middleware';
+import { requireScope, requireRole, requireEntitlement } from '../middlewares/auth.middleware';
 
 // ── Default IVR menu ─────────────────────────────────────────────────────
 const DEFAULT_IVR_MENU = [
@@ -283,15 +283,50 @@ async function createTicketFromBotCall(
       call.transcript ? `\nTranscript:\n${call.transcript.slice(0, 2000)}` : null,
     ].filter(Boolean).join('\n');
 
-    // Look up contact by phone number
-    const [contact] = await db.withSuperAdmin(async (c) => {
-      if (!call.fromNumber) return [];
-      const r = await c.query(
-        `SELECT id FROM contacts WHERE tenant_id = $1 AND phone ILIKE $2 LIMIT 1`,
-        [tenantId, `%${call.fromNumber.replace(/\D/g, '').slice(-10)}%`],
-      );
-      return r.rows;
-    });
+    // Find existing contact by phone, or create one so the ticket appears on Contact 360
+    const contact = await (async () => {
+      const normalised = call.fromNumber?.replace(/\D/g, '').slice(-10) ?? null;
+
+      // 1. Try to find by phone or mobile
+      if (normalised) {
+        const [existing] = await db.withSuperAdmin(async (c) => {
+          const r = await c.query(
+            `SELECT id FROM contacts WHERE tenant_id = $1
+               AND (phone ILIKE $2 OR mobile ILIKE $2)
+             LIMIT 1`,
+            [tenantId, `%${normalised}%`],
+          );
+          return r.rows;
+        });
+        if (existing) return existing;
+      }
+
+      // 2. Not found — create a new contact from whatever CLI + bot collected.
+      //    Even if the caller refused to share details, CLI number is always captured.
+      let firstName: string;
+      let lastName: string | null;
+      if (call.extractedName) {
+        const nameParts = call.extractedName.trim().split(/\s+/);
+        firstName = nameParts[0] ?? 'Caller';
+        lastName  = nameParts.slice(1).join(' ') || null;
+      } else {
+        // Caller did not share their name — use "Caller" so the contact is human-readable
+        firstName = 'Caller';
+        lastName  = null;
+      }
+      const tags = call.extractedName ? ['voice_bot'] : ['voice_bot', 'anonymous'];
+      const [created] = await db.withSuperAdmin(async (c) => {
+        const r = await c.query(
+          `INSERT INTO contacts
+             (tenant_id, first_name, last_name, phone, email, source, tags, custom_fields)
+           VALUES ($1, $2, $3, $4, $5, 'voice_bot', $6, '{}')
+           RETURNING id`,
+          [tenantId, firstName, lastName, call.fromNumber ?? null, call.extractedEmail ?? null, JSON.stringify(tags)],
+        );
+        return r.rows;
+      });
+      return created ?? null;
+    })();
 
     const [{ next_val }] = (await db.withSuperAdmin(async (c) =>
       (await c.query(
@@ -530,6 +565,11 @@ async function createComplaintFromStructured(
 export function voiceBotRoutes(db: DatabaseClient, eventBus: EventBus) {
   return async function (fastify: FastifyInstance) {
 
+    // Gate entire plugin — tenant must be entitled to voice_bot.calls or voice_bot.config.
+    // Webhook endpoints (/webhook/*) bypass auth entirely via server.ts prefix list,
+    // so this hook is only reached by authenticated (protected) routes.
+    fastify.addHook('preHandler', requireEntitlement('voice_bot.calls', 'voice_bot.config'));
+
     // ── Webhook URL helper (public) ───────────────────────────────────────
     // Returns the URL the tenant should paste into their provider's dashboard.
     // Needs the tenant's public API base URL from settings.
@@ -751,9 +791,99 @@ export function voiceBotRoutes(db: DatabaseClient, eventBus: EventBus) {
       return reply.send({ success: true, data: cfg });
     });
 
+    // ── Connector secret (stored in tenant.settings so webhooks can read it) ──
+    fastify.put('/config/connector-secret', { preHandler: requireRole('tenant_admin', 'super_admin') }, async (req, reply) => {
+      const { provider, webhookSecret } = z.object({
+        provider:      z.enum(['vapi', 'retell', 'bland', 'livekit']),
+        webhookSecret: z.string().min(8),
+      }).parse(req.body);
+
+      await db.withTenant(req.tenant.id, async (c) => {
+        await c.query(
+          `UPDATE tenants
+             SET settings = jsonb_set(
+               COALESCE(settings, '{}'::jsonb),
+               ARRAY['connectors', $1],
+               jsonb_build_object('webhookSecret', $2::text)
+             )
+           WHERE id = $3`,
+          [provider, webhookSecret, req.tenant.id],
+        );
+      });
+      return reply.send({ success: true, message: `Webhook secret for ${provider} saved.` });
+    });
+
+    // ── Simulated test call (authenticated — uses /config/simulate not /webhook/ prefix) ──
+    fastify.post('/config/simulate', { preHandler: requireRole('tenant_admin', 'super_admin') }, async (req, reply) => {
+      const body = z.object({
+        provider:     z.enum(['vapi', 'retell', 'bland']).default('retell'),
+        fromNumber:   z.string().default('+923001234567'),
+        subject:      z.string().default('Test call from voice bot'),
+        summary:      z.string().default('Customer called to test the voice bot integration.'),
+        transcript:   z.string().default('Customer: Hello, I want to test this system. Bot: Sure, let me create a test ticket for you.'),
+        ticketType:   z.enum(['complaint', 'inquiry', 'sales']).default('inquiry'),
+        priority:     z.enum(['urgent', 'high', 'medium', 'low']).default('medium'),
+      }).parse(req.body ?? {});
+
+      const tenantId = req.tenant.id;
+
+      const [botConfig] = await db.withTenant(tenantId, async (c) => {
+        const r = await c.query('SELECT * FROM voice_bot_configs WHERE tenant_id = $1 AND provider = $2', [tenantId, body.provider]);
+        return r.rows;
+      });
+
+      const fakeCallData = {
+        providerCallId:      `test_${Date.now()}`,
+        fromNumber:          body.fromNumber,
+        toNumber:            '+922111111111',
+        durationSeconds:     60,
+        status:              'ended' as const,
+        transcript:          body.transcript,
+        summary:             body.summary,
+        extractedName:       'Test Caller',
+        extractedEmail:      null,
+        startedAt:           new Date(Date.now() - 60000),
+        endedAt:             new Date(),
+        rawPayload:          { test: true, provider: body.provider },
+        ticketType:          body.ticketType,
+        extractedPriority:   body.priority,
+        extractedSubject:    body.subject,
+      };
+
+      const sentiment = extractSentiment(body.summary);
+
+      const [botCall] = await db.withSuperAdmin(async (c) => {
+        const r = await c.query(
+          `INSERT INTO voice_bot_calls
+             (tenant_id, provider, provider_call_id, from_number, to_number,
+              duration_seconds, status, transcript, summary, sentiment,
+              extracted_subject, extracted_priority, extracted_reporter_name,
+              raw_payload, started_at, ended_at)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+           RETURNING id`,
+          [tenantId, body.provider, fakeCallData.providerCallId, fakeCallData.fromNumber, fakeCallData.toNumber,
+           fakeCallData.durationSeconds, 'ended', fakeCallData.transcript, fakeCallData.summary, sentiment,
+           fakeCallData.extractedSubject, fakeCallData.extractedPriority, 'Test Caller',
+           JSON.stringify({ test: true }), fakeCallData.startedAt, fakeCallData.endedAt],
+        );
+        return r.rows;
+      });
+
+      const ticketId = await createTicketFromBotCall(db, eventBus, tenantId, botCall.id, fakeCallData, botConfig);
+
+      return reply.send({
+        success: true,
+        message: 'Test call simulated successfully',
+        botCallId: botCall.id,
+        ticketId,
+        provider: body.provider,
+      });
+    });
+
     // ── Call list ──────────────────────────────────────────────────────
 
-    fastify.get('/calls', { preHandler: requireScope('activities:read') }, async (req, reply) => {
+    // Transcripts & full call records are supervisor/manager only — agents see the ticket, not the raw call
+    fastify.get('/calls', { preHandler: requireRole('super_admin', 'tenant_admin', 'manager') }, async (req, reply) => {
       const { provider, hasTicket, sentiment, search, page = 1, pageSize = 25 } =
         req.query as Record<string, string>;
       const offset = (Number(page) - 1) * Number(pageSize);
@@ -794,7 +924,7 @@ export function voiceBotRoutes(db: DatabaseClient, eventBus: EventBus) {
 
     // ── Single call ────────────────────────────────────────────────────
 
-    fastify.get('/calls/:id', { preHandler: requireScope('activities:read') }, async (req, reply) => {
+    fastify.get('/calls/:id', { preHandler: requireRole('super_admin', 'tenant_admin', 'manager') }, async (req, reply) => {
       const { id } = req.params as { id: string };
       const [call] = await db.withTenant(req.tenant.id, async (c) => {
         const r = await c.query(

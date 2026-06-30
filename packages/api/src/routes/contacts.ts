@@ -3,7 +3,7 @@ import { z } from 'zod';
 import type { DatabaseClient } from '@crm/core';
 import type { EventBus } from '@crm/core';
 import { CRM_EVENTS } from '@crm/core';
-import { requireScope } from '../middlewares/auth.middleware';
+import { requireScope, requireRole } from '../middlewares/auth.middleware';
 import { getVisibleUserIds, ownerScopeSql } from '../lib/visibility';
 
 const CreateContactSchema = z.object({
@@ -279,8 +279,8 @@ export function contactRoutes(db: DatabaseClient, eventBus: EventBus) {
       return reply.send({ success: true, data: contact });
     });
 
-    // DELETE contact
-    fastify.delete('/:id', { preHandler: requireScope('contacts:write') }, async (req, reply) => {
+    // DELETE contact — tenant_admin / super_admin only (global standard: no operational role should hard-delete)
+    fastify.delete('/:id', { preHandler: requireRole('super_admin', 'tenant_admin') }, async (req, reply) => {
       const { id } = req.params as { id: string };
       try {
         const deleted = await db.withTenant(req.tenant.id, async (client) => {
@@ -306,8 +306,8 @@ export function contactRoutes(db: DatabaseClient, eventBus: EventBus) {
       const { id } = req.params as { id: string };
       const tickets = await db.withTenant(req.tenant.id, async (client) => {
         const result = await client.query(
-          `SELECT t.id, t.ticket_number, t.subject, t.status, t.priority, t.ticket_type as type,
-                  u.department, t.created_at, t.accepted_at, t.resolved_at,
+          `SELECT t.id, t.ticket_number, t.subject, t.status, t.priority, t.channel,
+                  t.ticket_type as type, u.department, t.created_at, t.accepted_at, t.resolved_at,
                   t.assignee_id, u.name as assignee_name,
                   t.sla_due_at, t.resolved_at
            FROM tickets t

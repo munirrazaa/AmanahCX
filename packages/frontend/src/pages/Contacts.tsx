@@ -221,7 +221,7 @@ export function Contacts() {
               <input
                 value={search}
                 onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-                placeholder="Search name, email, phone…"
+                placeholder="Search name, email, phone, NIC…"
                 className="w-full pl-8 pr-3 py-2 text-sm border border-gray-200 rounded-lg outline-none focus:border-brand-400"
               />
             </div>

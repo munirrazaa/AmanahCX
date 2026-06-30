@@ -15,9 +15,13 @@
  *       - line manager        → themselves + their direct & indirect reportees
  *       - department manager  → themselves + the whole sub-tree (their department)
  *
- * Note: tenant_admin is administrative-only and is blocked from operational
- * routes upstream; if it ever reaches here it gets the same self-only scoping
- * (returns just its own id, which owns no operational records → sees nothing).
+ * Note: tenant_admin gets the same self-only scoping here (owns no operational
+ * records → sees nothing via this helper). Tickets is the one exception: the
+ * tickets list route below special-cases tenant_admin to bypass this helper
+ * entirely, since tenant_admin has dedicated read-only observer access there.
+ * Other entities (contacts, deals, activities) stay administrative-only and
+ * tenant_admin must keep seeing nothing through this shared helper, even
+ * though requireScope() bypasses its own checks for tenant_admin.
  */
 
 import type { PoolClient } from 'pg';

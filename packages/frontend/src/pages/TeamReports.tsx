@@ -35,21 +35,21 @@ const REPORT_CATALOGUE = [
     label: 'Pipeline Performance',
     desc:  'Deals created, won, lost and revenue per team member',
     icon:  TrendingUp,
-    ready: false,
+    ready: true,
   },
   {
     id:    'contacts',
     label: 'Contact Acquisition',
     desc:  'New contacts and companies created over the period',
     icon:  Users,
-    ready: false,
+    ready: true,
   },
   {
     id:    'tickets',
     label: 'Ticket Handling',
     desc:  'Ticket volume, SLA compliance and resolution rates',
     icon:  BarChart3,
-    ready: false,
+    ready: true,
   },
 ];
 
@@ -162,6 +162,86 @@ async function triggerDownload(format: string, qs: string) {
     const blob = new Blob([html], { type: 'application/msword' });
     Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: 'team-report.doc' }).click();
   }
+}
+
+// ── Ticket Handling Panel ─────────────────────────────────────────────────────
+
+function TicketHandlingPanel({ stats, fmt }: { stats: any[]; fmt: (n: number) => string }) {
+  const { data: ticketStats } = useQuery<any>({
+    queryKey: ['ticket-stats-team'],
+    queryFn: () => api.get('/api/v1/tickets/stats').then((r: any) => r.data.data ?? r.data),
+    retry: false,
+  });
+  const { data: resolution } = useQuery<any>({
+    queryKey: ['ticket-resolution-team'],
+    queryFn: () => api.get('/api/v1/tickets/analytics/resolution?period=30d').then((r: any) => r.data.data),
+    retry: false,
+  });
+
+  const ts = ticketStats ?? {};
+  const res = resolution?.summary ?? {};
+  const trend: any[] = (resolution?.trend ?? []).map((r: any) => ({
+    day:  new Date(r.period).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+    sla:  Number(r.sla_compliance ?? 0),
+    res:  Number(r.avg_resolution_hours ?? 0),
+  }));
+
+  const slaColor = (v: number) => v >= 90 ? 'text-green-600' : v >= 70 ? 'text-amber-500' : 'text-red-500';
+
+  return (
+    <>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <StatCard label="Open Tickets"     value={fmt(Number(ts.open ?? 0))} />
+        <StatCard label="Resolved (30d)"   value={fmt(Number(ts.resolved_30d ?? ts.resolved ?? 0))} color="text-green-600" />
+        <StatCard label="SLA Compliance"
+          value={`${Number(res.sla_compliance_rate ?? 0).toFixed(1)}%`}
+          color={slaColor(Number(res.sla_compliance_rate ?? 0))} />
+        <StatCard label="Avg Resolution"
+          value={res.avg_resolution_hours != null ? `${Number(res.avg_resolution_hours).toFixed(1)}h` : '—'} />
+      </div>
+
+      {trend.length > 0 && (
+        <div className="bg-white border border-gray-100 rounded-xl p-5">
+          <h2 className="text-sm font-semibold text-gray-700 mb-4">SLA Compliance & Resolution Trend</h2>
+          <ResponsiveContainer width="100%" height={180}>
+            <LineChart data={trend} margin={{ top: 0, right: 8, bottom: 0, left: -10 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
+              <XAxis dataKey="day" tick={{ fontSize: 10 }} />
+              <YAxis yAxisId="pct" domain={[0, 100]} tick={{ fontSize: 10 }} unit="%" />
+              <YAxis yAxisId="hrs" orientation="right" tick={{ fontSize: 10 }} unit="h" />
+              <Tooltip />
+              <Line yAxisId="pct" type="monotone" dataKey="sla" name="SLA %" stroke="#22c55e" strokeWidth={2} dot={false} />
+              <Line yAxisId="hrs" type="monotone" dataKey="res" name="Avg Res (h)" stroke="#f59e0b" strokeWidth={2} dot={false} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+
+      {stats.length > 0 && (
+        <div className="bg-white border border-gray-100 rounded-xl overflow-hidden">
+          <div className="px-5 py-4 border-b border-gray-50"><h2 className="text-sm font-semibold text-gray-700">Ticket Handling by Member</h2></div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead><tr className="border-b border-gray-50">
+                <th className="text-left px-5 py-3 text-xs font-medium text-gray-400">Member</th>
+                <th className="text-right px-4 py-3 text-xs font-medium text-gray-400">Tickets Handled</th>
+                <th className="text-right px-5 py-3 text-xs font-medium text-gray-400">Activities Done</th>
+              </tr></thead>
+              <tbody>
+                {[...stats].sort((a, b) => Number(b.tickets_handled ?? 0) - Number(a.tickets_handled ?? 0)).map((u: any) => (
+                  <tr key={u.id} className="border-b border-gray-50 hover:bg-gray-50/50">
+                    <td className="px-5 py-3 text-xs font-medium text-gray-900">{u.name}</td>
+                    <td className="px-4 py-3 text-right font-semibold text-brand-600">{u.tickets_handled ?? 0}</td>
+                    <td className="px-5 py-3 text-right text-green-600">{u.activities_done ?? 0}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </>
+  );
 }
 
 // ── Download menu ─────────────────────────────────────────────────────────────
@@ -298,8 +378,12 @@ export function TeamReports() {
           {/* Header + filters */}
           <div className="flex items-start justify-between flex-wrap gap-3">
             <div>
-              <h1 className="text-xl font-bold text-gray-900">Team Activity Report</h1>
-              <p className="text-sm text-gray-400 mt-0.5">Consolidated view across your full reporting line</p>
+              <h1 className="text-xl font-bold text-gray-900">
+                {REPORT_CATALOGUE.find(r => r.id === activeReport)?.label ?? 'Team Report'}
+              </h1>
+              <p className="text-sm text-gray-400 mt-0.5">
+                {REPORT_CATALOGUE.find(r => r.id === activeReport)?.desc}
+              </p>
             </div>
 
             <div className="flex items-center gap-2 flex-wrap">
@@ -350,6 +434,125 @@ export function TeamReports() {
 
           {!isLoading && !noAccess && data && (
             <>
+              {/* ── PIPELINE PERFORMANCE ── */}
+              {activeReport === 'pipeline' && (
+                <>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <StatCard label="Deals Created"  value={fmt(totals.deals)} />
+                    <StatCard label="Deals Won"       value={fmt(totals.deals_won)} color="text-green-600"
+                      sub={totals.deals > 0 ? `${Math.round(totals.deals_won / totals.deals * 100)}% win rate` : undefined} />
+                    <StatCard label="Total Revenue"   value={fmtCurrency(totals.revenue)} color="text-brand-600" />
+                    <StatCard label="Avg Deal Size"   value={fmtCurrency(totals.deals_won > 0 ? totals.revenue / totals.deals_won : 0)} />
+                  </div>
+
+                  {stats.length > 0 && (
+                    <div className="bg-white border border-gray-100 rounded-xl p-5">
+                      <h2 className="text-sm font-semibold text-gray-700 mb-4">Revenue by Team Member</h2>
+                      <ResponsiveContainer width="100%" height={180}>
+                        <BarChart data={stats.map(u => ({ name: u.name.split(' ')[0], revenue: Number(u.revenue ?? 0), won: Number(u.deals_won ?? 0) }))}
+                          margin={{ top: 0, right: 8, bottom: 0, left: 0 }}>
+                          <XAxis dataKey="name" tick={{ fontSize: 10 }} />
+                          <YAxis tick={{ fontSize: 10 }} tickFormatter={v => v >= 1000 ? `${(v/1000).toFixed(0)}k` : v} />
+                          <Tooltip formatter={(v: any) => `$${Number(v).toLocaleString()}`} />
+                          <Bar dataKey="revenue" name="Revenue" fill="#29ABE2" radius={[4,4,0,0]} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  )}
+
+                  {stats.length > 0 && (
+                    <div className="bg-white border border-gray-100 rounded-xl overflow-hidden">
+                      <div className="px-5 py-4 border-b border-gray-50"><h2 className="text-sm font-semibold text-gray-700">Pipeline Per Member</h2></div>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead><tr className="border-b border-gray-50">
+                            <th className="text-left px-5 py-3 text-xs font-medium text-gray-400">Member</th>
+                            <th className="text-right px-4 py-3 text-xs font-medium text-gray-400">Created</th>
+                            <th className="text-right px-4 py-3 text-xs font-medium text-gray-400">Won</th>
+                            <th className="text-right px-4 py-3 text-xs font-medium text-gray-400">Win Rate</th>
+                            <th className="text-right px-5 py-3 text-xs font-medium text-gray-400">Revenue</th>
+                          </tr></thead>
+                          <tbody>
+                            {stats.map((u: any) => {
+                              const wr = u.deals_created > 0 ? Math.round(u.deals_won / u.deals_created * 100) : 0;
+                              return (
+                                <tr key={u.id} className="border-b border-gray-50 hover:bg-gray-50/50">
+                                  <td className="px-5 py-3 text-xs font-medium text-gray-900">{u.name}</td>
+                                  <td className="px-4 py-3 text-right text-gray-700">{u.deals_created ?? 0}</td>
+                                  <td className="px-4 py-3 text-right text-green-600 font-medium">{u.deals_won ?? 0}</td>
+                                  <td className="px-4 py-3 text-right">
+                                    <span className={`text-xs font-semibold ${wr >= 50 ? 'text-green-600' : wr >= 25 ? 'text-amber-500' : 'text-gray-400'}`}>{wr}%</span>
+                                  </td>
+                                  <td className="px-5 py-3 text-right font-medium text-gray-900">{fmtCurrency(Number(u.revenue ?? 0))}</td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* ── CONTACT ACQUISITION ── */}
+              {activeReport === 'contacts' && (
+                <>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    <StatCard label="Contacts Created" value={fmt(totals.contacts)} />
+                    <StatCard label="Team Members" value={fmt(stats.length)} />
+                    <StatCard label="Avg per Member" value={fmt(stats.length > 0 ? Math.round(totals.contacts / stats.length) : 0)} />
+                  </div>
+
+                  {trend.length > 0 && (
+                    <div className="bg-white border border-gray-100 rounded-xl p-5">
+                      <h2 className="text-sm font-semibold text-gray-700 mb-4">New Contacts Over Time</h2>
+                      <ResponsiveContainer width="100%" height={180}>
+                        <LineChart data={trend} margin={{ top: 0, right: 8, bottom: 0, left: -20 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
+                          <XAxis dataKey="day" tick={{ fontSize: 10 }} />
+                          <YAxis tick={{ fontSize: 10 }} />
+                          <Tooltip />
+                          <Line type="monotone" dataKey="count" stroke="#29ABE2" strokeWidth={2} dot={false} name="Contacts" />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                  )}
+
+                  {stats.length > 0 && (
+                    <div className="bg-white border border-gray-100 rounded-xl overflow-hidden">
+                      <div className="px-5 py-4 border-b border-gray-50"><h2 className="text-sm font-semibold text-gray-700">Contacts by Member</h2></div>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead><tr className="border-b border-gray-50">
+                            <th className="text-left px-5 py-3 text-xs font-medium text-gray-400">Member</th>
+                            <th className="text-right px-4 py-3 text-xs font-medium text-gray-400">Reports To</th>
+                            <th className="text-right px-5 py-3 text-xs font-medium text-gray-400">Contacts Created</th>
+                          </tr></thead>
+                          <tbody>
+                            {[...stats].sort((a, b) => Number(b.contacts_created ?? 0) - Number(a.contacts_created ?? 0)).map((u: any) => (
+                              <tr key={u.id} className="border-b border-gray-50 hover:bg-gray-50/50">
+                                <td className="px-5 py-3 text-xs font-medium text-gray-900">{u.name}</td>
+                                <td className="px-4 py-3 text-right text-xs text-gray-500">{u.manager_name ?? '—'}</td>
+                                <td className="px-5 py-3 text-right font-semibold text-brand-600">{u.contacts_created ?? 0}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* ── TICKET HANDLING ── */}
+              {activeReport === 'tickets' && (
+                <TicketHandlingPanel stats={stats} fmt={fmt} />
+              )}
+
+              {/* ── TEAM ACTIVITY (original) ── */}
+              {activeReport === 'team-activity' && (
+              <>
               {/* Summary cards */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <StatCard label="Contacts Created" value={fmt(totals.contacts)} />
@@ -465,6 +668,8 @@ export function TeamReports() {
                   <p className="text-sm font-medium text-gray-500">No data for this period</p>
                   <p className="text-xs text-gray-400 mt-1">Try a wider date range or select a different team member.</p>
                 </div>
+              )}
+              </>
               )}
             </>
           )}

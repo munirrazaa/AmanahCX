@@ -18,7 +18,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import type { DatabaseClient, EventBus } from '@crm/core';
 import { CRM_EVENTS } from '@crm/core';
-import { requireScope } from '../middlewares/auth.middleware';
+import { requireScope, requireEntitlement } from '../middlewares/auth.middleware';
 import { EmailService } from '../services/email.service';
 
 // ── Validation schemas ─────────────────────────────────────────────────────
@@ -54,6 +54,9 @@ export function emailRoutes(db: DatabaseClient, eventBus: EventBus) {
   const emailSvc = new EmailService(db);
 
   return async function (fastify: FastifyInstance) {
+
+    // Gate entire plugin — tenant must be entitled to the Email Inbox module.
+    fastify.addHook('preHandler', requireEntitlement('emails.inbox', 'emails.compose'));
 
     // ── Send ────────────────────────────────────────────────────────────
     fastify.post('/send', { preHandler: requireScope('activities:write') }, async (req, reply) => {
@@ -373,6 +376,91 @@ export function emailRoutes(db: DatabaseClient, eventBus: EventBus) {
       });
 
       return reply.send({ ok: true });
+    });
+
+    // ── Email analytics ──────────────────────────────────────────────────
+    // GET /api/v1/emails/analytics?from=&to=
+    fastify.get('/analytics', { preHandler: requireScope('activities:read') }, async (req, reply) => {
+      const { from, to } = req.query as { from?: string; to?: string };
+      const fromDate = from ? new Date(from) : new Date(Date.now() - 30 * 86400_000);
+      const toDate   = to   ? new Date(to)   : new Date();
+
+      const tenantId = req.tenant.id;
+      const data = await db.withTenant(tenantId, async (c) => {
+        const summary = await c.query(
+          `SELECT
+             COUNT(*)                                                          AS total_sent,
+             COUNT(*) FILTER (WHERE status = 'delivered')                     AS delivered,
+             COUNT(*) FILTER (WHERE status = 'bounced')                       AS bounced,
+             COUNT(*) FILTER (WHERE status = 'failed')                        AS failed,
+             COUNT(*) FILTER (WHERE opened_at IS NOT NULL)                    AS opened,
+             COUNT(*) FILTER (WHERE status NOT IN ('delivered','bounced','failed','archived')) AS queued,
+             ROUND(
+               100.0 * COUNT(*) FILTER (WHERE status = 'delivered') / NULLIF(COUNT(*), 0), 1
+             ) AS delivery_rate,
+             ROUND(
+               100.0 * COUNT(*) FILTER (WHERE opened_at IS NOT NULL)
+                 / NULLIF(COUNT(*) FILTER (WHERE status = 'delivered'), 0), 1
+             ) AS open_rate,
+             ROUND(
+               100.0 * COUNT(*) FILTER (WHERE status = 'bounced') / NULLIF(COUNT(*), 0), 1
+             ) AS bounce_rate
+           FROM emails
+           WHERE created_at >= $1 AND created_at <= $2
+             AND status != 'archived'`,
+          [fromDate, toDate],
+        );
+
+        const daily = await c.query(
+          `SELECT
+             DATE(created_at) AS date,
+             COUNT(*)                                         AS sent,
+             COUNT(*) FILTER (WHERE status = 'delivered')    AS delivered,
+             COUNT(*) FILTER (WHERE opened_at IS NOT NULL)   AS opened,
+             COUNT(*) FILTER (WHERE status = 'bounced')      AS bounced
+           FROM emails
+           WHERE created_at >= $1 AND created_at <= $2
+             AND status != 'archived'
+           GROUP BY DATE(created_at)
+           ORDER BY date`,
+          [fromDate, toDate],
+        );
+
+        const byStatus = await c.query(
+          `SELECT status, COUNT(*) AS count
+           FROM emails
+           WHERE created_at >= $1 AND created_at <= $2
+             AND status != 'archived'
+           GROUP BY status
+           ORDER BY count DESC`,
+          [fromDate, toDate],
+        );
+
+        const topRecipients = await c.query(
+          `SELECT
+             COALESCE(con.first_name || ' ' || COALESCE(con.last_name,''), e.to_address) AS name,
+             e.to_address AS email,
+             COUNT(*) AS emails_received,
+             COUNT(*) FILTER (WHERE e.opened_at IS NOT NULL) AS opened
+           FROM emails e
+           LEFT JOIN contacts con ON e.contact_id = con.id
+           WHERE e.created_at >= $1 AND e.created_at <= $2
+             AND e.status != 'archived'
+           GROUP BY e.to_address, con.first_name, con.last_name
+           ORDER BY emails_received DESC
+           LIMIT 10`,
+          [fromDate, toDate],
+        );
+
+        return {
+          summary:       summary.rows[0],
+          daily:         daily.rows,
+          byStatus:      byStatus.rows,
+          topRecipients: topRecipients.rows,
+        };
+      });
+
+      return reply.send({ success: true, data });
     });
 
     // ── Generic SMTP open-tracking pixel (public) ───────────────────────

@@ -294,7 +294,6 @@ async function buildServer() {
       '/api/v1/deals',
       '/api/v1/activities',
       '/api/v1/analytics',
-      '/api/v1/tickets',
       '/api/v1/sales',
       '/api/v1/opportunities',
       '/api/v1/emails',
@@ -308,6 +307,17 @@ async function buildServer() {
       TENANT_ADMIN_BLOCKED_PREFIXES.some((p) => req.url.startsWith(p))
     ) {
       return reply.code(403).send({ success: false, error: { code: 'ADMIN_NO_OPERATIONS', message: 'Administrators manage users, roles, settings and integrations — operational and billing data is not accessible to this role.' } });
+    }
+    // Tenant admin has READ-ONLY observer access to tickets — all write operations are blocked
+    // at the route level, except hard-deleting closed tickets (DELETE), which the route handler
+    // itself further restricts to closed-status tickets only.
+    if (
+      req.url.startsWith('/api/v1/tickets') &&
+      (req.user as any)?.role === 'tenant_admin' &&
+      req.method !== 'GET' &&
+      req.method !== 'DELETE'
+    ) {
+      return reply.code(403).send({ success: false, error: { code: 'OBSERVER_ONLY', message: 'Tenant admins have read-only observer access to tickets. Use GET to view.' } });
     }
 
     await tenantMiddleware(req, reply);

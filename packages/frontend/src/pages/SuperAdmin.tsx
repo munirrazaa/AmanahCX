@@ -76,6 +76,315 @@ const ALL_MODULES: Array<{ key: string; label: string; description: string; alwa
   { key: 'sales',        label: 'Sales Module',       icon: '💼', description: 'Sales pipeline, invoicing, payments and forecasting.'                    },
 ];
 
+// ── Pricing plan presets ─────────────────────────────────────────────────────
+// PLAN_MODULE_MAP drives auto-selection in the Create Workspace modal
+// and the visual Deal Builder in the Catalogue tab.
+const PLAN_PRICING: Record<string, { price: string; tagline: string; color: string; highlight?: boolean }> = {
+  free:         { price: '$0',   tagline: 'Try before you buy',           color: '#64748b' },
+  starter:      { price: '$49',  tagline: 'Growing teams',                color: '#2563eb' },
+  professional: { price: '$89',  tagline: 'High-volume contact centres',  color: '#29ABE2', highlight: true },
+  enterprise:   { price: 'Custom', tagline: 'Large / regulated orgs',     color: '#7c3aed' },
+};
+
+// Module keys that a plan includes (from super-admin.ts included_in_plans)
+const PLAN_MODULE_MAP: Record<string, string[]> = {
+  free:         ['crm'],
+  starter:      ['crm', 'ticketing', 'emails', 'integrations'],
+  professional: ['crm', 'ticketing', 'emails', 'integrations', 'sales', 'voice_bot', 'analytics'],
+  enterprise:   ['crm', 'ticketing', 'emails', 'integrations', 'sales', 'voice_bot', 'analytics'],
+};
+
+// Catalogue cards — extended descriptions for the visual Catalogue tab
+const CATALOGUE_MODULES: Array<{
+  key: string; label: string; icon: string; tier: string; tierColor: string;
+  description: string; features: string[]; price: string; category: 'core' | 'addon' | 'horizontal';
+}> = [
+  {
+    key: 'crm', label: 'Core CRM', icon: '🏢', tier: 'Free+', tierColor: '#22c55e', category: 'core',
+    price: 'Included in all plans',
+    description: 'The customer record at the heart of everything. Contacts, companies, deals, activities and a shared team inbox in one place.',
+    features: ['Contact & company records', 'Deal pipeline management', 'Activity timeline', 'CRM Analytics dashboard'],
+  },
+  {
+    key: 'ticketing', label: 'Ticketing & Support', icon: '🎫', tier: 'Starter+', tierColor: '#2563eb', category: 'addon',
+    price: 'Included from Starter',
+    description: 'Omnichannel ticketing with SLA policies, CSAT surveys and queue management for support teams.',
+    features: ['Omnichannel ticket creation', 'SLA policies & breach alerts', 'CSAT surveys on close', 'Queue & priority management', 'Ticket-level reports'],
+  },
+  {
+    key: 'emails', label: 'Email Inbox', icon: '📧', tier: 'Starter+', tierColor: '#2563eb', category: 'addon',
+    price: 'Included from Starter',
+    description: 'Shared team email inbox with assignment, threading, template library and open-tracking analytics.',
+    features: ['Shared team inbox', 'Thread assignment & handoff', 'Email templates', 'Open / bounce tracking', 'Email analytics dashboard'],
+  },
+  {
+    key: 'integrations', label: 'Integrations', icon: '🔌', tier: 'Starter+', tierColor: '#2563eb', category: 'addon',
+    price: 'Included from Starter',
+    description: 'Pre-built connectors to SMS gateways, Slack, Zapier/Make, WhatsApp and generic webhooks.',
+    features: ['20+ pre-built connectors', 'Webhook delivery tracking', 'Zapier / Make support', 'Integration health dashboard'],
+  },
+  {
+    key: 'sales', label: 'Sales & Invoicing', icon: '💼', tier: 'Professional+', tierColor: '#29ABE2', category: 'addon',
+    price: 'Included from Professional',
+    description: 'Sales pipeline, invoicing, payments, contact billing and revenue forecasting in one module.',
+    features: ['Sales pipeline & forecasting', 'Invoice creation & PDF export', 'Payment tracking', 'Sales contacts & billing', 'Revenue reports'],
+  },
+  {
+    key: 'voice_bot', label: 'Voice Bot', icon: '🤖', tier: 'Professional+', tierColor: '#29ABE2', category: 'addon',
+    price: 'Included from Professional',
+    description: 'AI-powered inbound call handling via SIP. Auto-creates contacts, tickets and call transcripts.',
+    features: ['SIP / provider integration', 'Auto contact & ticket creation', 'Call transcripts & sentiment', 'Bot configuration UI', 'Anonymous caller handling'],
+  },
+  {
+    key: 'analytics', label: 'Advanced Analytics', icon: '📊', tier: 'All plans', tierColor: '#64748b', category: 'horizontal',
+    price: 'Included in all plans',
+    description: 'Cross-module reports, team performance dashboards, pipeline funnels and data export. Gets richer as more modules activate.',
+    features: ['Cross-module reporting', 'Team performance reports', 'Pipeline funnel analysis', 'CSAT & SLA trends', 'CSV / PDF export'],
+  },
+];
+
+// ── Catalogue tab ─────────────────────────────────────────────────────────────
+function CatalogueTab() {
+  const [subTab, setSubTab] = useState<'modules' | 'plans' | 'builder'>('modules');
+  const [builderModules, setBuilderModules] = useState<string[]>(['crm']);
+
+  const toggleBuilder = (key: string) => {
+    if (key === 'crm') return; // always on
+    setBuilderModules(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]);
+  };
+
+  const applyPlan = (plan: string) => {
+    setBuilderModules(PLAN_MODULE_MAP[plan] ?? ['crm']);
+    setSubTab('builder');
+  };
+
+  const MODULE_PRICES: Record<string, number> = {
+    crm: 0, ticketing: 0, emails: 0, integrations: 0, // included in plan base
+    sales: 15, voice_bot: 20, analytics: 0,
+  };
+
+  const basePriceForModules = (mods: string[]) => {
+    if (mods.includes('voice_bot') || mods.includes('sales')) return 89;
+    if (mods.some(m => ['ticketing', 'emails', 'integrations'].includes(m))) return 49;
+    return 0;
+  };
+
+  const addonPrice = builderModules.reduce((s, m) => s + (MODULE_PRICES[m] ?? 0), 0);
+  const totalBase  = basePriceForModules(builderModules);
+
+  return (
+    <div className="space-y-4">
+      {/* Sub-tabs */}
+      <div className="flex gap-1 border-b border-gray-100 pb-0">
+        {([
+          { key: 'modules', label: 'Module Catalogue' },
+          { key: 'plans',   label: 'Pricing Plans' },
+          { key: 'builder', label: 'Deal Builder' },
+        ] as const).map(({ key, label }) => (
+          <button key={key} onClick={() => setSubTab(key)}
+            className={`px-4 py-2 text-sm rounded-t-lg border-b-2 transition-colors ${
+              subTab === key
+                ? 'border-brand-500 text-brand-700 bg-brand-50 font-semibold'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}>
+            {label}
+          </button>
+        ))}
+        <div className="flex-1" />
+        <span className="self-center text-xs text-gray-400 pr-1">Source: packages/api/src/routes/super-admin.ts</span>
+      </div>
+
+      {/* Module Catalogue */}
+      {subTab === 'modules' && (
+        <div className="space-y-6">
+          <div>
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Core Module — always active</p>
+            <div className="grid grid-cols-1 gap-3">
+              {CATALOGUE_MODULES.filter(m => m.category === 'core').map(m => (
+                <CatalogueCard key={m.key} mod={m} onApplyPlan={() => setSubTab('plans')} />
+              ))}
+            </div>
+          </div>
+          <div>
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Add-on modules — require Core CRM</p>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+              {CATALOGUE_MODULES.filter(m => m.category === 'addon').map(m => (
+                <CatalogueCard key={m.key} mod={m} onApplyPlan={() => setSubTab('plans')} />
+              ))}
+            </div>
+          </div>
+          <div>
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Horizontal modules — work across all active modules</p>
+            <div className="grid grid-cols-1 gap-3">
+              {CATALOGUE_MODULES.filter(m => m.category === 'horizontal').map(m => (
+                <CatalogueCard key={m.key} mod={m} onApplyPlan={() => setSubTab('plans')} />
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Pricing Plans */}
+      {subTab === 'plans' && (
+        <div>
+          <p className="text-sm text-gray-500 mb-4">Pick a plan to pre-load the right modules in the Deal Builder. Prices are per seat per month.</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {PLANS.map(plan => {
+              const p = PLAN_PRICING[plan];
+              const mods = PLAN_MODULE_MAP[plan] ?? [];
+              return (
+                <div key={plan} className={`bg-white rounded-2xl overflow-hidden border-2 transition-shadow hover:shadow-md ${
+                  p.highlight ? 'border-brand-400' : 'border-gray-200'
+                }`}>
+                  <div className="p-4" style={{ background: p.highlight ? p.color : undefined }}>
+                    <p className={`text-xs font-semibold uppercase tracking-wider ${p.highlight ? 'text-white/70' : 'text-gray-500'}`}>
+                      {plan}
+                    </p>
+                    <p className={`text-3xl font-black mt-1 ${p.highlight ? 'text-white' : 'text-gray-900'}`}>
+                      {p.price}{p.price !== 'Custom' && <span className="text-sm font-normal opacity-60"> /seat/mo</span>}
+                    </p>
+                    <p className={`text-xs mt-1 ${p.highlight ? 'text-white/70' : 'text-gray-400'}`}>{p.tagline}</p>
+                  </div>
+                  <div className="p-4 space-y-1.5">
+                    {CATALOGUE_MODULES
+                      .filter(m => mods.includes(m.key))
+                      .map(m => (
+                        <div key={m.key} className="flex items-center gap-1.5 text-xs text-gray-600">
+                          <Check className="w-3 h-3 text-green-500 shrink-0" />
+                          {m.label}
+                        </div>
+                      ))}
+                    {CATALOGUE_MODULES
+                      .filter(m => !mods.includes(m.key))
+                      .map(m => (
+                        <div key={m.key} className="flex items-center gap-1.5 text-xs text-gray-300">
+                          <X className="w-3 h-3 shrink-0" /> {m.label}
+                        </div>
+                      ))}
+                    <button onClick={() => applyPlan(plan)}
+                      className="w-full mt-3 py-2 text-xs font-semibold rounded-lg transition-colors"
+                      style={{ background: p.color, color: '#fff' }}>
+                      Load in Deal Builder →
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Deal Builder */}
+      {subTab === 'builder' && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2 space-y-3">
+            <p className="text-sm text-gray-500 mb-1">Toggle modules to build a custom package. Core CRM is always included.</p>
+            {CATALOGUE_MODULES.map(m => {
+              const on = builderModules.includes(m.key);
+              const locked = m.key === 'crm';
+              return (
+                <div key={m.key} onClick={() => toggleBuilder(m.key)}
+                  className={`flex items-start gap-4 p-4 rounded-xl border-2 transition-all cursor-pointer ${
+                    on ? 'border-brand-300 bg-brand-50/30' : 'border-gray-100 bg-white hover:border-gray-200'
+                  } ${locked ? 'cursor-default' : ''}`}>
+                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-lg shrink-0 ${
+                    on ? 'bg-brand-100' : 'bg-gray-100'
+                  }`}>{m.icon}</div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-semibold text-gray-900">{m.label}</p>
+                      {locked && <span className="text-[10px] bg-gray-200 text-gray-500 px-1.5 py-0.5 rounded-full">Always On</span>}
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-full ml-auto" style={{ background: `${m.tierColor}18`, color: m.tierColor }}>
+                        {m.tier}
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-400 mt-0.5 line-clamp-1">{m.description}</p>
+                  </div>
+                  <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center shrink-0 mt-0.5 transition-colors ${
+                    on ? 'border-brand-500 bg-brand-500' : 'border-gray-300'
+                  }`}>
+                    {on && <Check className="w-3 h-3 text-white" />}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          {/* Summary card */}
+          <div className="space-y-4">
+            <div className="bg-white rounded-2xl border-2 border-brand-200 p-5 sticky top-0">
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Package Summary</p>
+              <div className="space-y-1.5 mb-4">
+                {builderModules.map(key => {
+                  const m = CATALOGUE_MODULES.find(c => c.key === key);
+                  return m ? (
+                    <div key={key} className="flex items-center gap-2 text-xs">
+                      <span>{m.icon}</span>
+                      <span className="flex-1 text-gray-700">{m.label}</span>
+                      <span className="text-green-600 font-semibold">✓</span>
+                    </div>
+                  ) : null;
+                })}
+              </div>
+              <div className="border-t border-gray-100 pt-3 space-y-1">
+                <div className="flex justify-between text-xs text-gray-500">
+                  <span>Base plan</span>
+                  <span>${totalBase}/seat/mo</span>
+                </div>
+                {addonPrice > 0 && (
+                  <div className="flex justify-between text-xs text-gray-500">
+                    <span>Add-ons</span>
+                    <span>+${addonPrice}/seat/mo</span>
+                  </div>
+                )}
+                <div className="flex justify-between text-sm font-bold text-brand-700 pt-1">
+                  <span>Estimated total</span>
+                  <span>${totalBase + addonPrice}/seat/mo</span>
+                </div>
+              </div>
+              <div className="mt-4 p-3 bg-gray-50 rounded-lg">
+                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Entitlement JSON</p>
+                <pre className="text-[10px] text-gray-600 whitespace-pre-wrap break-all leading-4">
+                  {JSON.stringify({ active_modules: builderModules }, null, 2)}
+                </pre>
+              </div>
+              <p className="text-[10px] text-gray-400 mt-3">
+                Use "New Workspace" to provision a workspace with this module set.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CatalogueCard({ mod, onApplyPlan }: { mod: typeof CATALOGUE_MODULES[0]; onApplyPlan: () => void }) {
+  return (
+    <div className="bg-white rounded-2xl border border-gray-100 p-5 hover:border-gray-200 transition-colors">
+      <div className="flex items-start gap-4">
+        <div className="w-10 h-10 rounded-xl bg-gray-50 flex items-center justify-center text-xl shrink-0">{mod.icon}</div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <p className="text-sm font-semibold text-gray-900">{mod.label}</p>
+            <span className="text-[10px] px-2 py-0.5 rounded-full font-medium" style={{ background: `${mod.tierColor}18`, color: mod.tierColor }}>
+              {mod.tier}
+            </span>
+            <span className="text-xs text-gray-400 ml-auto">{mod.price}</span>
+          </div>
+          <p className="text-xs text-gray-500 mt-1 leading-relaxed">{mod.description}</p>
+          <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2.5">
+            {mod.features.map(f => (
+              <span key={f} className="flex items-center gap-1 text-[11px] text-gray-500">
+                <Check className="w-3 h-3 text-green-500" />{f}
+              </span>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const SYSTEM_ROLES_META = [
   { base_role: 'tenant_admin', name: 'Admin',   color: '#dc2626', desc: 'Full workspace access' },
   { base_role: 'manager',      name: 'Manager', color: '#d97706', desc: 'Team management & records' },
@@ -218,7 +527,8 @@ function CreateWorkspaceModal({ onClose }: { onClose: () => void }) {
   const [autoGenPw, setAutoGenPw] = useState(true);
   const [slugTouched, setSlugTouched] = useState(false);
   const [selectedFeatures, setSelectedFeatures] = useState<string[]>([]);
-  const [step, setStep] = useState<'details' | 'modules'>('details');
+  const [step, setStep] = useState<'details' | 'sector' | 'modules'>('details');
+  const [sector, setSector] = useState('other');
   const [result, setResult] = useState<{ slug: string; adminEmail: string; tempPassword?: string; emailSent?: boolean } | null>(null);
 
   // Licensable module + feature catalog — the single source of truth (from the API).
@@ -243,6 +553,7 @@ function CreateWorkspaceModal({ onClose }: { onClose: () => void }) {
       ...form,
       adminPassword: autoGenPw ? undefined : (form.adminPassword || undefined),
       entitledFeatures: selectedFeatures,
+      sector,
     }),
     onSuccess: (res) => {
       qc.invalidateQueries({ queryKey: ['sa-tenants'] });
@@ -271,8 +582,9 @@ function CreateWorkspaceModal({ onClose }: { onClose: () => void }) {
   const selectedModuleCount = catalog.filter(m => m.features.some(f => selectedFeatures.includes(f.key))).length;
 
   const STEP_LABELS: Record<string, string> = {
-    details: 'Step 1 of 2 — Workspace & admin details',
-    modules: 'Step 2 of 2 — Licensed modules & features',
+    details: 'Step 1 of 3 — Workspace & admin details',
+    sector:  'Step 2 of 3 — Industry sector',
+    modules: 'Step 3 of 3 — Licensed modules & features',
   };
 
   return (
@@ -323,13 +635,13 @@ function CreateWorkspaceModal({ onClose }: { onClose: () => void }) {
         {!result && (<>
         {/* Step indicator */}
         <div className="flex items-center gap-2 mb-5">
-          {(['details','modules'] as const).map((s, i) => (
+          {(['details','sector','modules'] as const).map((s, i) => (
             <div key={s} className="flex items-center gap-2">
               <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold transition-colors ${
                 step === s ? 'bg-brand-600 text-white' :
-                (['details','modules'].indexOf(step) > i) ? 'bg-green-500 text-white' : 'bg-gray-100 text-gray-400'
+                (['details','sector','modules'].indexOf(step) > i) ? 'bg-green-500 text-white' : 'bg-gray-100 text-gray-400'
               }`}>{i + 1}</div>
-              {i < 1 && <div className="h-px w-6 bg-gray-200" />}
+              {i < 2 && <div className="h-px w-6 bg-gray-200" />}
             </div>
           ))}
         </div>
@@ -394,16 +706,77 @@ function CreateWorkspaceModal({ onClose }: { onClose: () => void }) {
           </div>
         )}
 
-        {/* Step 2 — Module licensing */}
+        {/* Step 2 — Sector */}
+        {step === 'sector' && (
+          <div className="space-y-3">
+            <p className="text-xs text-gray-500 mb-3">Choose the industry this workspace operates in. This controls the custom fields that appear on contacts, companies, deals and tickets — and the SLA policy names in the support module.</p>
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                { id: 'banking',          label: 'Banking & Finance',   icon: '🏦' },
+                { id: 'telecom',          label: 'Telecommunications',  icon: '📡' },
+                { id: 'public_transport', label: 'Public Transport',    icon: '🚌' },
+                { id: 'logistics',        label: 'Logistics & Freight', icon: '🚚' },
+                { id: 'insurance',        label: 'Insurance',           icon: '🛡️' },
+                { id: 'education',        label: 'Education',           icon: '🎓' },
+                { id: 'ecommerce',        label: 'E-Commerce / Retail', icon: '🛒' },
+                { id: 'other',            label: 'Other / General',     icon: '🌐' },
+              ].map(s => (
+                <button key={s.id}
+                  onClick={() => setSector(s.id)}
+                  className={`flex items-center gap-3 px-4 py-3 rounded-xl border text-left transition-all ${
+                    sector === s.id
+                      ? 'border-brand-500 bg-brand-50 text-brand-700 font-semibold'
+                      : 'border-gray-200 text-gray-700 hover:border-brand-300 hover:bg-gray-50'
+                  }`}>
+                  <span className="text-xl">{s.icon}</span>
+                  <span className="text-sm">{s.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Step 3 — Module licensing */}
         {step === 'modules' && (
           <div>
+            {/* Plan-preset quick selector */}
+            <div className="mb-4">
+              <p className="text-xs font-medium text-gray-600 mb-2">Quick-select by plan</p>
+              <div className="grid grid-cols-4 gap-2">
+                {PLANS.map(plan => {
+                  const p = PLAN_PRICING[plan];
+                  const mods = PLAN_MODULE_MAP[plan] ?? [];
+                  // active if all modules for this plan are selected (and no more)
+                  const isActive = mods.every(m =>
+                    catalog.find(c => c.key === m)?.features.every(f => selectedFeatures.includes(f.key))
+                  );
+                  return (
+                    <button key={plan} type="button"
+                      onClick={() => {
+                        const features = catalog
+                          .filter(c => mods.includes(c.key))
+                          .flatMap(c => c.features.map(f => f.key));
+                        // always keep always-on features
+                        const alwaysFeatures = catalog.filter(c => c.always).flatMap(c => c.features.map(f => f.key));
+                        setSelectedFeatures(Array.from(new Set([...alwaysFeatures, ...features])));
+                      }}
+                      className={`py-2 px-1 rounded-lg border-2 text-center transition-all ${
+                        isActive ? 'border-brand-400 bg-brand-50' : 'border-gray-200 hover:border-gray-300'
+                      }`}>
+                      <p className="text-xs font-bold capitalize text-gray-800">{plan}</p>
+                      <p className="text-[10px] text-gray-400 mt-0.5">{p.price}{p.price !== 'Custom' ? '/seat' : ''}</p>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
             <div className="bg-amber-50 border border-amber-100 rounded-xl px-4 py-3 mb-4">
               <p className="text-xs text-amber-700 flex items-start gap-1.5">
                 <Package className="w-3.5 h-3.5 mt-0.5 shrink-0" />
                 <span>Allocate only the modules and feature-areas this customer <strong>agreed and paid for</strong>. This becomes their licensed entitlement — who can create/edit/delete within these is set later under Roles.</span>
               </p>
             </div>
-            <div className="space-y-3 max-h-80 overflow-y-auto pr-1">
+            <div className="space-y-3 max-h-64 overflow-y-auto pr-1">
               {catalog.map((m) => {
                 const fkeys = m.features.map(f => f.key);
                 const onCount = fkeys.filter(k => selectedFeatures.includes(k)).length;
@@ -455,15 +828,24 @@ function CreateWorkspaceModal({ onClose }: { onClose: () => void }) {
           {step === 'details' && (
             <>
               <button onClick={onClose} className="flex-1 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50">Cancel</button>
-              <button onClick={() => setStep('modules')} disabled={!detailsValid}
+              <button onClick={() => setStep('sector')} disabled={!detailsValid}
                 className="flex-1 py-2 bg-brand-600 text-white rounded-lg text-sm hover:bg-brand-700 disabled:opacity-50 flex items-center justify-center gap-2">
+                Next: Choose Sector →
+              </button>
+            </>
+          )}
+          {step === 'sector' && (
+            <>
+              <button onClick={() => setStep('details')} className="flex-1 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50">← Back</button>
+              <button onClick={() => setStep('modules')}
+                className="flex-1 py-2 bg-brand-600 text-white rounded-lg text-sm hover:bg-brand-700 flex items-center justify-center gap-2">
                 Next: Allocate Modules →
               </button>
             </>
           )}
           {step === 'modules' && (
             <>
-              <button onClick={() => setStep('details')} className="flex-1 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50">← Back</button>
+              <button onClick={() => setStep('sector')} className="flex-1 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50">← Back</button>
               <button
                 onClick={() => mutation.mutate()}
                 disabled={mutation.isPending}
@@ -2550,7 +2932,7 @@ export function SuperAdmin() {
   if (!isSuperAdmin) return <Navigate to="/dashboard" replace />;
 
   const qc = useQueryClient();
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'tenants' | 'roles' | 'sub-admins' | 'billing' | 'reports' | 'settings'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'tenants' | 'roles' | 'sub-admins' | 'billing' | 'reports' | 'catalogue' | 'settings'>('dashboard');
   const [search, setSearch] = useState('');
   const [planFilter, setPlanFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -2603,6 +2985,7 @@ export function SuperAdmin() {
             { key: 'dashboard',  label: 'Dashboard',        icon: BarChart3   },
             { key: 'tenants',    label: 'Tenants',          icon: Building2   },
             { key: 'billing',    label: 'Billing',          icon: TrendingUp  },
+            { key: 'catalogue',  label: 'Module Catalogue', icon: Package     },
             { key: 'roles',      label: 'Sub-Admin Roles',  icon: Shield      },
             { key: 'sub-admins', label: 'Sub-Admins',       icon: Users       },
             { key: 'reports',    label: 'Reports',          icon: BarChart2   },
@@ -2624,6 +3007,7 @@ export function SuperAdmin() {
       <div className="flex-1 overflow-y-auto p-6 space-y-6">
         {activeTab === 'dashboard'  && <DashboardTab />}
         {activeTab === 'billing'    && <PlatformBillingTab tenants={tenants} />}
+        {activeTab === 'catalogue'  && <CatalogueTab />}
         {activeTab === 'roles'      && <PlatformRolesTab />}
         {activeTab === 'sub-admins' && <SubAdminsTab />}
         {activeTab === 'reports'    && <SuperAdminReports />}

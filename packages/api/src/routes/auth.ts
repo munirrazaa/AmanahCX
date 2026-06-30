@@ -109,23 +109,28 @@ export function authRoutes(db: DatabaseClient, redis: RedisClient) {
         );
         const adminUser = userResult.rows[0];
 
-        // 3. Seed sector-specific custom field definitions for the 'contact' entity
-        for (const field of sectorCfg.fields) {
-          await client.query(
-            `INSERT INTO custom_field_definitions
-               (tenant_id, entity, name, label, field_type, options, is_required, sort_order)
-             VALUES ($1, 'contact', $2, $3, $4, $5, $6, $7)
-             ON CONFLICT (tenant_id, entity, name) DO NOTHING`,
-            [
-              t.id,
-              field.name,
-              field.label,
-              field.field_type,
-              field.options ? JSON.stringify(field.options) : null,
-              field.is_required,
-              field.sort_order,
-            ],
-          );
+        // 3. Seed sector-specific custom field definitions for all entity types
+        const entityFieldMap: Array<{ entity: string; fields: typeof sectorCfg.fields }> = [
+          { entity: 'contact', fields: sectorCfg.fields },
+          { entity: 'company', fields: (sectorCfg as any).companyFields ?? [] },
+          { entity: 'deal',    fields: (sectorCfg as any).dealFields    ?? [] },
+          { entity: 'ticket',  fields: (sectorCfg as any).ticketFields  ?? [] },
+        ];
+        for (const { entity, fields } of entityFieldMap) {
+          for (const field of fields) {
+            await client.query(
+              `INSERT INTO custom_field_definitions
+                 (tenant_id, entity, name, label, field_type, options, is_required, sort_order)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+               ON CONFLICT (tenant_id, entity, name) DO NOTHING`,
+              [
+                t.id, entity,
+                field.name, field.label, field.field_type,
+                field.options ? JSON.stringify(field.options) : null,
+                field.is_required, field.sort_order,
+              ],
+            );
+          }
         }
 
         // 4. Seed default ticket queues (departments) for the sector
@@ -143,8 +148,8 @@ export function authRoutes(db: DatabaseClient, redis: RedisClient) {
         return { tenant: t, user: adminUser };
       });
 
-      // Seed default SLA policies for the new tenant
-      await seedDefaultSlaPolicies(db, tenant.id);
+      // Seed default SLA policies for the new tenant (sector-aware)
+      await seedDefaultSlaPolicies(db, tenant.id, body.sector);
 
       const regJti  = crypto.randomBytes(16).toString('hex');
       const token   = await reply.jwtSign({

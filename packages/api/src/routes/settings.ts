@@ -164,7 +164,7 @@ export function settingsRoutes(db: DatabaseClient) {
   return async function (fastify: FastifyInstance) {
 
     // Root — returns workspace + plan info
-    fastify.get('/', { preHandler: requireRole('super_admin', 'tenant_admin', 'manager') }, async (req, reply) => {
+    fastify.get('/', { preHandler: requireRole('super_admin', 'tenant_admin') }, async (req, reply) => {
       const [tenant] = await db.withSuperAdmin(async (client) => {
         const result = await client.query(
           'SELECT id, name, slug, plan, status, settings, billing_details FROM tenants WHERE id = $1',
@@ -176,7 +176,7 @@ export function settingsRoutes(db: DatabaseClient) {
     });
 
     // Get workspace settings
-    fastify.get('/workspace', { preHandler: requireRole('super_admin', 'tenant_admin', 'manager') }, async (req, reply) => {
+    fastify.get('/workspace', { preHandler: requireRole('super_admin', 'tenant_admin') }, async (req, reply) => {
       const [tenant] = await db.withSuperAdmin(async (client) => {
         const result = await client.query(
           'SELECT id, name, slug, custom_domain, plan, status, sector, settings, billing_details FROM tenants WHERE id = $1',
@@ -237,12 +237,18 @@ export function settingsRoutes(db: DatabaseClient) {
     });
 
     fastify.patch('/routing', { preHandler: requireRole('super_admin', 'tenant_admin', 'manager') }, async (req, reply) => {
+      const patcherRole = req.user.role;
       const body = z.object({
-        per_agent_ticket_limit: z.number().int().min(0).max(500).optional(), // 0 = unlimited
-        routing_method:         z.enum(['random_capacity','round_robin','manual']).optional(),
+        per_agent_ticket_limit: z.number().int().min(0).max(500).optional(), // 0 = unlimited — criteria (manager+)
+        routing_method:         z.enum(['random_capacity','round_robin','manual']).optional(), // algorithm — admin only
         csat_expiry_days:       z.number().int().min(1).max(90).optional(),
-        bot_default_priority:   z.enum(['urgent','high','medium','low']).optional(),
+        bot_default_priority:   z.enum(['urgent','high','medium','low']).optional(), // criteria (manager+)
       }).parse(req.body);
+
+      // routing_method (the algorithm) is admin-only — managers can configure criteria but not change the algorithm
+      if (body.routing_method !== undefined && patcherRole === 'manager') {
+        return reply.code(403).send({ success: false, error: { code: 'FORBIDDEN', message: 'Only tenant admins can change the routing algorithm. Managers can adjust routing criteria (ticket limit, bot priority).' } });
+      }
 
       await db.withSuperAdmin(async (client) => {
         if (body.per_agent_ticket_limit !== undefined || body.routing_method !== undefined || body.bot_default_priority !== undefined) {
@@ -432,11 +438,12 @@ export function settingsRoutes(db: DatabaseClient) {
     });
 
     // Invite team member
-    fastify.post('/team/invite', { preHandler: requireRole('super_admin', 'tenant_admin') }, async (req, reply) => {
+    fastify.post('/team/invite', { preHandler: requireRole('super_admin', 'tenant_admin', 'manager') }, async (req, reply) => {
+      const inviterRole = req.user.role;
       const InviteSchema = z.object({
         email:           z.string().email(),
         name:            z.string().max(100).optional(),
-        // Tenant admins can only assign roles up to their own level; super_admin is never assignable here
+        // Tenant admins can assign up to manager; managers can only assign agent/viewer/policy_admin
         role:                  z.enum(['tenant_admin', 'manager', 'agent', 'viewer', 'policy_admin']).default('agent'),
         custom_role_id:        z.string().uuid().optional(),
         permissions:           z.record(z.string()).optional(),
@@ -451,6 +458,22 @@ export function settingsRoutes(db: DatabaseClient) {
         return reply.code(400).send({ success: false, error: { code: 'INVALID_INPUT', message: parsed.error.issues[0]?.message ?? 'Invalid input' } });
       }
       const { email, name, role, custom_role_id, permissions: customPermissions, department, departmentType, manager_id, governed_departments } = parsed.data;
+
+      // Delegated administration: managers can only invite roles below their own level
+      if (inviterRole === 'manager') {
+        const allowedRoles = ['agent', 'viewer', 'policy_admin'];
+        if (!allowedRoles.includes(role ?? 'agent')) {
+          return reply.code(403).send({ success: false, error: { code: 'FORBIDDEN', message: 'Managers can only invite agents, viewers, or policy admins' } });
+        }
+        // Enforce department scope — invitee must be in manager's own department
+        const [inviter] = await db.withTenant(req.tenant.id, async (c) => {
+          const r = await c.query('SELECT department, department_type FROM users WHERE id = $1', [req.user.sub]);
+          return r.rows;
+        });
+        if (inviter?.department && department && inviter.department !== department) {
+          return reply.code(403).send({ success: false, error: { code: 'FORBIDDEN', message: 'You can only invite team members to your own department' } });
+        }
+      }
 
       const displayName  = name?.trim() || email.split('@')[0];
       const assignedRole = role ?? 'agent';

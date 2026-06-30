@@ -15,7 +15,7 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import type { DatabaseClient } from '@crm/core';
-import { requireRole } from '../middlewares/auth.middleware';
+import { requireRole, requireScope } from '../middlewares/auth.middleware';
 import { EmailService } from '../services/email.service';
 import { SmsService } from '@crm/core/sms.service';
 
@@ -554,6 +554,82 @@ export function connectorRoutes(db: DatabaseClient) {
       } catch (err: any) {
         return reply.send({ success: false, message: err.message });
       }
+    });
+
+    // ── Integration health analytics ──────────────────────────────────────
+    // GET /api/v1/connectors/health
+    fastify.get('/health', { preHandler: requireScope('settings:read') }, async (req, reply) => {
+      const [tenant] = await db.withSuperAdmin(async (client) => {
+        const result = await client.query(
+          'SELECT settings, created_at FROM tenants WHERE id = $1',
+          [req.tenant.id],
+        );
+        return result.rows;
+      });
+
+      const saved: Record<string, Record<string, string>> = (tenant?.settings as any)?.connectors ?? {};
+
+      // Build per-connector status
+      const connectors = CONNECTOR_DEFS.map((def) => {
+        const cfg = saved[def.id] ?? {};
+        const requiredFields = def.fields.filter((f) => f.required);
+        const configured = requiredFields.every((f) => !!cfg[f.key]);
+        return {
+          id:          def.id,
+          name:        def.name,
+          category:    def.category,
+          logo:        def.logo,
+          configured,
+          status:      configured ? 'connected' : 'not_configured',
+          fieldsTotal: def.fields.length,
+          fieldsDone:  Object.keys(cfg).filter((k) => !!cfg[k]).length,
+        };
+      });
+
+      const connected   = connectors.filter((c) => c.configured).length;
+      const total       = connectors.length;
+      const categories  = [...new Set(connectors.map((c) => c.category))];
+      const byCategory  = categories.map((cat) => ({
+        category: cat,
+        total:    connectors.filter((c) => c.category === cat).length,
+        active:   connectors.filter((c) => c.category === cat && c.configured).length,
+      }));
+
+      // Webhook delivery stats from webhook_events table (if exists)
+      let webhookStats = { total: 0, delivered: 0, failed: 0, success_rate: null as number | null };
+      try {
+        const [wh] = await db.withTenant(req.tenant.id, async (c) => {
+          const r = await c.query(
+            `SELECT
+               COUNT(*)                                        AS total,
+               COUNT(*) FILTER (WHERE status = 'delivered')   AS delivered,
+               COUNT(*) FILTER (WHERE status = 'failed')      AS failed
+             FROM webhook_events
+             WHERE created_at >= NOW() - INTERVAL '30 days'`,
+          );
+          return r.rows;
+        });
+        if (wh) {
+          webhookStats = {
+            total:        Number(wh.total),
+            delivered:    Number(wh.delivered),
+            failed:       Number(wh.failed),
+            success_rate: wh.total > 0
+              ? Math.round((Number(wh.delivered) / Number(wh.total)) * 1000) / 10
+              : null,
+          };
+        }
+      } catch { /* table may not exist in all envs */ }
+
+      return reply.send({
+        success: true,
+        data: {
+          summary:      { total, connected, disconnected: total - connected },
+          byCategory,
+          connectors,
+          webhookStats,
+        },
+      });
     });
   };
 }
