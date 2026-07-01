@@ -10,15 +10,16 @@
 
 import { useAuthStore } from '../store/auth.store';
 
-type Role = 'super_admin' | 'tenant_admin' | 'manager' | 'agent' | 'viewer' | 'policy_admin';
+type Role = 'super_admin' | 'tenant_admin' | 'operations_admin' | 'manager' | 'agent' | 'viewer' | 'policy_admin';
 
 const ROLE_RANK: Record<Role, number> = {
-  super_admin:  50,
-  tenant_admin: 40,
-  manager:      30,
-  policy_admin: 25, // independent governance — sits between manager and agent in rank, reports to no department
-  agent:        20,
-  viewer:       10,
+  super_admin:       50,
+  tenant_admin:      40,
+  operations_admin:  35, // COO / Head of CC — cross-tenant read-only observer, no system config access
+  policy_admin:      32, // governance role — outranks manager so no operational role can manage a compliance officer
+  manager:           30,
+  agent:             20,
+  viewer:            10,
 };
 
 function getRank(role: string | undefined): number {
@@ -66,6 +67,16 @@ export function useIsPolicyAdmin(): boolean {
 }
 
 /**
+ * Operations Admin (rank 35) — COO / Head of Contact Centre.
+ * Read-only visibility across all tickets, recordings, sales, contacts, and reports.
+ * No system config access (users, integrations, SLA, routing).
+ */
+export function useIsOperationsAdmin(): boolean {
+  const { user } = useAuthStore();
+  return user?.role === 'operations_admin';
+}
+
+/**
  * Granular permission check.
  * add_more_permissions here as the product grows.
  */
@@ -73,20 +84,24 @@ export function useCan() {
   const { user } = useAuthStore();
   const rank = getRank(user?.role);
 
+  const isOpsAdmin = user?.role === 'operations_admin';
+
   return {
     /** Create / edit / delete contacts, deals, companies, activities */
-    writeRecords: rank >= ROLE_RANK.agent,
-    /** Delete contacts / deals (agent+ but managers can restrict) */
-    deleteRecords: rank >= ROLE_RANK.manager,
+    writeRecords: rank >= ROLE_RANK.agent && !isOpsAdmin,
+    /** Delete contacts / deals */
+    deleteRecords: rank >= ROLE_RANK.manager && !isOpsAdmin,
     /** Invite / remove team members */
-    manageTeam: rank >= ROLE_RANK.tenant_admin,
+    manageTeam: rank >= ROLE_RANK.tenant_admin && !isOpsAdmin,
     /** Change workspace settings, connectors, billing */
-    manageWorkspace: rank >= ROLE_RANK.tenant_admin,
+    manageWorkspace: rank >= ROLE_RANK.tenant_admin && !isOpsAdmin,
     /** Create / revoke API keys and webhooks */
-    manageIntegrations: rank >= ROLE_RANK.manager,
+    manageIntegrations: rank >= ROLE_RANK.manager && !isOpsAdmin,
     manageSla: user?.role === 'policy_admin',
-    /** View analytics and reports */
+    /** View analytics and reports — operations_admin gets full cross-tenant view */
     viewAnalytics: rank >= ROLE_RANK.agent,
+    /** Cross-tenant read-only visibility (operations_admin + tenant_admin + super_admin) */
+    viewAllTenantData: rank >= ROLE_RANK.operations_admin,
     /** Manage all workspaces on the platform */
     superAdminAccess: user?.role === 'super_admin',
     /** Raw role for conditional rendering */

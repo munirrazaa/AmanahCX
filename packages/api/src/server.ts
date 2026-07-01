@@ -46,6 +46,8 @@ import { sectorRoutes } from './routes/sector';
 import { departmentRoutes } from './routes/departments';
 import { opportunityRoutes } from './routes/opportunities';
 import { teamMessageRoutes } from './routes/team-messages';
+import { recordingsRoutes } from './routes/recordings';
+import { recordingInsightsRoutes } from './routes/recording-insights';
 
 // Feature modules (internal building blocks)
 import { ContactsModule } from '../../../modules/contacts/src';
@@ -334,7 +336,7 @@ async function buildServer() {
   await fastify.register(apiKeyRoutes(db), { prefix: '/api/v1/api-keys' });
   await fastify.register(superAdminRoutes(db, tenantService), { prefix: '/super-admin' });
   await fastify.register(companyRoutes(db, eventBus), { prefix: '/api/v1/companies' });
-  await fastify.register(settingsRoutes(db), { prefix: '/api/v1/settings' });
+  await fastify.register(settingsRoutes(db, redis), { prefix: '/api/v1/settings' });
   await fastify.register(billingRoutes(db, eventBus), { prefix: '/api/v1/billing' });
   await fastify.register(modulesRoute(moduleRegistry), { prefix: '/api/v1/modules' });
   await fastify.register(connectorRoutes(db), { prefix: '/api/v1/connectors' });
@@ -356,6 +358,8 @@ async function buildServer() {
   await fastify.register(departmentRoutes(db),     { prefix: '/api/v1/departments' });
   await fastify.register(opportunityRoutes(db),    { prefix: '/api/v1/opportunities' });
   await fastify.register(teamMessageRoutes(db),    { prefix: '/api/v1/messages' });
+  await fastify.register(recordingsRoutes(db),         { prefix: '/api/v1/recordings' });
+  await fastify.register(recordingInsightsRoutes(db),  { prefix: '/api/v1/recordings' });
 
   // Health check
   fastify.get('/health', async () => ({
