@@ -183,7 +183,7 @@
 <!-- ═══ COMPLIANCE SUMMARY SCORECARD ═══ -->
 <section id="summary">
   <h2><span class="icon" style="background:#fef3c7">📊</span>Overall Compliance Scorecard</h2>
-  <p class="subtitle">Aggregated across all sections vs. ITIL v4, ISO 20000, ISO 27001, NIST RBAC, SOC 2, and top CRM benchmarks (Zendesk Enterprise, Salesforce Service Cloud, Freshdesk Enterprise). <strong>Version 5.5 — updated 2026-07-02. Agent escalation fully tested end-to-end: agent sees button, types reason, flag set in DB, manager notified; manager sees "Acknowledge Escalation" button + escalation reason banner, clicks to clear — all verified in browser. Custom fields builder tested end-to-end (sector presets, add/edit/delete, tab switching, DB persistence). Both launch blockers cleared.</strong> 6 further gaps fully resolved: G-P3 (agent escalation), G-P4 (GDPR erasure), G-P5 (SLA publish gate), G-F4 (pending closure), G-D1 (collaborator role), D-D1 (saved views). Custom fields builder (tenant admin) now resolved. Compliance now 65/80 = 81%.</p>
+  <p class="subtitle">Aggregated across all sections vs. ITIL v4, ISO 20000, ISO 27001, NIST RBAC, SOC 2, and top CRM benchmarks (Zendesk Enterprise, Salesforce Service Cloud, Freshdesk Enterprise). <strong>Version 5.6 — updated 2026-07-02. G-P3 agent escalation fully resolved: agent escalates with written reason → manager sees orange badge + reason banner + timestamp → manager acknowledges to clear → audit logged. Sector-specific ticket fields auto-provisioned at tenant creation — banking fields (Case Type, Transaction Ref, Amount Involved, Regulatory Deadline, Central Bank Ref #) now appear in New Ticket form and ticket detail panel. Gap table and rectify cards updated to reflect resolved status.</strong></p>
   <div class="summary-bar">
     <div class="metric"><div class="num num-green" id="total-compliant">0</div><div class="lbl">Compliant</div></div>
     <div class="metric"><div class="num num-red" id="total-gaps">0</div><div class="lbl">Gaps</div></div>
@@ -220,7 +220,7 @@
           <thead><tr><th>Sector</th><th>Critical Gap</th><th>What Zendesk/Salesforce Does</th><th>AmanahCX Current State</th><th>Risk</th></tr></thead>
           <tbody>
             <tr class="sr"><td colspan="5">🏦 Banking &amp; Financial Services (SBP-regulated)</td></tr>
-            <tr><td>Banking</td><td>SBP Complaint Ref # on every ticket</td><td>Custom field on ticket form, pre-populated from complaint register</td><td>No custom fields builder; SBP ref is a free-text note field only</td><td class="status-fail">HIGH — regulatory audit</td></tr>
+            <tr><td>Banking</td><td>SBP Complaint Ref # on every ticket</td><td>Custom field on ticket form, pre-populated from complaint register</td><td>✅ Sector-specific fields now auto-provisioned at tenant creation — banking includes Case Type, Transaction Ref, Amount Involved, Regulatory Deadline, Central Bank Ref #</td><td class="status-ok">✅ Resolved — 2026-07-02</td></tr>
             <tr><td>Banking</td><td>Annual access review (G-R1)</td><td>Scheduled role review report emailed to admin quarterly</td><td>Manual deactivation only — no review schedule</td><td class="status-fail">HIGH — ISO 27001 finding</td></tr>
             <tr><td>Banking</td><td>Separation of Duties (G-R2)</td><td>Role conflict rules enforced at assignment</td><td>No SoD constraints defined</td><td class="status-fail">HIGH — SOC 2 / NIST</td></tr>
             <tr><td>Banking</td><td>GDPR/PDPA recording retention (G-F5)</td><td>Retention policies with auto-delete schedules and RoPA export</td><td>Legal Hold flag built; full retention policy engine pending</td><td class="status-partial">MEDIUM</td></tr>
@@ -583,7 +583,7 @@
         <tbody>
           <tr><td>G-P1</td><td>Zendesk / Freshdesk Enterprise</td><td>Bulk ticket operations — mass status change, bulk reassign, bulk close</td><td>Manager, Tenant Admin</td><td class="status-fail">HIGH — operational bottleneck in high-volume scenarios</td></tr>
           <tr><td>G-P2</td><td>ISO 20000 §8.6.1</td><td>Ticket merge — ability to merge duplicate tickets from same customer into one</td><td>Manager, Tenant Admin</td><td class="status-partial">MEDIUM — duplicates inflate queue metrics</td></tr>
-          <tr><td>G-P3</td><td>Salesforce Service Cloud</td><td>Agent can flag a ticket for manager review / escalate formally (not just status change)</td><td>Agent</td><td class="status-partial">MEDIUM — no formal escalation path from agent to manager</td></tr>
+          <tr><td>G-P3</td><td>Salesforce Service Cloud</td><td><s>Agent can flag a ticket for manager review / escalate formally (not just status change)</s> ✅</td><td>Agent</td><td class="status-ok">✅ Resolved — 2026-07-02</td></tr>
           <tr><td>G-P4</td><td>SOC 2 CC6.8</td><td>Data export / right-to-erasure for a contact — structured GDPR deletion workflow</td><td>Tenant Admin</td><td class="status-fail">HIGH — GDPR compliance gap</td></tr>
           <tr><td>G-P5</td><td>ITIL v4 — Change Mgmt</td><td>Change Advisory Board (CAB) approval gate before SLA policy changes go live</td><td>Tenant Admin / Policy Admin</td><td class="status-partial">MEDIUM</td></tr>
         </tbody>
@@ -654,15 +654,19 @@
           <button class="btn-dismiss" onclick="dismiss_card('G-P4')">Dismiss</button>
         </div>
       </div>
-      <div class="rectify-card" id="card-G-P3">
-        <div class="rc-title">G-P3 · Formal Agent Escalation Path</div>
+      <div class="rectify-card deviation" id="card-G-P3" style="border-color:#16a34a;background:#f0fdf4;">
+        <div class="rc-title" style="color:#15803d;">✅ G-P3 · Formal Agent Escalation Path — RESOLVED</div>
         <div class="rc-std">Salesforce Service Cloud — Escalate button creates escalation record</div>
-        <div class="rc-body">Agents currently have no formal way to flag a ticket for manager review. They must verbally communicate or rely on status changes that don't convey urgency.</div>
-        <div class="rc-current"><strong>Current</strong>No escalation button or formal escalation status for agents</div>
-        <div class="rc-standard"><strong>Global Standard</strong>Escalate button on ticket (agent-only) → sets flag → manager receives notification → logged as escalated audit entry</div>
-        <div class="rc-actions">
-          <button class="btn-confirm" onclick="confirm_card('G-P3','Add Escalate button visible to agents on their own tickets; sets escalated=true flag on ticket; sends notification to queue manager; logs escalated audit entry; manager sees escalated badge on ticket list')">✓ Confirm — Schedule Fix</button>
-          <button class="btn-dismiss" onclick="dismiss_card('G-P3')">Dismiss</button>
+        <div class="rc-body">
+          <strong style="color:#dc2626;">BEFORE:</strong> Agents had no formal way to flag a ticket for manager review. They had to communicate verbally or change status with no urgency signal.<br/><br/>
+          <strong style="color:#16a34a;">AFTER:</strong>
+          <ul style="margin:8px 0 0 16px;">
+            <li>Agents see an <strong>Escalate to Manager</strong> button on any ticket they own. They must type a written reason before confirming.</li>
+            <li>The ticket gets an orange <strong>Escalated</strong> badge visible to managers across the ticket list and detail panel.</li>
+            <li>Managers see a full escalation reason banner (reason + timestamp + who escalated) and an <strong>Acknowledge Escalation</strong> button to clear the flag.</li>
+            <li>Both actions (escalate + acknowledge) are written to the audit log.</li>
+            <li>Non-managers see a read-only "Escalated" indicator — they cannot acknowledge.</li>
+          </ul>
         </div>
       </div>
       <div class="rectify-card deviation" id="card-D-P1" style="border-color:#16a34a;background:#f0fdf4;">
