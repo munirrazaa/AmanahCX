@@ -175,7 +175,7 @@ async function findSlaPolicy(
     // Fetch all active policies matching priority, ordered by specificity (most conditions first)
     const r = await client.query(
       `SELECT id, resolution_hours, match_conditions FROM sla_policies
-       WHERE priority = $1 AND is_active = true
+       WHERE priority = $1 AND is_active = true AND COALESCE(policy_status,'published') = 'published'
        ORDER BY (
          (CASE WHEN match_conditions->>'channels'    IS NOT NULL AND jsonb_array_length(match_conditions->'channels')    > 0 THEN 1 ELSE 0 END) +
          (CASE WHEN match_conditions->>'departments' IS NOT NULL AND jsonb_array_length(match_conditions->'departments') > 0 THEN 1 ELSE 0 END) +
@@ -1086,8 +1086,8 @@ export function ticketRoutes(db: DatabaseClient, eventBus: EventBus) {
              (tenant_id, ticket_number, subject, description, status, priority, channel,
               queue_id, sla_policy_id, contact_id, company_id, assignee_id,
               reporter_email, reporter_name, reporter_phone, reporter_whatsapp,
-              preferred_channel, ticket_type, tags, custom_fields)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
+              preferred_channel, ticket_type, tags, custom_fields, created_by)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
            RETURNING *`,
           [tenantId, ticketNum, body.subject, body.description ?? null,
            status, body.priority, body.channel,
@@ -1097,7 +1097,7 @@ export function ticketRoutes(db: DatabaseClient, eventBus: EventBus) {
            body.reporterEmail ?? null, body.reporterName ?? null, body.reporterPhone ?? null,
             body.reporterWhatsapp ?? null, body.preferredChannel ?? 'email',
             body.ticketType ?? 'complaint',
-            body.tags ?? [], JSON.stringify(body.customFields ?? {})],
+            body.tags ?? [], JSON.stringify(body.customFields ?? {}), req.user.sub],
         );
         return r.rows;
       });
@@ -1150,6 +1150,42 @@ export function ticketRoutes(db: DatabaseClient, eventBus: EventBus) {
         action:    'created',
         newValue:  { status: ticket.status, priority: ticket.priority, channel: ticket.channel },
       });
+
+      // G-F1: repeat-caller detection — if this contact has ≥3 tickets in last 30 days,
+      // flag the ticket and notify managers so root cause can be addressed.
+      if (ticket.contact_id) {
+        const recCheck = await db.withSuperAdmin(async (c) => {
+          const r = await c.query(
+            `SELECT COUNT(*)::int AS cnt FROM tickets
+             WHERE tenant_id = $1 AND contact_id = $2
+               AND created_at > NOW() - INTERVAL '30 days'`,
+            [tenantId, ticket.contact_id],
+          );
+          return r.rows[0]?.cnt ?? 0;
+        });
+        if (recCheck >= 3) {
+          await db.withSuperAdmin(async (c) => {
+            await c.query(
+              `UPDATE tickets SET recurrence_flag = TRUE, recurrence_count = $1 WHERE id = $2`,
+              [recCheck, ticket.id],
+            );
+          });
+          // Notify all active managers in the tenant
+          const managers = await db.withSuperAdmin(async (c) => {
+            const r = await c.query(
+              `SELECT id FROM users WHERE tenant_id = $1 AND role IN ('manager','tenant_admin') AND is_active = TRUE`,
+              [tenantId],
+            );
+            return r.rows.map((u: any) => u.id as string);
+          });
+          if (managers.length > 0) {
+            await notify(db, tenantId, managers, 'recurrence_flag',
+              `Repeat caller flagged — ${ticket.ticket_number}`,
+              `Contact has raised ${recCheck} tickets in the last 30 days. Root cause review recommended.`,
+              ticket.id);
+          }
+        }
+      }
 
       return reply.code(201).send({ success: true, data: ticket });
     });
@@ -1228,21 +1264,32 @@ export function ticketRoutes(db: DatabaseClient, eventBus: EventBus) {
       let idx = 1;
 
       // Visibility guard: agents see only their tickets; managers see full reportee hierarchy.
-      // Cross-dept originator view: also show tickets this user created that have been
-      // accepted by another department (read-only — enforced at write time).
-      // tenant_admin is the one exception: dedicated read-only observer access sees ALL
-      // tickets tenant-wide (writes still blocked elsewhere with OBSERVER_ONLY).
-      const visibleIds = req.user.role === 'tenant_admin' ? null : await db.withTenant(tenantId, (client) =>
+      // tenant_admin and operations_admin are read-only observers — they see ALL tickets
+      // tenant-wide (writes blocked with OBSERVER_ONLY).
+      const isFullObserver = req.user.role === 'tenant_admin' || req.user.role === 'operations_admin';
+      const visibleIds = isFullObserver ? null : await db.withTenant(tenantId, (client) =>
         getVisibleUserIds(client, userId, req.user.role),
       );
       if (visibleIds !== null) {
+        // D-R1: agents can also see unassigned open tickets in their queues (self-assign eligible)
+        const agentQueueClause = req.user.role === 'agent'
+          ? ` OR (t.assignee_id IS NULL AND t.status = 'open' AND t.queue_id IN` +
+            `      (SELECT queue_id FROM queue_members WHERE user_id = $${idx + 2}))`
+          : '';
+        // D-F3: originators see their own tickets from creation (not just after acceptance)
         where.push(
           `(t.assignee_id = ANY($${idx}::uuid[])` +
-          ` OR (t.created_by = $${idx + 1} AND t.accepted_at IS NOT NULL` +
-          `     AND (t.assignee_id IS NULL OR t.assignee_id != ALL($${idx}::uuid[]))))`,
+          ` OR (t.created_by = $${idx + 1}` +
+          `     AND (t.assignee_id IS NULL OR t.assignee_id != ALL($${idx}::uuid[])))` +
+          `${agentQueueClause})`,
         );
-        params.push(visibleIds, userId);
-        idx += 2;
+        if (req.user.role === 'agent') {
+          params.push(visibleIds, userId, userId);
+          idx += 3;
+        } else {
+          params.push(visibleIds, userId);
+          idx += 2;
+        }
       }
 
       if (query.status) {
@@ -1317,7 +1364,7 @@ export function ticketRoutes(db: DatabaseClient, eventBus: EventBus) {
           total: count,
           totalPages: Math.ceil(count / query.pageSize),
           // observer_mode: tenant_admin sees all tickets in read-only observation mode (separate from operations)
-          observer_mode: req.user.role === 'tenant_admin',
+          observer_mode: req.user.role === 'tenant_admin' || req.user.role === 'operations_admin',
         },
       });
     });
@@ -1398,7 +1445,7 @@ export function ticketRoutes(db: DatabaseClient, eventBus: EventBus) {
         return r.rows;
       });
 
-      return reply.send({ success: true, data: { ...ticket, comments, escalations, voiceBotCall, csatSurvey: csatSurvey ?? null }, observer_mode: req.user.role === 'tenant_admin' });
+      return reply.send({ success: true, data: { ...ticket, comments, escalations, voiceBotCall, csatSurvey: csatSurvey ?? null }, observer_mode: req.user.role === 'tenant_admin' || req.user.role === 'operations_admin' });
     });
 
     // ── Update ticket ─────────────────────────────────────────────────────
@@ -1408,9 +1455,9 @@ export function ticketRoutes(db: DatabaseClient, eventBus: EventBus) {
       const userId = req.user.sub;
       const role   = req.user.role;
 
-      // Tenant admin is observer-only on tickets — they do not participate in operations
-      if (role === 'tenant_admin') {
-        return reply.code(403).send({ success: false, error: { code: 'OBSERVER_ONLY', message: 'Tenant admins have read-only observer access to tickets. Operational changes must be made by managers or agents.' } });
+      // Tenant admin and operations_admin are observer-only on tickets
+      if (role === 'tenant_admin' || role === 'operations_admin') {
+        return reply.code(403).send({ success: false, error: { code: 'OBSERVER_ONLY', message: 'This role has read-only observer access to tickets. Operational changes must be made by managers or agents.' } });
       }
 
       // Originator read-only guard: if the ticket was created by this user but accepted
@@ -1795,22 +1842,26 @@ ${note ? `<p><strong>Reason:</strong> ${note}</p>` : ''}
       const tenantId = req.tenant.id;
       const { note } = z.object({ note: z.string().optional() }).parse(req.body ?? {});
 
+      // G-F4: resolve → pending_closure (48h reopen window) rather than resolved directly
+      const closureDeadline = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
+
       const [ticket] = await db.withTenant(tenantId, async (client) => {
         const r = await client.query(
           `UPDATE tickets
-           SET status = 'resolved',
+           SET status = 'pending_closure',
                resolved_at = COALESCE(resolved_at, NOW()),
-               resolution_note = COALESCE($1, resolution_note),
+               closure_deadline = $1,
+               resolution_note = COALESCE($2, resolution_note),
                updated_at = NOW()
-           WHERE id = $2 RETURNING *`,
-          [note ?? null, id],
+           WHERE id = $3 RETURNING *`,
+          [closureDeadline, note ?? null, id],
         );
         return r.rows;
       });
 
       if (!ticket) return reply.code(404).send({ success: false, error: { code: 'NOT_FOUND', message: 'Ticket not found' } });
 
-      // Email reporter on resolution
+      // Email reporter on resolution — include reopen info and 48h window
       if (ticket.reporter_email) {
         emailSvc.send(tenantId, {
           to: ticket.reporter_email,
@@ -1818,9 +1869,10 @@ ${note ? `<p><strong>Reason:</strong> ${note}</p>` : ''}
           subject: `Your ticket ${ticket.ticket_number} has been resolved`,
           bodyHtml: `<p>Dear ${ticket.reporter_name ?? 'Customer'},</p>
 <p>We're pleased to let you know that your support ticket <strong>${ticket.ticket_number}</strong> — "<em>${ticket.subject}</em>" — has been resolved.</p>
-<p>If you have any further questions, please don't hesitate to reach out.</p>
+<p>If you feel this has not been fully addressed, you can request to reopen it within <strong>48 hours</strong> by replying to this email or contacting our support team.</p>
+<p>After 48 hours, the ticket will be automatically closed.</p>
 <p>Thank you for your patience.</p>`,
-          bodyText: `Dear ${ticket.reporter_name ?? 'Customer'},\n\nYour ticket ${ticket.ticket_number} ("${ticket.subject}") has been resolved.\n\nThank you.`,
+          bodyText: `Dear ${ticket.reporter_name ?? 'Customer'},\n\nYour ticket ${ticket.ticket_number} ("${ticket.subject}") has been resolved.\n\nYou have 48 hours to reopen it if needed. After that it will be automatically closed.\n\nThank you.`,
           ticketId: id,
         }).catch(() => { /* non-fatal */ });
       }
@@ -1896,6 +1948,61 @@ ${note ? `<p><strong>Reason:</strong> ${note}</p>` : ''}
       const total     = steps.length;
 
       return reply.send({ success: true, data: { steps, progress: total > 0 ? Math.round((completed / total) * 100) : 0 } });
+    });
+
+    // ── Claim ticket (agent self-assign from unassigned queue) ───────────
+    // D-R1: agents can claim any unassigned open ticket in a queue they belong to
+    fastify.post('/:id/claim', { preHandler: requireScope('tickets:write') }, async (req, reply) => {
+      const { id }   = req.params as { id: string };
+      const tenantId = req.tenant.id;
+      const userId   = req.user.sub;
+
+      const [ticket] = await db.withTenant(tenantId, async (client) => {
+        // Verify ticket is unassigned and open, and agent is in the ticket's queue
+        const check = await client.query(
+          `SELECT t.id, t.queue_id, t.status, t.assignee_id, t.ticket_number, t.subject
+           FROM tickets t
+           WHERE t.id = $1`,
+          [id],
+        );
+        const tkt = check.rows[0];
+        if (!tkt) return [null];
+        if (tkt.assignee_id !== null) return ['already_assigned'];
+        if (tkt.status !== 'open') return ['not_open'];
+
+        if (tkt.queue_id) {
+          const mem = await client.query(
+            `SELECT 1 FROM queue_members WHERE queue_id = $1 AND user_id = $2`,
+            [tkt.queue_id, userId],
+          );
+          if (mem.rows.length === 0) return ['not_in_queue'];
+        }
+
+        const r = await client.query(
+          `UPDATE tickets SET assignee_id = $1, status = 'assigned', updated_at = NOW()
+           WHERE id = $2 AND assignee_id IS NULL
+           RETURNING *`,
+          [userId, id],
+        );
+        return r.rows;
+      });
+
+      if (ticket === null) return reply.code(404).send({ success: false, error: { code: 'NOT_FOUND', message: 'Ticket not found' } });
+      if (ticket === 'already_assigned') return reply.code(409).send({ success: false, error: { code: 'ALREADY_ASSIGNED', message: 'Ticket has already been claimed' } });
+      if (ticket === 'not_open') return reply.code(409).send({ success: false, error: { code: 'INVALID_STATUS', message: 'Only open tickets can be claimed' } });
+      if (ticket === 'not_in_queue') return reply.code(403).send({ success: false, error: { code: 'FORBIDDEN', message: 'You are not a member of this ticket\'s queue' } });
+      if (!ticket.id) return reply.code(409).send({ success: false, error: { code: 'CONFLICT', message: 'Ticket was claimed by another agent simultaneously' } });
+
+      await auditLog(db, {
+        tenantId, ticketId: id,
+        actorId: userId, actorName: '',
+        action: 'assignee_changed',
+        oldValue: { assignee_id: null },
+        newValue: { assignee_id: userId },
+        meta: { claimedFromQueue: true },
+      });
+
+      return reply.send({ success: true, data: ticket });
     });
 
     // ── Close ticket ──────────────────────────────────────────────────────
@@ -2040,6 +2147,202 @@ ${note ? `<p><strong>Reason:</strong> ${note}</p>` : ''}
       });
 
       return reply.send({ success: true, data: ticket });
+    });
+
+    // ── G-P3: Agent Escalation (manual escalate to manager) ──────────────
+    fastify.post('/:id/escalate', { preHandler: requireScope('tickets:write') }, async (req, reply) => {
+      const { id }   = req.params as { id: string };
+      const tenantId = req.tenant.id;
+      const userId   = req.user.sub;
+      const body     = z.object({ reason: z.string().min(3).max(500) }).parse(req.body ?? {});
+
+      // Only agents (not already managers) can manually escalate
+      const userRole = req.user.role;
+      if (['manager','tenant_admin','super_admin'].includes(userRole)) {
+        return reply.code(403).send({ success: false, error: { code: 'FORBIDDEN', message: 'Managers do not need to escalate — they can act directly.' } });
+      }
+
+      const [ticket] = await db.withTenant(tenantId, async (client) => {
+        const existing = await client.query(
+          `SELECT id, subject, ticket_number, status, assignee_id, agent_escalated FROM tickets WHERE id = $1`, [id]);
+        if (!existing.rows[0]) return [];
+        const t = existing.rows[0];
+        if (t.agent_escalated) return [{ __error: 'Ticket is already escalated.' }];
+        if (['closed','cancelled','resolved'].includes(t.status)) {
+          return [{ __error: 'Cannot escalate a closed, cancelled, or resolved ticket.' }];
+        }
+        const r = await client.query(
+          `UPDATE tickets SET agent_escalated=true, agent_escalated_at=NOW(), agent_escalated_reason=$1, updated_at=NOW()
+           WHERE id=$2 RETURNING *`, [body.reason, id]);
+        return r.rows;
+      });
+
+      if (!ticket) return reply.code(404).send({ success: false, error: { code: 'NOT_FOUND', message: 'Ticket not found' } });
+      if (ticket.__error) return reply.code(409).send({ success: false, error: { code: 'CONFLICT', message: ticket.__error } });
+
+      const actorName = await db.withSuperAdmin(async (c) => {
+        const r = await c.query('SELECT name FROM users WHERE id=$1', [userId]);
+        return r.rows[0]?.name ?? 'Unknown';
+      });
+
+      // Notify all managers in the tenant
+      const managers = await db.withSuperAdmin(async (c) => {
+        const r = await c.query(
+          `SELECT id FROM users WHERE tenant_id=$1 AND role='manager' AND is_active=true`, [tenantId]);
+        return r.rows.map((u: any) => u.id as string);
+      });
+      if (managers.length > 0) {
+        await notify(db, tenantId, managers, 'ticket_escalated',
+          `🚨 Escalation: ${ticket.ticket_number}`,
+          `${actorName} escalated ticket "${ticket.subject}": ${body.reason}`, id);
+      }
+
+      await auditLog(db, {
+        tenantId, ticketId: id, actorId: userId, actorName,
+        action: 'escalated',
+        newValue: { reason: body.reason },
+      });
+
+      return reply.send({ success: true, data: ticket });
+    });
+
+    // ── G-P3: Acknowledge escalation (manager clears the escalation flag) ──
+    fastify.post('/:id/acknowledge-escalation', { preHandler: requireScope('tickets:write') }, async (req, reply) => {
+      const { id }   = req.params as { id: string };
+      const tenantId = req.tenant.id;
+      const userId   = req.user.sub;
+      const userRole = req.user.role;
+
+      if (!['manager','tenant_admin','super_admin'].includes(userRole)) {
+        return reply.code(403).send({ success: false, error: { code: 'FORBIDDEN', message: 'Only managers can acknowledge escalations.' } });
+      }
+
+      const [ticket] = await db.withTenant(tenantId, async (client) => {
+        const existing = await client.query(
+          `SELECT id, subject, ticket_number, agent_escalated, assignee_id FROM tickets WHERE id=$1`, [id]);
+        if (!existing.rows[0]) return [];
+        if (!existing.rows[0].agent_escalated) return [{ __error: 'Ticket is not escalated.' }];
+        const r = await client.query(
+          `UPDATE tickets SET agent_escalated=false, agent_escalated_at=NULL, agent_escalated_reason=NULL, updated_at=NOW()
+           WHERE id=$1 RETURNING *`, [id]);
+        return r.rows;
+      });
+
+      if (!ticket) return reply.code(404).send({ success: false, error: { code: 'NOT_FOUND', message: 'Ticket not found' } });
+      if (ticket.__error) return reply.code(409).send({ success: false, error: { code: 'CONFLICT', message: ticket.__error } });
+
+      const actorName = await db.withSuperAdmin(async (c) => {
+        const r = await c.query('SELECT name FROM users WHERE id=$1', [userId]);
+        return r.rows[0]?.name ?? 'Unknown';
+      });
+
+      await auditLog(db, {
+        tenantId, ticketId: id, actorId: userId, actorName,
+        action: 'escalation_acknowledged',
+        newValue: {},
+      });
+
+      return reply.send({ success: true, data: ticket });
+    });
+
+    // ── G-F4: Reopen a resolved/pending_closure ticket ────────────────────
+    fastify.post('/:id/reopen', { preHandler: requireScope('tickets:write') }, async (req, reply) => {
+      const { id }   = req.params as { id: string };
+      const tenantId = req.tenant.id;
+      const userId   = req.user.sub;
+      const body     = z.object({ reason: z.string().min(3).max(500).optional() }).parse(req.body ?? {});
+
+      const [ticket] = await db.withTenant(tenantId, async (client) => {
+        const existing = await client.query(
+          `SELECT id, subject, ticket_number, status FROM tickets WHERE id=$1`, [id]);
+        if (!existing.rows[0]) return [];
+        const t = existing.rows[0];
+        if (!['resolved','pending_closure'].includes(t.status)) {
+          return [{ __error: 'Only resolved or pending-closure tickets can be reopened.' }];
+        }
+        const r = await client.query(
+          `UPDATE tickets SET status='in_progress', closure_deadline=NULL, resolved_at=NULL, updated_at=NOW()
+           WHERE id=$1 RETURNING *`, [id]);
+        return r.rows;
+      });
+
+      if (!ticket) return reply.code(404).send({ success: false, error: { code: 'NOT_FOUND', message: 'Ticket not found' } });
+      if (ticket.__error) return reply.code(409).send({ success: false, error: { code: 'CONFLICT', message: ticket.__error } });
+
+      const actorName = await db.withSuperAdmin(async (c) => {
+        const r = await c.query('SELECT name FROM users WHERE id=$1', [userId]);
+        return r.rows[0]?.name ?? 'Unknown';
+      });
+
+      await auditLog(db, {
+        tenantId, ticketId: id, actorId: userId, actorName,
+        action: 'reopened',
+        newValue: { reason: body.reason ?? 'Customer requested reopen' },
+      });
+
+      return reply.send({ success: true, data: ticket });
+    });
+
+    // ── G-P5: SLA Policy publish / draft toggle ───────────────────────────
+    fastify.patch('/sla-policies/:policyId/publish', { preHandler: requireRole('policy_admin','super_admin','tenant_admin') }, async (req, reply) => {
+      const { policyId } = req.params as { policyId: string };
+      const tenantId     = req.tenant.id;
+      const body         = z.object({ status: z.enum(['draft','published']) }).parse(req.body ?? {});
+
+      const [policy] = await db.withTenant(tenantId, async (client) => {
+        const r = await client.query(
+          `UPDATE sla_policies SET policy_status=$1, updated_at=NOW() WHERE id=$2 RETURNING *`,
+          [body.status, policyId]);
+        return r.rows;
+      });
+
+      if (!policy) return reply.code(404).send({ success: false, error: { code: 'NOT_FOUND', message: 'Policy not found' } });
+      return reply.send({ success: true, data: policy });
+    });
+
+    // ── D-D1: Manager saved ticket views ─────────────────────────────────
+    fastify.get('/saved-views', { preHandler: requireScope('tickets:read') }, async (req, reply) => {
+      const tenantId = req.tenant.id;
+      const userId   = req.user.sub;
+      const isManager = ['manager','super_admin','tenant_admin','operations_admin'].includes(req.user.role);
+      const rows = await db.withTenant(tenantId, async (client) => {
+        const r = await client.query(
+          `SELECT * FROM user_ticket_views
+           WHERE (user_id=$1 OR is_shared=true) AND tenant_id=current_setting('app.tenant_id')::uuid
+           ORDER BY created_at DESC`, [userId]);
+        return r.rows;
+      });
+      return reply.send({ success: true, data: rows });
+    });
+
+    fastify.post('/saved-views', { preHandler: [requireScope('tickets:read'), requireRole('manager','super_admin','tenant_admin')] }, async (req, reply) => {
+      const tenantId = req.tenant.id;
+      const userId   = req.user.sub;
+      const body     = z.object({
+        name:      z.string().min(1).max(80),
+        filters:   z.record(z.any()),
+        is_shared: z.boolean().default(false),
+      }).parse(req.body ?? {});
+
+      const [view] = await db.withTenant(tenantId, async (client) => {
+        const r = await client.query(
+          `INSERT INTO user_ticket_views(tenant_id,user_id,name,filters,is_shared)
+           VALUES(current_setting('app.tenant_id')::uuid,$1,$2,$3,$4) RETURNING *`,
+          [userId, body.name, JSON.stringify(body.filters), body.is_shared]);
+        return r.rows;
+      });
+      return reply.code(201).send({ success: true, data: view });
+    });
+
+    fastify.delete('/saved-views/:viewId', { preHandler: requireScope('tickets:read') }, async (req, reply) => {
+      const { viewId } = req.params as { viewId: string };
+      const tenantId   = req.tenant.id;
+      const userId     = req.user.sub;
+      await db.withTenant(tenantId, async (client) => {
+        await client.query(
+          `DELETE FROM user_ticket_views WHERE id=$1 AND user_id=$2`, [viewId, userId]);
+      });
+      return reply.send({ success: true });
     });
 
     // ── RCA — Root Cause Analysis ─────────────────────────────────────────
@@ -2460,6 +2763,109 @@ ${note ? `<p><strong>Reason:</strong> ${note}</p>` : ''}
         success: true,
         data: { totals, agents, direct_reports: Number(direct_reports) },
       });
+    });
+
+    // ── G-P1: Bulk ticket operations (manager+) ────────────────────────
+    // POST /api/v1/tickets/bulk
+    // body: { ids: string[], action: 'close'|'resolve'|'reassign'|'status', assigneeId?, status? }
+    fastify.post('/bulk', { preHandler: [requireScope('tickets:write'), requireRole('manager','tenant_admin','super_admin','policy_admin')] }, async (req, reply) => {
+      const tenantId = req.tenant.id;
+      const userId   = req.user.sub;
+      const body = z.object({
+        ids:        z.array(z.string().uuid()).min(1).max(100),
+        action:     z.enum(['close','resolve','reassign','status']),
+        assigneeId: z.string().uuid().optional(),
+        status:     z.enum(['open','assigned','accepted','in_progress','pending','resolved','closed','cancelled']).optional(),
+      }).parse(req.body);
+
+      let setSql = '';
+      const extraParams: any[] = [];
+      if (body.action === 'close') {
+        setSql = `status = 'closed', closed_at = COALESCE(closed_at, NOW()), updated_at = NOW()`;
+      } else if (body.action === 'resolve') {
+        setSql = `status = 'resolved', resolved_at = COALESCE(resolved_at, NOW()), updated_at = NOW()`;
+      } else if (body.action === 'reassign') {
+        if (!body.assigneeId) return reply.code(400).send({ success: false, error: { code: 'BAD_REQUEST', message: 'assigneeId required for reassign action' } });
+        setSql = `assignee_id = $3, status = CASE WHEN status = 'open' THEN 'assigned' ELSE status END, updated_at = NOW()`;
+        extraParams.push(body.assigneeId);
+      } else if (body.action === 'status') {
+        if (!body.status) return reply.code(400).send({ success: false, error: { code: 'BAD_REQUEST', message: 'status required for status action' } });
+        setSql = `status = $3, updated_at = NOW()`;
+        extraParams.push(body.status);
+      }
+
+      const updated = await db.withTenant(tenantId, async (client) => {
+        const r = await client.query(
+          `UPDATE tickets SET ${setSql}
+           WHERE id = ANY($1::uuid[]) AND tenant_id = $2
+           RETURNING id, ticket_number, status`,
+          [body.ids, tenantId, ...extraParams],
+        );
+        return r.rows;
+      });
+
+      // Individual audit entries per ticket (ISO 27001 traceability)
+      await Promise.all(updated.map((t: any) =>
+        auditLog(db, {
+          tenantId, ticketId: t.id,
+          actorId: userId, actorName: null,
+          action: body.action === 'reassign' ? 'assignee_changed' : 'status_changed',
+          newValue: body.action === 'reassign'
+            ? { assignee_id: body.assigneeId }
+            : { status: t.status },
+          meta: { bulk: true, bulk_size: body.ids.length },
+        }),
+      ));
+
+      return reply.send({ success: true, data: { updated: updated.length, tickets: updated } });
+    });
+
+    // ── G-P2: Ticket merge (manager+, same tenant) ─────────────────────
+    // POST /api/v1/tickets/:id/merge  — merges :id INTO targetId
+    // The source ticket is closed and marked merged; comments + audit log copied to target.
+    fastify.post('/:id/merge', { preHandler: [requireScope('tickets:write'), requireRole('manager','tenant_admin','super_admin')] }, async (req, reply) => {
+      const { id }   = req.params as { id: string };
+      const tenantId = req.tenant.id;
+      const userId   = req.user.sub;
+      const { targetId } = z.object({ targetId: z.string().uuid() }).parse(req.body);
+
+      if (id === targetId) return reply.code(400).send({ success: false, error: { code: 'BAD_REQUEST', message: 'Cannot merge a ticket into itself' } });
+
+      const [source, target] = await db.withTenant(tenantId, async (client) => {
+        const r = await client.query(
+          `SELECT id, ticket_number, status, subject, merged_into_id FROM tickets WHERE id = ANY($1::uuid[])`,
+          [[id, targetId]],
+        );
+        const rows = r.rows;
+        return [rows.find((t: any) => t.id === id), rows.find((t: any) => t.id === targetId)];
+      });
+
+      if (!source) return reply.code(404).send({ success: false, error: { code: 'NOT_FOUND', message: 'Source ticket not found' } });
+      if (!target) return reply.code(404).send({ success: false, error: { code: 'NOT_FOUND', message: 'Target ticket not found' } });
+      if (source.merged_into_id) return reply.code(409).send({ success: false, error: { code: 'ALREADY_MERGED', message: 'Source ticket has already been merged' } });
+      if (['closed','cancelled'].includes(source.status)) return reply.code(409).send({ success: false, error: { code: 'INVALID_STATUS', message: 'Cannot merge a closed or cancelled ticket' } });
+
+      // Close source and mark merged; re-parent comments to target
+      await db.withTenant(tenantId, async (client) => {
+        await client.query(
+          `UPDATE tickets SET merged_into_id = $1, status = 'closed', closed_at = NOW(), updated_at = NOW() WHERE id = $2`,
+          [targetId, id],
+        );
+        // Re-parent comments so agent context isn't lost
+        await client.query(
+          `UPDATE ticket_comments SET ticket_id = $1 WHERE ticket_id = $2`,
+          [targetId, id],
+        );
+      });
+
+      await auditLog(db, { tenantId, ticketId: id, actorId: userId, actorName: null,
+        action: 'status_changed', oldValue: { status: source.status }, newValue: { status: 'closed', merged_into: targetId },
+        meta: { merged: true, target_ticket_number: target.ticket_number } });
+      await auditLog(db, { tenantId, ticketId: targetId, actorId: userId, actorName: null,
+        action: 'ticket_merged_in', newValue: { source_ticket: source.ticket_number, source_id: id },
+        meta: { merged: true } });
+
+      return reply.send({ success: true, data: { merged: source.ticket_number, into: target.ticket_number } });
     });
 
   };

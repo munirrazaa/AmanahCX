@@ -33,11 +33,12 @@ import {
   LifeBuoy, PhoneCall, ChevronRight,
   Calendar, TrendingUp, ShieldAlert, Timer,
   Circle, ArrowRightLeft, CornerUpLeft, StickyNote,
-  Reply, CreditCard, Pencil, Trash2,
+  Reply, CreditCard, Pencil, Trash2, RotateCcw,
 } from 'lucide-react';
 import { api } from '../services/api';
-import { useCan } from '../hooks/useRole';
+import { useCan, useIsCollaborator, useIsManager } from '../hooks/useRole';
 import { useAuthStore } from '../store/auth.store';
+import { SectorFieldsForm, SectorFieldsDisplay } from '../components/SectorFieldsForm';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 interface Ticket {
@@ -67,6 +68,10 @@ interface Ticket {
   deal_id?: string | null;
   is_originated_by_me?: boolean;
   assignee_department?: string;
+  agent_escalated?: boolean;
+  agent_escalated_at?: string;
+  agent_escalated_reason?: string;
+  closure_deadline?: string;
 }
 
 interface Comment {
@@ -93,6 +98,7 @@ interface TicketDetail extends Ticket {
   csatSurvey: CsatSurveyData | null;
   comments: Comment[];
   escalations: any[];
+  custom_fields?: Record<string, any>;
   queue_id?: string;
   milestones?: Array<{id:string;label:string;order:number;completed:boolean;completed_at?:string}>;
   // Warm-transfer fields
@@ -153,7 +159,10 @@ const STATUS_CFG: Record<string, { label: string; badge: string; dot: string }> 
   in_progress: { label: 'In Progress', badge: 'bg-brand-900/60 text-vivid-green-300 border border-brand-600/50', dot: 'bg-brand-300' },
   pending:     { label: 'Pending',     badge: 'bg-yellow-900/60 text-yellow-300 border border-yellow-700/50', dot: 'bg-yellow-400' },
   resolved:    { label: 'Resolved',    badge: 'bg-emerald-900/60 text-emerald-300 border border-emerald-700/50',dot:'bg-emerald-400'},
-  closed:      { label: 'Closed',      badge: 'bg-gray-100 text-gray-500 border border-gray-200',       dot: 'bg-gray-400'   },
+  closed:          { label: 'Closed',          badge: 'bg-gray-100 text-gray-500 border border-gray-200',             dot: 'bg-gray-400'     },
+  cancelled:       { label: 'Cancelled',       badge: 'bg-red-900/60 text-red-300 border border-red-700/50',           dot: 'bg-red-400'      },
+  cancel_requested:{ label: 'Cancel Requested',badge: 'bg-red-900/40 text-red-300 border border-red-700/40',           dot: 'bg-red-300'      },
+  pending_closure: { label: 'Pending Closure', badge: 'bg-sky-900/40 text-sky-300 border border-sky-700/40',           dot: 'bg-sky-300'      },
 };
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -239,25 +248,38 @@ function SlaBar({ ticket }: { ticket: Ticket }) {
 
 // ── Ticket card ────────────────────────────────────────────────────────────
 function TicketCard({
-  ticket, onOpen, onAccept, onResolve,
+  ticket, onOpen, onAccept, onResolve, onClaim, selected, onSelect,
 }: {
   ticket: Ticket;
   onOpen: (id: string) => void;
   onAccept: (id: string) => void;
   onResolve: (id: string) => void;
+  onClaim?: (id: string) => void;
+  selected?: boolean;
+  onSelect?: (id: string, checked: boolean) => void;
 }) {
   const can = useCan();
+  const { user } = useAuthStore();
   const pc  = PRIORITY_CFG[ticket.priority] ?? PRIORITY_CFG.medium;
   const sc  = STATUS_CFG[ticket.status]     ?? STATUS_CFG.open;
 
   const canAccept  = can.writeRecords && ['open','assigned'].includes(ticket.status);
   const canResolve = can.writeRecords && ['accepted','in_progress','pending'].includes(ticket.status);
+  const canClaim   = user?.role === 'agent' && !ticket.assignee_id && ticket.status === 'open' && !!onClaim;
 
   return (
-    <div className={`relative rounded-2xl border p-5 flex flex-col gap-4 transition-all hover:border-opacity-70 ${pc.card}`}>
+    <div className={`relative rounded-2xl border p-5 flex flex-col gap-4 transition-all hover:border-opacity-70 ${pc.card} ${selected ? 'ring-2 ring-brand-400' : ''}`}>
       {/* Escalation glow */}
       {ticket.escalation_level >= 2 && (
         <div className="absolute inset-0 rounded-2xl ring-2 ring-red-500/40 pointer-events-none" />
+      )}
+      {/* Bulk select checkbox (manager+ only) */}
+      {onSelect && (
+        <div className="absolute top-3 left-3 z-10">
+          <input type="checkbox" checked={!!selected}
+            onChange={e => { e.stopPropagation(); onSelect(ticket.id, e.target.checked); }}
+            className="w-4 h-4 rounded accent-brand-600 cursor-pointer" />
+        </div>
       )}
 
       {/* Header row */}
@@ -273,6 +295,11 @@ function TicketCard({
           {ticket.escalation_level >= 2 && (
             <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-red-900/80 text-red-300 border border-red-600/50">
               <ShieldAlert className="w-3 h-3" /> Escalated
+            </span>
+          )}
+          {ticket.agent_escalated && ticket.escalation_level < 2 && (
+            <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-orange-900/60 text-orange-300 border border-orange-600/40">
+              <ShieldAlert className="w-3 h-3" /> Agent Escalated
             </span>
           )}
           {ticket.escalation_level === 1 && (
@@ -390,6 +417,14 @@ function TicketCard({
           })()}
       {/* Action buttons */}
       <div className="flex gap-2 pt-1">
+        {canClaim && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onClaim!(ticket.id); }}
+            className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-semibold bg-purple-600/80 text-white hover:bg-purple-600 border border-purple-500/50 transition-colors"
+          >
+            <CheckCircle className="w-3.5 h-3.5" /> Claim
+          </button>
+        )}
         {canAccept && (
           <button
             onClick={(e) => { e.stopPropagation(); onAccept(ticket.id); }}
@@ -432,6 +467,13 @@ function CreateTicketModal({ queues, onClose }: { queues: Queue[]; onClose: () =
     enabled: contactSearch.length >= 2,
   });
 
+  // Ticket custom fields
+  const { data: ticketFieldDefs = [] } = useQuery({
+    queryKey: ['sector-fields-ticket'],
+    queryFn: () => api.get('/api/v1/sector/fields?entity=ticket').then(r => r.data.data ?? []),
+  });
+  const [customFields, setCustomFields] = useState<Record<string, any>>({});
+
   const [form, setForm] = useState({
     subject: '', description: '', priority: 'medium',
     queueId: '', reporterName: '', reporterEmail: '', reporterPhone: '',
@@ -451,6 +493,7 @@ function CreateTicketModal({ queues, onClose }: { queues: Queue[]; onClose: () =
       reporterPhone:    form.reporterPhone    || undefined,
       reporterWhatsapp: form.reporterWhatsapp || undefined,
       preferredChannel: form.preferredChannel,
+      customFields:     Object.keys(customFields).length ? customFields : undefined,
     }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['tickets'] });
@@ -600,6 +643,18 @@ function CreateTicketModal({ queues, onClose }: { queues: Queue[]; onClose: () =
             <textarea value={form.description} onChange={set('description')} rows={3} placeholder="Describe the problem in detail…"
               className="w-full bg-white border border-gray-200 text-gray-900 placeholder-gray-400 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-brand-500/60 resize-none" />
           </div>
+
+          {/* Sector-specific ticket fields */}
+          {ticketFieldDefs.length > 0 && (
+            <div>
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Additional Details</p>
+              <SectorFieldsForm
+                fields={ticketFieldDefs}
+                values={customFields}
+                onChange={(name, value) => setCustomFields(f => ({ ...f, [name]: value }))}
+              />
+            </div>
+          )}
 
           {/* Priority + Queue */}
           <div className="grid grid-cols-2 gap-3">
@@ -764,16 +819,25 @@ function CommentBubble({ c, onReply, canReply }: {
 function TicketPanel({ ticketId, onClose }: { ticketId: string; onClose: () => void }) {
   const qc  = useQueryClient();
   const can = useCan();
+  const isCollaborator = useIsCollaborator();
 
   // Tab: 'conversation' | 'remarks'
   const [activeTab, setActiveTab]     = useState<'conversation' | 'remarks'>('conversation');
   const [comment, setComment]         = useState('');
+  // Collaborators can only post internal notes — force isInternal=true for them
   const [isInternal, setInternal]     = useState(false);
+  const effectiveInternal = isCollaborator ? true : isInternal;
   // WhatsApp-style reply-to state
   const [replyTo, setReplyTo]         = useState<Comment | null>(null);
   const commentsEndRef                = useRef<HTMLDivElement>(null);
   const remarksEndRef                 = useRef<HTMLDivElement>(null);
   const inputRef                      = useRef<HTMLTextAreaElement>(null);
+
+  // Ticket custom field definitions
+  const { data: ticketFieldDefs = [] } = useQuery({
+    queryKey: ['sector-fields-ticket'],
+    queryFn: () => api.get('/api/v1/sector/fields?entity=ticket').then(r => r.data.data ?? []),
+  });
 
   const { data: t, isLoading, isError } = useQuery<TicketDetail>({
     queryKey: ['ticket', ticketId],
@@ -802,13 +866,26 @@ function TicketPanel({ ticketId, onClose }: { ticketId: string; onClose: () => v
 
   const acceptMutation  = useMutation({ mutationFn: () => api.post(`/api/v1/tickets/${ticketId}/accept`, {}),  onSuccess: invalidate });
   const resolveMutation = useMutation({ mutationFn: () => api.post(`/api/v1/tickets/${ticketId}/resolve`, {}), onSuccess: invalidate });
+  const reopenMutation  = useMutation({ mutationFn: (reason?: string) => api.post(`/api/v1/tickets/${ticketId}/reopen`, { reason }), onSuccess: invalidate });
   const convertMutation = useMutation({ mutationFn: () => api.post(`/api/v1/tickets/${ticketId}/convert-to-deal`, {}), onSuccess: invalidate });
+
+  // G-P3: Agent escalation
+  const [escalateOpen, setEscalateOpen]       = useState(false);
+  const [escalateReason, setEscalateReason]   = useState('');
+  const escalateMutation = useMutation({
+    mutationFn: () => api.post(`/api/v1/tickets/${ticketId}/escalate`, { reason: escalateReason }),
+    onSuccess: () => { setEscalateOpen(false); setEscalateReason(''); invalidate(); },
+  });
+  const acknowledgeEscalationMutation = useMutation({
+    mutationFn: () => api.post(`/api/v1/tickets/${ticketId}/acknowledge-escalation`, {}),
+    onSuccess: () => invalidate(),
+  });
 
   const commentMutation = useMutation({
     mutationFn: () => api.post(`/api/v1/tickets/${ticketId}/comments`, {
       body:        comment,
-      isInternal,
-      commentType: activeTab === 'remarks' ? 'remark' : (isInternal ? 'note' : 'reply'),
+      isInternal:  effectiveInternal,
+      commentType: activeTab === 'remarks' ? 'remark' : (effectiveInternal ? 'note' : 'reply'),
       replyToId:   replyTo?.id ?? undefined,
     }),
     onSuccess: () => { setComment(''); setReplyTo(null); invalidate(); },
@@ -1231,6 +1308,33 @@ function TicketPanel({ ticketId, onClose }: { ticketId: string; onClose: () => v
                   Mark Resolved
                 </button>
               )}
+              {/* G-P3: Agent escalation — agent can flag for manager attention */}
+              {['open','assigned','accepted','in_progress','pending'].includes(t.status) && !t.agent_escalated && can.role === 'agent' && (
+                <button onClick={() => setEscalateOpen(true)}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold bg-orange-700/60 text-orange-200 hover:bg-orange-700/80 border border-orange-600/40">
+                  <ShieldAlert className="w-3.5 h-3.5" /> Escalate to Manager
+                </button>
+              )}
+              {t.agent_escalated && can.role !== 'manager' && can.role !== 'tenant_admin' && (
+                <span className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold bg-orange-900/40 text-orange-300 border border-orange-700/40">
+                  <ShieldAlert className="w-3.5 h-3.5" /> Escalated
+                </span>
+              )}
+              {t.agent_escalated && (can.role === 'manager' || can.role === 'tenant_admin') && (
+                <button onClick={() => acknowledgeEscalationMutation.mutate()} disabled={acknowledgeEscalationMutation.isPending}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold bg-orange-700/80 text-orange-100 hover:bg-orange-700 disabled:opacity-40 border border-orange-600/60">
+                  <ShieldAlert className="w-3.5 h-3.5" />
+                  {acknowledgeEscalationMutation.isPending ? 'Acknowledging…' : 'Acknowledge Escalation'}
+                </button>
+              )}
+              {/* G-F4: Reopen — customer or agent can reopen a pending_closure ticket */}
+              {t.status === 'pending_closure' && (
+                <button onClick={() => reopenMutation.mutate(undefined)} disabled={reopenMutation.isPending}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold bg-sky-700/60 text-sky-200 hover:bg-sky-700/80 disabled:opacity-40 border border-sky-600/40">
+                  {reopenMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCcw className="w-3.5 h-3.5" />}
+                  Reopen
+                </button>
+              )}
               {/* Sales enquiry → pipeline deal. Shown only for sales tickets.
                   Once converted, becomes a non-clickable "Deal created" marker. */}
               {t.ticket_type === 'sales' && (
@@ -1252,6 +1356,56 @@ function TicketPanel({ ticketId, onClose }: { ticketId: string; onClose: () => v
             <p className="text-[11px] text-red-400">
               {(convertMutation.error as any)?.response?.data?.error?.message ?? 'Could not convert to a deal.'}
             </p>
+          )}
+
+          {/* G-P3: Escalation modal */}
+          {escalateOpen && (
+            <div className="bg-orange-950/40 border border-orange-700/50 rounded-xl p-3 flex flex-col gap-2">
+              <p className="text-xs font-semibold text-orange-300 flex items-center gap-1.5">
+                <ShieldAlert className="w-3.5 h-3.5" /> Escalate ticket to manager
+              </p>
+              <textarea
+                value={escalateReason}
+                onChange={e => setEscalateReason(e.target.value)}
+                rows={2}
+                placeholder="Reason for escalation (required)…"
+                className="w-full text-xs rounded-lg bg-white/10 border border-orange-700/40 px-2.5 py-1.5 text-orange-100 placeholder:text-orange-400/50 resize-none focus:outline-none focus:ring-1 focus:ring-orange-500"
+              />
+              <div className="flex gap-2">
+                <button onClick={() => escalateMutation.mutate()} disabled={!escalateReason.trim() || escalateMutation.isPending}
+                  className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-orange-700 text-white hover:bg-orange-600 disabled:opacity-40">
+                  {escalateMutation.isPending ? 'Escalating…' : 'Confirm Escalation'}
+                </button>
+                <button onClick={() => { setEscalateOpen(false); setEscalateReason(''); }}
+                  className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-white/10 text-orange-300 hover:bg-white/20">
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* G-P3: Escalation reason banner — visible to everyone when ticket is escalated */}
+          {t.agent_escalated && t.agent_escalated_reason && (
+            <div className="bg-orange-950/40 border border-orange-700/50 rounded-xl px-3 py-2.5 flex gap-2">
+              <ShieldAlert className="w-3.5 h-3.5 text-orange-400 shrink-0 mt-0.5" />
+              <div>
+                <p className="text-[10px] font-semibold text-orange-400 uppercase tracking-wider mb-0.5">Escalation Reason</p>
+                <p className="text-xs text-orange-200">{t.agent_escalated_reason}</p>
+                {t.agent_escalated_at && (
+                  <p className="text-[10px] text-orange-400/70 mt-1">{new Date(t.agent_escalated_at).toLocaleString()}</p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* G-F4: Pending closure countdown */}
+          {t.status === 'pending_closure' && t.closure_deadline && (
+            <div className="bg-sky-950/40 border border-sky-700/40 rounded-xl px-3 py-2 flex items-center gap-2">
+              <Clock className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+              <p className="text-xs text-sky-300">
+                Auto-closes <span className="font-semibold">{new Date(t.closure_deadline).toLocaleString()}</span> — click Reopen if the issue is not resolved.
+              </p>
+            </div>
           )}
 
           {/* Info grid */}
@@ -1317,6 +1471,14 @@ function TicketPanel({ ticketId, onClose }: { ticketId: string; onClose: () => v
             <div className="bg-white rounded-xl p-3">
               <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1.5">Problem Description</p>
               <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{t.description}</p>
+            </div>
+          )}
+
+          {/* Sector-specific custom fields display */}
+          {ticketFieldDefs.length > 0 && t.custom_fields && Object.keys(t.custom_fields).length > 0 && (
+            <div className="bg-white rounded-xl p-3">
+              <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-2">Additional Details</p>
+              <SectorFieldsDisplay fields={ticketFieldDefs} values={t.custom_fields} />
             </div>
           )}
 
@@ -1440,8 +1602,8 @@ function TicketPanel({ ticketId, onClose }: { ticketId: string; onClose: () => v
                 </div>
               )}
 
-              {/* Message type selector — only on Conversation tab */}
-              {activeTab === 'conversation' && (
+              {/* Message type selector — only on Conversation tab; collaborators always internal */}
+              {activeTab === 'conversation' && !isCollaborator && (
                 <div className="flex gap-2">
                   {[
                     { val: false, label: 'Reply to Customer', icon: Send },
@@ -1456,6 +1618,15 @@ function TicketPanel({ ticketId, onClose }: { ticketId: string; onClose: () => v
                       <Icon className="w-3 h-3" /> {label}
                     </button>
                   ))}
+                </div>
+              )}
+
+              {/* Collaborator notice — internal notes only */}
+              {activeTab === 'conversation' && isCollaborator && (
+                <div className="flex items-center gap-1.5 text-xs text-amber-600">
+                  <Lock className="w-3 h-3" />
+                  <span className="font-medium">Internal note only</span>
+                  <span className="text-amber-400">— collaborators cannot reply to customers</span>
                 </div>
               )}
 
@@ -1531,6 +1702,7 @@ const TABS: { id: Tab; label: string }[] = [
 
 export function Tickets() {
   const can = useCan();
+  const isManagerRole = useIsManager();
   const { user } = useAuthStore();
   const qc  = useQueryClient();
   const deptLabel = user?.department ? `${user.department} Tickets` : 'Tickets';
@@ -1541,6 +1713,30 @@ export function Tickets() {
   const [priority, setPriority] = useState('');
   const [showCreate, setCreate] = useState(false);
   const [selectedId, setSelect] = useState<string | null>(() => searchParams.get('open'));
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const isManager = ['manager','tenant_admin','super_admin','policy_admin'].includes(user?.role ?? '');
+
+  // D-D1: Saved ticket views (manager+)
+  const [saveViewOpen, setSaveViewOpen] = useState(false);
+  const [newViewName, setNewViewName]   = useState('');
+  const { data: savedViews = [] } = useQuery<Array<{ id: string; name: string; filters: Record<string, string>; is_shared: boolean }>>({
+    queryKey: ['saved-ticket-views'],
+    queryFn: async () => (await api.get('/api/v1/tickets/saved-views')).data.data,
+    enabled: isManagerRole,
+  });
+  const createViewMutation = useMutation({
+    mutationFn: () => api.post('/api/v1/tickets/saved-views', { name: newViewName, filters: { status: tab, search, priority } }),
+    onSuccess: () => { setNewViewName(''); setSaveViewOpen(false); qc.invalidateQueries({ queryKey: ['saved-ticket-views'] }); },
+  });
+  const deleteViewMutation = useMutation({
+    mutationFn: (viewId: string) => api.delete(`/api/v1/tickets/saved-views/${viewId}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['saved-ticket-views'] }),
+  });
+  function applyView(filters: Record<string, string>) {
+    if (filters.status) setTab((filters.status as Tab) ?? 'all');
+    if (filters.search !== undefined) setSearch(filters.search ?? '');
+    if (filters.priority !== undefined) setPriority(filters.priority ?? '');
+  }
 
   // Derive API params
   const params = useMemo(() => {
@@ -1586,6 +1782,19 @@ export function Tickets() {
     mutationFn: (id: string) => api.post(`/api/v1/tickets/${id}/resolve`, {}),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['tickets'] }); qc.invalidateQueries({ queryKey: ['ticket-stats'] }); },
   });
+  const claimMutation = useMutation({
+    mutationFn: (id: string) => api.post(`/api/v1/tickets/${id}/claim`, {}),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['tickets'] }); qc.invalidateQueries({ queryKey: ['ticket-stats'] }); },
+  });
+  const bulkMutation = useMutation({
+    mutationFn: (payload: { ids: string[]; action: string; assigneeId?: string; status?: string }) =>
+      api.post('/api/v1/tickets/bulk', payload),
+    onSuccess: () => {
+      setSelectedIds(new Set());
+      qc.invalidateQueries({ queryKey: ['tickets'] });
+      qc.invalidateQueries({ queryKey: ['ticket-stats'] });
+    },
+  });
 
   return (
     <div className="flex flex-col h-full bg-gray-50 text-gray-900">
@@ -1602,12 +1811,25 @@ export function Tickets() {
               <p className="text-xs text-gray-400">Manually created tickets</p>
             </div>
           </div>
-          {can.writeRecords && (
-            <button onClick={() => setCreate(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-brand-600 text-white rounded-xl text-sm font-semibold hover:bg-brand-500 transition-colors border border-brand-500/50">
-              <Plus className="w-4 h-4" /> New Ticket
-            </button>
-          )}
+          <div className="flex items-center gap-2">
+            {isManager && selectedIds.size > 0 && (
+              <div className="flex items-center gap-2 bg-white border border-brand-300 rounded-xl px-3 py-1.5 shadow-sm">
+                <span className="text-xs font-semibold text-brand-700">{selectedIds.size} selected</span>
+                <button onClick={() => bulkMutation.mutate({ ids: [...selectedIds], action: 'resolve' })}
+                  className="text-xs px-2 py-1 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 font-semibold">Resolve All</button>
+                <button onClick={() => bulkMutation.mutate({ ids: [...selectedIds], action: 'close' })}
+                  className="text-xs px-2 py-1 rounded-lg bg-gray-600 text-white hover:bg-gray-700 font-semibold">Close All</button>
+                <button onClick={() => setSelectedIds(new Set())}
+                  className="text-xs px-2 py-1 rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 font-semibold">Clear</button>
+              </div>
+            )}
+            {can.writeRecords && (
+              <button onClick={() => setCreate(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-brand-600 text-white rounded-xl text-sm font-semibold hover:bg-brand-500 transition-colors border border-brand-500/50">
+                <Plus className="w-4 h-4" /> New Ticket
+              </button>
+            )}
+          </div>
         </div>
 
         {/* KPI strip — Created / Open / Assigned / Claimed / Within TAT / Overdue */}
@@ -1668,6 +1890,42 @@ export function Tickets() {
         </div>
       </div>
 
+      {/* D-D1: Saved views strip (manager+) */}
+      {isManagerRole && (
+        <div className="px-6 py-2 border-b border-gray-200 bg-white flex items-center gap-2 flex-wrap shrink-0">
+          <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Saved Views</span>
+          {savedViews.map(v => (
+            <div key={v.id} className="flex items-center gap-0.5 group">
+              <button onClick={() => applyView(v.filters)}
+                className="px-2.5 py-1 rounded-l-lg text-xs font-medium bg-gray-100 text-gray-600 hover:bg-brand-100 hover:text-brand-700 border border-gray-200 transition-colors">
+                {v.name}{v.is_shared && <span className="ml-1 text-[9px] text-gray-400">shared</span>}
+              </button>
+              <button onClick={() => deleteViewMutation.mutate(v.id)}
+                className="px-1 py-1 rounded-r-lg text-gray-300 hover:text-red-500 bg-gray-100 border border-l-0 border-gray-200 opacity-0 group-hover:opacity-100 transition-opacity">
+                <X className="w-3 h-3" />
+              </button>
+            </div>
+          ))}
+          {!saveViewOpen ? (
+            <button onClick={() => setSaveViewOpen(true)}
+              className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium text-gray-400 hover:text-brand-600 hover:bg-brand-50 border border-dashed border-gray-200 transition-colors">
+              <Plus className="w-3 h-3" /> Save current filters
+            </button>
+          ) : (
+            <div className="flex items-center gap-1">
+              <input value={newViewName} onChange={e => setNewViewName(e.target.value)}
+                placeholder="View name…" autoFocus
+                className="text-xs border border-gray-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-brand-400 w-32"
+              />
+              <button onClick={() => createViewMutation.mutate()} disabled={!newViewName.trim() || createViewMutation.isPending}
+                className="px-2 py-1 rounded-lg text-xs bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-40">Save</button>
+              <button onClick={() => setSaveViewOpen(false)}
+                className="px-2 py-1 rounded-lg text-xs bg-gray-100 text-gray-600 hover:bg-gray-200">Cancel</button>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Card grid */}
       <div className="flex-1 overflow-y-auto p-6">
         {isLoading && (
@@ -1691,6 +1949,15 @@ export function Tickets() {
                 onOpen={setSelect}
                 onAccept={id => acceptMutation.mutate(id)}
                 onResolve={id => resolveMutation.mutate(id)}
+                onClaim={id => claimMutation.mutate(id)}
+                selected={selectedIds.has(ticket.id)}
+                onSelect={isManager ? (id, checked) => {
+                  setSelectedIds(prev => {
+                    const next = new Set(prev);
+                    checked ? next.add(id) : next.delete(id);
+                    return next;
+                  });
+                } : undefined}
               />
             ))}
           </div>

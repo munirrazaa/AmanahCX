@@ -128,10 +128,11 @@ const ROLE_CONFIG: Record<string, { label: string; icon: React.ElementType; badg
   tenant_admin: { label: 'Admin',        icon: ShieldCheck, badge: 'bg-red-100 text-red-700',       desc: 'Full workspace access' },
   manager:      { label: 'Manager',      icon: UserCheck,   badge: 'bg-orange-100 text-orange-700', desc: 'Manage team & records' },
   agent:        { label: 'Agent',        icon: Users,       badge: 'bg-blue-100 text-blue-700',     desc: 'Create & edit records' },
+  collaborator: { label: 'Collaborator', icon: Users,       badge: 'bg-teal-100 text-teal-700',     desc: 'View tickets + internal notes only' },
   viewer:       { label: 'Viewer',       icon: Eye,         badge: 'bg-gray-100 text-gray-600',     desc: 'Read-only access' },
 };
 
-const ASSIGNABLE_ROLES = ['tenant_admin', 'manager', 'agent', 'viewer'];
+const ASSIGNABLE_ROLES = ['tenant_admin', 'manager', 'agent', 'collaborator', 'viewer'];
 
 function RoleBadge({ role }: { role: string }) {
   const cfg = ROLE_CONFIG[role] ?? ROLE_CONFIG.viewer;

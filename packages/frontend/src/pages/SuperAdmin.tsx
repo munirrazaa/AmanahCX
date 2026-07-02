@@ -13,7 +13,8 @@ import {
   Loader2, X, Check, AlertTriangle, Building2, BarChart3,
   Package, Ban, Play, KeyRound, Trash2, RefreshCw, FileText,
   BarChart2, Receipt, ClipboardList, Edit2, Eye, EyeOff,
-  Lock, Calendar, ChevronDown, ChevronRight, Download,
+  Lock, Calendar, ChevronDown, ChevronRight, Download, ShoppingCart,
+  Hourglass, BadgeCheck, XCircle, CheckCircle,
 } from 'lucide-react';
 import { api } from '../services/api';
 import { useIsSuperAdmin } from '../hooks/useRole';
@@ -2926,13 +2927,266 @@ function SuperAdminSettings() {
   );
 }
 
+// ── Super Admin — Orders Management tab ───────────────────────────────────
+
+const ORDER_STATUS_CFG: Record<string, { label: string; cls: string; icon: React.ElementType }> = {
+  pending:      { label: 'Pending Review', cls: 'bg-amber-50 text-amber-700 border-amber-200',       icon: Hourglass   },
+  under_review: { label: 'Under Review',   cls: 'bg-blue-50 text-blue-700 border-blue-200',          icon: Hourglass   },
+  approved:     { label: 'Approved',       cls: 'bg-emerald-50 text-emerald-700 border-emerald-200', icon: BadgeCheck  },
+  rejected:     { label: 'Rejected',       cls: 'bg-red-50 text-red-700 border-red-200',             icon: XCircle     },
+  cancelled:    { label: 'Cancelled',      cls: 'bg-gray-100 text-gray-500 border-gray-200',         icon: X           },
+};
+
+const ORDER_TYPE_LABELS: Record<string, string> = {
+  storage_extension: 'Storage Extension',
+  new_module:        'New Module',
+  feature_request:   'Feature Request',
+  plan_upgrade:      'Plan Upgrade',
+};
+
+interface SuperOrder {
+  id: number; tenant_id: string; tenant_name?: string;
+  order_type: string; status: string; description: string;
+  requested_module?: string; requested_features?: string[]; requested_days?: number;
+  quoted_amount?: number; currency?: string;
+  payment_confirmed: boolean; payment_ref?: string; admin_note?: string;
+  requested_by_name?: string; requested_at: string; reviewed_at?: string;
+}
+
+function ReviewOrderModal({ order, onClose }: { order: SuperOrder; onClose: () => void }) {
+  const qc = useQueryClient();
+  const [note, setNote]         = useState(order.admin_note ?? '');
+  const [payRef, setPayRef]     = useState(order.payment_ref ?? '');
+  const [amount, setAmount]     = useState(order.quoted_amount?.toString() ?? '');
+  const [payConfirmed, setPayConfirmed] = useState(order.payment_confirmed);
+
+  const reviewMut  = useMutation({ mutationFn: () => api.patch(`/api/v1/governance/orders/${order.id}/review`,  { admin_note: note || undefined, quoted_amount: amount ? Number(amount) : undefined }), onSuccess: () => { qc.invalidateQueries({ queryKey: ['super-orders'] }); onClose(); } });
+  const approveMut = useMutation({ mutationFn: () => api.patch(`/api/v1/governance/orders/${order.id}/approve`, { admin_note: note || undefined, payment_ref: payRef || undefined, payment_confirmed: payConfirmed }), onSuccess: () => { qc.invalidateQueries({ queryKey: ['super-orders'] }); onClose(); } });
+  const rejectMut  = useMutation({ mutationFn: () => api.patch(`/api/v1/governance/orders/${order.id}/reject`,  { admin_note: note || undefined }), onSuccess: () => { qc.invalidateQueries({ queryKey: ['super-orders'] }); onClose(); } });
+
+  const busy = reviewMut.isPending || approveMut.isPending || rejectMut.isPending;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+          <h3 className="text-base font-semibold text-gray-900">Review Order #{order.id}</h3>
+          <button onClick={onClose}><X className="w-5 h-5 text-gray-400" /></button>
+        </div>
+        <div className="px-6 py-5 space-y-4">
+          <div className="bg-gray-50 rounded-xl p-4 space-y-1">
+            <p className="text-xs text-gray-500">Tenant: <span className="font-medium text-gray-700">{order.tenant_name ?? order.tenant_id}</span></p>
+            <p className="text-xs text-gray-500">Type: <span className="font-medium text-gray-700">{ORDER_TYPE_LABELS[order.order_type] ?? order.order_type}</span></p>
+            {order.requested_module   && <p className="text-xs text-gray-500">Module: <span className="font-medium text-gray-700">{order.requested_module}</span></p>}
+            {order.requested_days     && <p className="text-xs text-gray-500">Days: <span className="font-medium text-gray-700">+{order.requested_days}</span></p>}
+            {order.requested_features?.length ? <p className="text-xs text-gray-500">Features: <span className="font-medium text-gray-700">{order.requested_features.join(', ')}</span></p> : null}
+            <p className="text-xs text-gray-600 mt-2 border-t border-gray-200 pt-2">{order.description}</p>
+          </div>
+
+          <div className="space-y-3">
+            <div>
+              <label className="text-xs font-medium text-gray-500 block mb-1">Quoted Amount (USD)</label>
+              <input type="number" min={0} step={0.01} value={amount} onChange={e => setAmount(e.target.value)}
+                placeholder="0.00"
+                className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400" />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-500 block mb-1">Payment Reference</label>
+              <input type="text" value={payRef} onChange={e => setPayRef(e.target.value)}
+                placeholder="Invoice / transaction ID…"
+                className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400" />
+            </div>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" checked={payConfirmed} onChange={e => setPayConfirmed(e.target.checked)}
+                className="rounded accent-brand-600" />
+              <span className="text-sm text-gray-700">Payment confirmed</span>
+            </label>
+            <div>
+              <label className="text-xs font-medium text-gray-500 block mb-1">Admin Note (visible to tenant)</label>
+              <textarea rows={3} value={note} onChange={e => setNote(e.target.value)}
+                placeholder="Optional note for the tenant…"
+                className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-brand-400" />
+            </div>
+          </div>
+        </div>
+        <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-between gap-2">
+          <div className="flex gap-2">
+            {['pending'].includes(order.status) && (
+              <button onClick={() => reviewMut.mutate()} disabled={busy}
+                className="px-3 py-2 rounded-xl text-xs font-semibold border border-blue-200 text-blue-700 hover:bg-blue-50 disabled:opacity-40">
+                Mark Under Review
+              </button>
+            )}
+            {['pending','under_review'].includes(order.status) && (
+              <button onClick={() => rejectMut.mutate()} disabled={busy}
+                className="px-3 py-2 rounded-xl text-xs font-semibold border border-red-200 text-red-700 hover:bg-red-50 disabled:opacity-40">
+                Reject
+              </button>
+            )}
+          </div>
+          <div className="flex gap-2 ml-auto">
+            <button onClick={onClose} className="px-4 py-2 rounded-xl text-sm text-gray-600 hover:bg-gray-50 border border-gray-200">Cancel</button>
+            {['pending','under_review'].includes(order.status) && (
+              <button onClick={() => approveMut.mutate()} disabled={busy || !payConfirmed}
+                className="px-4 py-2 rounded-xl text-sm font-semibold bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40">
+                {approveMut.isPending ? 'Approving…' : 'Approve & Provision'}
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SuperAdminOrdersTab() {
+  const [statusFilter, setStatusFilter] = useState('');
+  const [typeFilter,   setTypeFilter]   = useState('');
+  const [reviewing, setReviewing]       = useState<SuperOrder | null>(null);
+
+  const { data: orders = [], isLoading } = useQuery<SuperOrder[]>({
+    queryKey: ['super-orders', statusFilter, typeFilter],
+    queryFn: () => api.get('/api/v1/governance/orders', {
+      params: { ...(statusFilter && { status: statusFilter }), ...(typeFilter && { type: typeFilter }) },
+    }).then(r => r.data.data),
+  });
+
+  const counts = {
+    pending:      orders.filter(o => o.status === 'pending').length,
+    under_review: orders.filter(o => o.status === 'under_review').length,
+    approved:     orders.filter(o => o.status === 'approved').length,
+    rejected:     orders.filter(o => o.status === 'rejected').length,
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+            <ShoppingCart className="w-5 h-5 text-brand-600" /> Tenant Orders
+          </h2>
+          <p className="text-sm text-gray-500 mt-0.5">Review and approve upgrade requests from workspaces</p>
+        </div>
+      </div>
+
+      {/* KPI chips */}
+      <div className="grid grid-cols-4 gap-3">
+        {[
+          { label: 'Awaiting Review', value: counts.pending,      cls: counts.pending > 0 ? 'border-amber-200 bg-amber-50 text-amber-700' : '' },
+          { label: 'Under Review',    value: counts.under_review, cls: counts.under_review > 0 ? 'border-blue-200 bg-blue-50 text-blue-700' : '' },
+          { label: 'Approved',        value: counts.approved,     cls: 'border-emerald-200 bg-emerald-50 text-emerald-700' },
+          { label: 'Rejected',        value: counts.rejected,     cls: 'border-gray-200 bg-gray-50 text-gray-500' },
+        ].map(k => (
+          <div key={k.label} className={`rounded-xl border px-4 py-3 ${k.cls || 'border-gray-100 bg-white'}`}>
+            <p className="text-xs opacity-70">{k.label}</p>
+            <p className="text-2xl font-bold mt-0.5">{k.value}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Filters */}
+      <div className="flex gap-3">
+        <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
+          className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400">
+          <option value="">All Statuses</option>
+          {Object.entries(ORDER_STATUS_CFG).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+        </select>
+        <select value={typeFilter} onChange={e => setTypeFilter(e.target.value)}
+          className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400">
+          <option value="">All Types</option>
+          {Object.entries(ORDER_TYPE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+        </select>
+      </div>
+
+      {/* Table */}
+      {isLoading && <div className="flex justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-brand-400" /></div>}
+      {!isLoading && orders.length === 0 && (
+        <div className="text-center py-16 bg-white rounded-2xl border border-dashed border-gray-200">
+          <ShoppingCart className="w-10 h-10 mx-auto text-gray-200 mb-3" />
+          <p className="text-gray-500 font-medium">No orders match the filter</p>
+        </div>
+      )}
+      {!isLoading && orders.length > 0 && (
+        <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-100 text-xs text-gray-400 font-medium uppercase tracking-wider">
+                <th className="text-left px-4 py-3">#</th>
+                <th className="text-left px-4 py-3">Tenant</th>
+                <th className="text-left px-4 py-3">Type</th>
+                <th className="text-left px-4 py-3">Details</th>
+                <th className="text-left px-4 py-3">Status</th>
+                <th className="text-left px-4 py-3">Payment</th>
+                <th className="text-left px-4 py-3">Submitted</th>
+                <th className="text-left px-4 py-3"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {orders.map(o => {
+                const cfg = ORDER_STATUS_CFG[o.status] ?? ORDER_STATUS_CFG.pending;
+                const StatusIcon = cfg.icon;
+                return (
+                  <tr key={o.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
+                    <td className="px-4 py-3 text-gray-400 font-mono text-xs">{o.id}</td>
+                    <td className="px-4 py-3">
+                      <p className="font-medium text-gray-800 text-xs">{o.tenant_name ?? o.tenant_id.slice(0,8)}</p>
+                      <p className="text-gray-400 text-[10px]">{o.requested_by_name}</p>
+                    </td>
+                    <td className="px-4 py-3 text-gray-700 text-xs">{ORDER_TYPE_LABELS[o.order_type] ?? o.order_type}</td>
+                    <td className="px-4 py-3 text-gray-500 text-xs max-w-xs">
+                      <p className="line-clamp-2">{o.description}</p>
+                      {o.requested_module && <p className="text-gray-400 mt-0.5">Module: {o.requested_module}</p>}
+                      {o.requested_days   && <p className="text-gray-400 mt-0.5">+{o.requested_days} days</p>}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border font-medium ${cfg.cls}`}>
+                        <StatusIcon className="w-3 h-3" />{cfg.label}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      {o.payment_confirmed
+                        ? <span className="inline-flex items-center gap-1 text-xs text-emerald-700"><CheckCircle className="w-3 h-3" />Confirmed</span>
+                        : o.quoted_amount
+                          ? <span className="text-xs text-amber-600">Quoted {o.currency ?? 'USD'} {Number(o.quoted_amount).toFixed(2)}</span>
+                          : <span className="text-xs text-gray-400">—</span>}
+                    </td>
+                    <td className="px-4 py-3 text-xs text-gray-400">
+                      {new Date(o.requested_at).toLocaleDateString('en-US', { day:'2-digit', month:'short', year:'numeric' })}
+                    </td>
+                    <td className="px-4 py-3">
+                      {['pending','under_review'].includes(o.status) && (
+                        <button onClick={() => setReviewing(o)}
+                          className="text-xs px-3 py-1.5 rounded-lg border border-brand-200 text-brand-700 hover:bg-brand-50 font-medium">
+                          Review
+                        </button>
+                      )}
+                      {['approved','rejected'].includes(o.status) && (
+                        <button onClick={() => setReviewing(o)}
+                          className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50">
+                          View
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {reviewing && <ReviewOrderModal order={reviewing} onClose={() => setReviewing(null)} />}
+    </div>
+  );
+}
+
 // ── Main page ──────────────────────────────────────────────────────────────
 export function SuperAdmin() {
   const isSuperAdmin = useIsSuperAdmin();
   if (!isSuperAdmin) return <Navigate to="/dashboard" replace />;
 
   const qc = useQueryClient();
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'tenants' | 'roles' | 'sub-admins' | 'billing' | 'reports' | 'catalogue' | 'settings'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'tenants' | 'roles' | 'sub-admins' | 'billing' | 'reports' | 'catalogue' | 'orders' | 'settings'>('dashboard');
   const [search, setSearch] = useState('');
   const [planFilter, setPlanFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -2985,8 +3239,9 @@ export function SuperAdmin() {
             { key: 'dashboard',  label: 'Dashboard',        icon: BarChart3   },
             { key: 'tenants',    label: 'Tenants',          icon: Building2   },
             { key: 'billing',    label: 'Billing',          icon: TrendingUp  },
-            { key: 'catalogue',  label: 'Module Catalogue', icon: Package     },
-            { key: 'roles',      label: 'Sub-Admin Roles',  icon: Shield      },
+            { key: 'catalogue',  label: 'Module Catalogue', icon: Package        },
+            { key: 'orders',     label: 'Tenant Orders',    icon: ShoppingCart   },
+            { key: 'roles',      label: 'Sub-Admin Roles',  icon: Shield         },
             { key: 'sub-admins', label: 'Sub-Admins',       icon: Users       },
             { key: 'reports',    label: 'Reports',          icon: BarChart2   },
             { key: 'settings',   label: 'Settings',         icon: Lock        },
@@ -3008,6 +3263,7 @@ export function SuperAdmin() {
         {activeTab === 'dashboard'  && <DashboardTab />}
         {activeTab === 'billing'    && <PlatformBillingTab tenants={tenants} />}
         {activeTab === 'catalogue'  && <CatalogueTab />}
+        {activeTab === 'orders'     && <SuperAdminOrdersTab />}
         {activeTab === 'roles'      && <PlatformRolesTab />}
         {activeTab === 'sub-admins' && <SubAdminsTab />}
         {activeTab === 'reports'    && <SuperAdminReports />}

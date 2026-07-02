@@ -14,11 +14,34 @@ const LOCKOUT_DURATION_S   = 15 * 60;    // 15 minutes initial lockout
 const LOCKOUT_KEY          = (tenantId: string, email: string) => `lockout:${tenantId}:${email.toLowerCase()}`;
 const FAIL_COUNT_KEY       = (tenantId: string, email: string) => `loginfail:${tenantId}:${email.toLowerCase()}`;
 const BLOCKLIST_KEY        = (jti: string) => `blocklist:${jti}`;
+const USER_REVOKED_KEY     = (userId: string) => `user_revoked:${userId}`;
+const JWT_MAX_TTL_S        = 48 * 60 * 60; // 48 h — generous cover for any token lifetime
 
 /** Check whether a JTI is in the token revocation blocklist */
 export async function isTokenRevoked(redis: RedisClient, jti: string): Promise<boolean> {
   const val = await redis.get(BLOCKLIST_KEY(jti));
   return val !== null;
+}
+
+/**
+ * G-R3 — ISO 27001 A.9.2.6
+ * Mark ALL tokens for a user as revoked by recording the deactivation timestamp.
+ * Auth middleware rejects any JWT whose iat is before this timestamp.
+ * Call on user deactivation; call with null to clear on reactivation.
+ */
+export async function revokeUserSessions(redis: RedisClient, userId: string, deactivatedAt: Date | null): Promise<void> {
+  if (deactivatedAt === null) {
+    await redis.del(USER_REVOKED_KEY(userId));
+  } else {
+    const ts = Math.floor(deactivatedAt.getTime() / 1000).toString();
+    await redis.setex(USER_REVOKED_KEY(userId), JWT_MAX_TTL_S, ts);
+  }
+}
+
+/** Return the deactivation unix-second timestamp if the user's sessions are revoked, else null */
+export async function getUserRevokedAt(redis: RedisClient, userId: string): Promise<number | null> {
+  const val = await redis.get(USER_REVOKED_KEY(userId));
+  return val !== null ? parseInt(val, 10) : null;
 }
 
 /** Add a JTI to the revocation blocklist with a TTL matching token expiry */

@@ -14,7 +14,8 @@ import { getSector, SECTORS } from '@crm/shared';
 export function sectorRoutes(db: DatabaseClient) {
   return async function (fastify: FastifyInstance) {
 
-    const authHandler = [requireScope('admin:read')];
+    const authHandler  = [requireScope('admin:read')];
+    const readHandler  = [requireScope('tickets:read')];   // agents + managers + admins
     const writeHandler = [requireScope('admin:write')];
 
     // ── GET /api/v1/sector  —  sector + all fields ───────────────────────
@@ -51,14 +52,18 @@ export function sectorRoutes(db: DatabaseClient) {
     });
 
     // ── GET /api/v1/sector/fields  —  just the field list ───────────────
-    fastify.get('/fields', { preHandler: authHandler }, async (req, reply) => {
+    fastify.get('/fields', { preHandler: readHandler }, async (req, reply) => {
       const tenantId = req.tenant.id;
+      const entity = (req.query as any).entity ?? 'contact';
+      const validEntities = ['contact', 'ticket', 'deal'];
+      if (!validEntities.includes(entity)) return reply.code(400).send({ success: false, error: { code: 'BAD_REQUEST', message: 'entity must be contact, ticket, or deal' } });
       const fields = await db.withTenant(tenantId, async (client) => {
         const r = await client.query(
-          `SELECT id, name, label, field_type, options, is_required, sort_order
+          `SELECT id, name, label, field_type, options, is_required, sort_order, entity
            FROM custom_field_definitions
-           WHERE entity = 'contact'
+           WHERE entity = $1
            ORDER BY sort_order, label`,
+          [entity],
         );
         return r.rows;
       });
@@ -70,6 +75,7 @@ export function sectorRoutes(db: DatabaseClient) {
       name:        z.string().min(1).regex(/^[a-z0-9_]+$/, 'name must be snake_case'),
       label:       z.string().min(1),
       field_type:  z.enum(['text','email','phone','number','date','select','textarea','boolean']),
+      entity:      z.enum(['contact','ticket','deal']).default('contact'),
       is_required: z.boolean().default(false),
       sort_order:  z.number().int().default(100),
       options:     z.array(z.string()).optional(),
@@ -83,13 +89,13 @@ export function sectorRoutes(db: DatabaseClient) {
         const r = await client.query(
           `INSERT INTO custom_field_definitions
              (tenant_id, entity, name, label, field_type, options, is_required, sort_order)
-           VALUES ($1, 'contact', $2, $3, $4, $5, $6, $7)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
            ON CONFLICT (tenant_id, entity, name) DO UPDATE
              SET label = EXCLUDED.label, field_type = EXCLUDED.field_type,
                  options = EXCLUDED.options, is_required = EXCLUDED.is_required,
                  sort_order = EXCLUDED.sort_order
            RETURNING *`,
-          [tenantId, body.name, body.label, body.field_type,
+          [tenantId, body.entity, body.name, body.label, body.field_type,
            body.options ? JSON.stringify(body.options) : null,
            body.is_required, body.sort_order],
         );
@@ -120,7 +126,7 @@ export function sectorRoutes(db: DatabaseClient) {
              is_required = COALESCE($3, is_required),
              sort_order  = COALESCE($4, sort_order),
              options     = COALESCE($5, options)
-           WHERE id = $1 AND entity = 'contact'
+           WHERE id = $1
            RETURNING *`,
           [id, body.label ?? null, body.is_required ?? null, body.sort_order ?? null,
            body.options ? JSON.stringify(body.options) : null],
@@ -139,7 +145,7 @@ export function sectorRoutes(db: DatabaseClient) {
 
       await db.withTenant(tenantId, async (client) => {
         await client.query(
-          `DELETE FROM custom_field_definitions WHERE id = $1 AND entity = 'contact'`,
+          `DELETE FROM custom_field_definitions WHERE id = $1`,
           [id],
         );
       });

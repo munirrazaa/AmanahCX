@@ -10,16 +10,17 @@
 
 import { useAuthStore } from '../store/auth.store';
 
-type Role = 'super_admin' | 'tenant_admin' | 'operations_admin' | 'manager' | 'agent' | 'viewer' | 'policy_admin';
+type Role = 'super_admin' | 'tenant_admin' | 'operations_admin' | 'policy_admin' | 'manager' | 'agent' | 'collaborator' | 'viewer';
 
 const ROLE_RANK: Record<Role, number> = {
-  super_admin:       50,
-  tenant_admin:      40,
-  operations_admin:  35, // COO / Head of CC — cross-tenant read-only observer, no system config access
-  policy_admin:      32, // governance role — outranks manager so no operational role can manage a compliance officer
-  manager:           30,
-  agent:             20,
-  viewer:            10,
+  super_admin:      50,
+  tenant_admin:     40,
+  operations_admin: 35,
+  manager:          30,
+  policy_admin:     25,
+  agent:            20,
+  collaborator:     15, // view + internal notes only — no ticket writes
+  viewer:           10,
 };
 
 function getRank(role: string | undefined): number {
@@ -66,14 +67,16 @@ export function useIsPolicyAdmin(): boolean {
   return user?.role === 'policy_admin';
 }
 
-/**
- * Operations Admin (rank 35) — COO / Head of Contact Centre.
- * Read-only visibility across all tickets, recordings, sales, contacts, and reports.
- * No system config access (users, integrations, SLA, routing).
- */
+/** Operations Admin — cross-dept read-only observability, no ticket writes */
 export function useIsOperationsAdmin(): boolean {
   const { user } = useAuthStore();
   return user?.role === 'operations_admin';
+}
+
+/** Collaborator — view tickets + add internal notes only, no ticket status/priority changes */
+export function useIsCollaborator(): boolean {
+  const { user } = useAuthStore();
+  return user?.role === 'collaborator';
 }
 
 /**
@@ -84,24 +87,20 @@ export function useCan() {
   const { user } = useAuthStore();
   const rank = getRank(user?.role);
 
-  const isOpsAdmin = user?.role === 'operations_admin';
-
   return {
     /** Create / edit / delete contacts, deals, companies, activities */
-    writeRecords: rank >= ROLE_RANK.agent && !isOpsAdmin,
-    /** Delete contacts / deals */
-    deleteRecords: rank >= ROLE_RANK.manager && !isOpsAdmin,
+    writeRecords: rank >= ROLE_RANK.agent,
+    /** Delete contacts / deals (agent+ but managers can restrict) */
+    deleteRecords: rank >= ROLE_RANK.manager,
     /** Invite / remove team members */
-    manageTeam: rank >= ROLE_RANK.tenant_admin && !isOpsAdmin,
+    manageTeam: rank >= ROLE_RANK.tenant_admin,
     /** Change workspace settings, connectors, billing */
-    manageWorkspace: rank >= ROLE_RANK.tenant_admin && !isOpsAdmin,
+    manageWorkspace: rank >= ROLE_RANK.tenant_admin,
     /** Create / revoke API keys and webhooks */
-    manageIntegrations: rank >= ROLE_RANK.manager && !isOpsAdmin,
+    manageIntegrations: rank >= ROLE_RANK.manager,
     manageSla: user?.role === 'policy_admin',
-    /** View analytics and reports — operations_admin gets full cross-tenant view */
+    /** View analytics and reports */
     viewAnalytics: rank >= ROLE_RANK.agent,
-    /** Cross-tenant read-only visibility (operations_admin + tenant_admin + super_admin) */
-    viewAllTenantData: rank >= ROLE_RANK.operations_admin,
     /** Manage all workspaces on the platform */
     superAdminAccess: user?.role === 'super_admin',
     /** Raw role for conditional rendering */

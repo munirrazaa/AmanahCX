@@ -47,9 +47,12 @@ export function contactRoutes(db: DatabaseClient, eventBus: EventBus) {
 
       // Hard visibility filter: a user only sees contacts owned by themselves or
       // anyone beneath them in the reporting tree. Managers see their department.
-      const scopeIds = await db.withTenant(tenantId, (client) =>
-        getVisibleUserIds(client, req.user.sub, req.user.role),
-      );
+      // operations_admin sees all contacts tenant-wide (read-only cross-tenant observer).
+      const scopeIds = req.user.role === 'operations_admin'
+        ? null
+        : await db.withTenant(tenantId, (client) =>
+            getVisibleUserIds(client, req.user.sub, req.user.role),
+          );
       const scopeClause = ownerScopeSql('c.owner_id', scopeIds);
       const scopeClauseNoAlias = ownerScopeSql('owner_id', scopeIds);
 
@@ -102,6 +105,9 @@ export function contactRoutes(db: DatabaseClient, eventBus: EventBus) {
 
     // CREATE contact
     fastify.post('/', { preHandler: requireScope('contacts:write') }, async (req, reply) => {
+      if (req.user.role === 'operations_admin') {
+        return reply.code(403).send({ success: false, error: { code: 'OBSERVER_ONLY', message: 'Operations admin has read-only access. Contact changes must be made by agents or managers.' } });
+      }
       const body = CreateContactSchema.parse(req.body);
       const ownerId = body.ownerId ?? req.user.sub;
 
@@ -366,6 +372,79 @@ export function contactRoutes(db: DatabaseClient, eventBus: EventBus) {
         return { avg: avg ? Math.round(avg * 10) / 10 : null, count: rows.length, responses: rows };
       });
       return reply.send({ success: true, data });
+    });
+
+    // ── G-P4: GDPR Right-to-Erasure ────────────────────────────────────────
+    // Anonymises all PII fields on the contact + linked ticket subjects/reporters.
+    // Only tenant_admin can invoke. Logs an erasure certificate.
+    fastify.post('/:id/erase', { preHandler: requireRole('tenant_admin','super_admin') }, async (req, reply) => {
+      const { id }   = req.params as { id: string };
+      const tenantId = req.tenant.id;
+      const userId   = req.user.sub;
+      const body     = z.object({ note: z.string().max(500).optional() }).parse(req.body ?? {});
+
+      const contact = await db.withTenant(tenantId, async (client) => {
+        const r = await client.query('SELECT id, first_name, last_name, email FROM contacts WHERE id=$1', [id]);
+        return r.rows[0] ?? null;
+      });
+      if (!contact) return reply.code(404).send({ success: false, error: { code: 'NOT_FOUND', message: 'Contact not found' } });
+
+      const contactRef = `${contact.first_name ?? ''} ${contact.last_name ?? ''} <${contact.email ?? 'unknown'}>`.trim();
+
+      await db.withTenant(tenantId, async (client) => {
+        // Anonymise contact PII fields
+        await client.query(
+          `UPDATE contacts SET
+             first_name  = '[ERASED]',
+             last_name   = NULL,
+             email       = NULL,
+             phone       = NULL,
+             mobile      = NULL,
+             nic_number  = NULL,
+             company_id  = NULL,
+             notes       = NULL,
+             updated_at  = NOW()
+           WHERE id = $1`, [id]);
+
+        // Anonymise ticket reporter fields linked to this contact
+        await client.query(
+          `UPDATE tickets SET
+             reporter_name  = '[ERASED]',
+             reporter_email = NULL,
+             reporter_phone = NULL,
+             updated_at     = NOW()
+           WHERE contact_id = $1`, [id]);
+      });
+
+      // Log erasure certificate (uses super-admin connection so it survives even if tenant data changes)
+      await db.withSuperAdmin(async (c) => {
+        await c.query(
+          `INSERT INTO contact_erasures(tenant_id, contact_id, contact_ref, erased_by, fields_erased, note)
+           VALUES($1,$2,$3,$4,$5,$6)`,
+          [
+            tenantId, id, contactRef, userId,
+            JSON.stringify(['first_name','last_name','email','phone','mobile','nic_number','notes','reporter_name','reporter_email','reporter_phone']),
+            body.note ?? null,
+          ]
+        );
+      });
+
+      return reply.send({ success: true, message: `Contact ${contactRef} has been anonymised. Erasure certificate logged.` });
+    });
+
+    // ── G-P4: List erasure certificates (tenant_admin audit trail) ─────────
+    fastify.get('/erasures', { preHandler: requireRole('tenant_admin','super_admin') }, async (req, reply) => {
+      const tenantId = req.tenant.id;
+      const rows = await db.withSuperAdmin(async (c) => {
+        const r = await c.query(
+          `SELECT ce.*, u.name as erased_by_name
+           FROM contact_erasures ce
+           LEFT JOIN users u ON ce.erased_by = u.id
+           WHERE ce.tenant_id = $1
+           ORDER BY ce.erased_at DESC LIMIT 100`, [tenantId]);
+        return r.rows;
+      });
+      return reply.send({ success: true, data: rows });
     });
   };
 }

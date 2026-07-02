@@ -6,7 +6,7 @@ import {
   CheckSquare, BarChart3, Settings as SettingsIcon, Zap, Shield,
   LogOut, CreditCard, BarChart2, LifeBuoy, List, Clock, Mail, Bot,
   FileText, Layers, MessageCircle, Key, Bell, Lock, ChevronDown, ChevronRight,
-  FileSpreadsheet,
+  FileSpreadsheet, ShoppingCart, BookOpen, Tag,
 } from 'lucide-react';
 import { useAuthStore } from './store/auth.store';
 import { useIsSuperAdmin, useIsAdmin, useIsTenantAdmin, useHasRole, useIsPolicyAdmin } from './hooks/useRole';
@@ -62,8 +62,9 @@ import { EmailAnalytics }    from './pages/EmailAnalytics';
 import { IntegrationHealth } from './pages/IntegrationHealth';
 import { TeamMessaging }     from './pages/TeamMessaging';
 import CsatSurvey            from './pages/CsatSurvey';
-import { CallRecordings }    from './pages/CallRecordings';
-import { CallInsights }      from './pages/CallInsights';
+import { GovernancePage }    from './pages/Governance';
+import { OrdersPage }        from './pages/Orders';
+import { CustomFieldsPage }  from './pages/CustomFields';
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 30_000, retry: 1 } },
@@ -167,7 +168,6 @@ function Sidebar() {
   const isTenantAdmin = useIsTenantAdmin();
   const isManager     = useHasRole('manager');
   const isPolicyAdmin = useIsPolicyAdmin();
-  const isOperationsAdmin = useHasRole('operations_admin');
   const [analyticsOpen, setAnalyticsOpen] = React.useState(true);
 
   // Fetch active modules from the API — drives the sidebar dynamically
@@ -257,10 +257,25 @@ function Sidebar() {
               className={({ isActive }) => `flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm transition-all ${isActive ? 'text-white font-semibold' : 'text-white/60 hover:text-white hover:bg-white/10'}`}
               style={({ isActive }) => isActive ? { background: 'linear-gradient(135deg, rgba(41,171,226,0.25) 0%, rgba(77,139,60,0.15) 100%)', borderLeft: '2px solid #29ABE2' } : {}}
             ><Clock className="w-4 h-4 shrink-0" />Routing & SLA</NavLink>
+            <NavLink to="/admin/custom-fields"
+              className={({ isActive }) => `flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm transition-all ${isActive ? 'text-white font-semibold' : 'text-white/60 hover:text-white hover:bg-white/10'}`}
+              style={({ isActive }) => isActive ? { background: 'linear-gradient(135deg, rgba(41,171,226,0.25) 0%, rgba(77,139,60,0.15) 100%)', borderLeft: '2px solid #29ABE2' } : {}}
+            ><Tag className="w-4 h-4 shrink-0" />Custom Fields</NavLink>
             <NavLink to="/tickets"
               className={({ isActive }) => `flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm transition-all ${isActive ? 'text-white font-semibold' : 'text-white/60 hover:text-white hover:bg-white/10'}`}
               style={({ isActive }) => isActive ? { background: 'linear-gradient(135deg, rgba(41,171,226,0.25) 0%, rgba(77,139,60,0.15) 100%)', borderLeft: '2px solid #29ABE2' } : {}}
             ><LifeBuoy className="w-4 h-4 shrink-0" />Tickets</NavLink>
+
+            {/* Governance & Orders section */}
+            <p className="px-3 pt-3 pb-1 text-[10px] font-bold text-brand-300/60 uppercase tracking-widest">Governance</p>
+            <NavLink to="/governance"
+              className={({ isActive }) => `flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm transition-all ${isActive ? 'text-white font-semibold' : 'text-white/60 hover:text-white hover:bg-white/10'}`}
+              style={({ isActive }) => isActive ? { background: 'linear-gradient(135deg, rgba(41,171,226,0.25) 0%, rgba(77,139,60,0.15) 100%)', borderLeft: '2px solid #29ABE2' } : {}}
+            ><BookOpen className="w-4 h-4 shrink-0" />Data & Privacy Policies</NavLink>
+            <NavLink to="/orders"
+              className={({ isActive }) => `flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm transition-all ${isActive ? 'text-white font-semibold' : 'text-white/60 hover:text-white hover:bg-white/10'}`}
+              style={({ isActive }) => isActive ? { background: 'linear-gradient(135deg, rgba(41,171,226,0.25) 0%, rgba(77,139,60,0.15) 100%)', borderLeft: '2px solid #29ABE2' } : {}}
+            ><ShoppingCart className="w-4 h-4 shrink-0" />Orders & Upgrades</NavLink>
 
             {/* Security section */}
             <p className="px-3 pt-3 pb-1 text-[10px] font-bold text-brand-300/60 uppercase tracking-widest">Security</p>
@@ -550,48 +565,6 @@ function Sidebar() {
           </div>
         )}
 
-        {/* CX Insights — operations_admin, policy_admin, managers */}
-        {(isOperationsAdmin || isPolicyAdmin || isManager) && !isTenantAdmin && (
-          <NavLink to="/cx-insights"
-            className={({ isActive }) =>
-              `flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm transition-all ${
-                isActive ? 'text-white font-semibold' : 'text-white/60 hover:text-white hover:bg-white/10'
-              }`
-            }
-            style={({ isActive }) => isActive ? {
-              background: 'linear-gradient(135deg, rgba(41,171,226,0.25) 0%, rgba(77,139,60,0.15) 100%)',
-              borderLeft: '2px solid #29ABE2',
-            } : {}}
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-            </svg>
-            CX Insights
-          </NavLink>
-        )}
-
-        {/* Call Recordings — operations_admin, policy_admin, managers */}
-        {(isOperationsAdmin || isPolicyAdmin || isManager) && !isTenantAdmin && (
-          <NavLink to="/recordings"
-            className={({ isActive }) =>
-              `flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm transition-all ${
-                isActive ? 'text-white font-semibold' : 'text-white/60 hover:text-white hover:bg-white/10'
-              }`
-            }
-            style={({ isActive }) => isActive ? {
-              background: 'linear-gradient(135deg, rgba(41,171,226,0.25) 0%, rgba(77,139,60,0.15) 100%)',
-              borderLeft: '2px solid #29ABE2',
-            } : {}}
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-7V3" />
-            </svg>
-            Call Recordings
-          </NavLink>
-        )}
-
         {/* SLA Policies — policy_admin only (governance role) */}
         {isPolicyAdmin && (
           <NavLink to="/tickets/sla"
@@ -742,6 +715,7 @@ function AppLayout() {
           <Route path="/admin/users"   element={isTenantAdmin ? <AdminUsers /> : <Navigate to="/dashboard" replace />} />
           <Route path="/admin/modules" element={isTenantAdmin ? <AdminPageWrapper title="Modules" subtitle="Enable or disable features for your workspace"><ModulesSettings /></AdminPageWrapper> : <Navigate to="/dashboard" replace />} />
           <Route path="/admin/routing" element={(isTenantAdmin || isManager) ? <AdminPageWrapper title="Routing & SLA" subtitle="Configure how tickets and calls are assigned to your team"><RoutingSettings /></AdminPageWrapper> : <Navigate to="/dashboard" replace />} />
+          <Route path="/admin/custom-fields" element={isTenantAdmin ? <AdminPageWrapper title="Custom Fields" subtitle="Add sector-specific fields to contacts, tickets, and deals"><CustomFieldsPage /></AdminPageWrapper> : <Navigate to="/dashboard" replace />} />
           <Route path="/dashboard"    element={isSuperAdmin ? <Navigate to="/super-admin" replace /> : op(<Dashboard />)} />
           <Route path="/contacts"     element={op(<Contacts />)} />
           <Route path="/companies"   element={op(<Companies />)} />
@@ -758,8 +732,6 @@ function AppLayout() {
           <Route path="/voice-bot"         element={op(<VoiceBotConfig />)} />
           <Route path="/voice-bot/calls"   element={op(<VoiceBotCalls />)} />
           <Route path="/voice-bot/tickets" element={op(<VoiceBotTickets />)} />
-          <Route path="/recordings"        element={op(<CallRecordings />)} />
-          <Route path="/cx-insights"      element={op(<CallInsights />)} />
           <Route path="/contacts/:id"      element={op(<ContactDetail />)} />
           <Route path="/activities"  element={op(<Activities />)} />
           <Route path="/analytics"   element={op(<Analytics />)} />
@@ -787,6 +759,8 @@ function AppLayout() {
           <Route path="/sales/templates"  element={op(<SalesTemplates />)} />
           <Route path="/sales/builder"    element={op(<SalesBuilder />)} />
           <Route path="/sales/settings"   element={op(<SalesSettingsPage />)} />
+          <Route path="/governance"   element={isTenantAdmin ? <GovernancePage /> : <Navigate to="/dashboard" replace />} />
+          <Route path="/orders"       element={isTenantAdmin ? <OrdersPage /> : <Navigate to="/dashboard" replace />} />
           <Route path="*"            element={<Navigate to={homePath} replace />} />
         </Routes>
       </main>

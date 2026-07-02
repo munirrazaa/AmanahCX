@@ -3,7 +3,7 @@
 _Plain-language reference for workspace managers, agents, and admins.
 Updated automatically on every release. Each section covers one feature: who uses it, what it does, and exactly how to operate it._
 
-Last updated: 2026-07-01
+Last updated: 2026-06-29
 
 ---
 
@@ -992,48 +992,6 @@ Managers can reroute a ticket to a different agent at any time (emergency rerout
 
 ---
 
-## Call Recordings
-
-The Call Recordings page lets authorised staff listen to recorded calls, read transcripts, and manage legal holds.
-
-**Who can access:**
-- Operations Admin — all recordings across all agents
-- Policy Admin — all recordings, plus legal hold controls
-- Manager — recordings for their team only
-- Agent — only their own call recordings
-
-**How to use:**
-1. Click **Call Recordings** in the left sidebar.
-2. Use the filter bar to narrow by type (All / Voice Bot / Human), topic/tag, or date range.
-3. Click any row to expand it — audio player and transcript appear below.
-4. Policy admins see a **Legal Hold** toggle on each recording. Enabling it prevents the recording from being auto-deleted.
-5. Pagination: 20 recordings per page. Use Previous / Next to browse.
-
----
-
-## CX Insights Dashboard
-
-The CX Insights page gives a full call-centre analytics view: KPI cards, charts, topic heatmap, and topic-filtered recordings.
-
-**Who can access:** Operations Admin, Policy Admin, Manager
-
-**Filters at the top:**
-- **All Calls / Voice Bot / Human** — switches every chart and metric to show only that call type
-- **Date range** — enter any from/to date
-
-**What you see:**
-| Section | What it shows |
-|---|---|
-| KPI cards | Total calls, inbound, outbound, bot vs human, avg handle time, recordings, tagged calls, longest/shortest |
-| Call Volume by Day | Stacked bar: purple = bot calls, green = human calls |
-| Calls by Hour of Day | Peak and off-peak hours; blue bars = business hours |
-| Inbound vs Outbound | Donut chart with percentages |
-| Duration Buckets | How long calls lasted (< 1 min → > 10 min) |
-| Top Agents | Ranked by call volume with avg handle time |
-| Topic Word Cloud | Topics discussed — bigger text = more calls on that topic; click to filter |
-| Topic Heatmap | Same topics, day-by-day grid showing call volume by colour intensity |
-| Filter chips | Click any topic chip to filter the recordings list below |
-| Recordings list | Calls matching the selected filters; expandable for audio and transcript |
 ## Escalating a Ticket to a Manager (Agent)
 
 If a ticket requires manager attention (complex issue, angry customer, policy exception), agents can escalate it directly from the ticket panel.
@@ -1069,9 +1027,9 @@ No setup is needed by agents — fields are provisioned automatically when the w
 
 ## Role Permissions Quick Reference
 
-A full HTML reference document (v2.1) covering all roles, the complete complaint flow, the sales end-to-end flow, role login dashboard mockups, sector-wise CRM fields, and global standards benchmarking is available at:
+A full HTML reference document covering all six roles (tenant admin, voice bot, manager, line manager, agent, viewer) and the complete voice-bot-to-resolution information flow is available at:
 
 - Project root: `AmanahCX-Roles-and-Flow.html`
-- Docs folder: `docs/2026-07-01-1of2/AmanahCX-Roles-and-Flow.html`
+- Desktop copy: `AmanahCX-Roles-and-Flow.html`
 
 Open in any browser — no login required.

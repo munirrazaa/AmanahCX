@@ -1,8 +1,9 @@
 import crypto from 'crypto';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import type { DatabaseClient } from '@crm/core';
+import type { DatabaseClient, RedisClient } from '@crm/core';
 import { requireRole } from '../middlewares/auth.middleware';
+import { revokeUserSessions } from './auth';
 import { EmailService } from '../services/email.service';
 import { MODULE_CATALOG } from './super-admin';
 
@@ -158,7 +159,7 @@ const WorkspaceSchema = z.object({
   currency:   z.string().length(3).optional(),
 });
 
-export function settingsRoutes(db: DatabaseClient) {
+export function settingsRoutes(db: DatabaseClient, redis: RedisClient) {
   const emailSvc = new EmailService(db);
 
   return async function (fastify: FastifyInstance) {
@@ -677,6 +678,15 @@ export function settingsRoutes(db: DatabaseClient) {
       });
 
       if (!user) return reply.code(404).send({ success: false, error: { code: 'NOT_FOUND', message: 'User not found' } });
+
+      // G-R3 — ISO 27001 A.9.2.6: immediately revoke all live tokens when deactivating.
+      // On reactivation clear the revocation key so the user can log in again.
+      if (is_active === false) {
+        revokeUserSessions(redis, userId, new Date()).catch(() => {});
+      } else if (is_active === true) {
+        revokeUserSessions(redis, userId, null).catch(() => {});
+      }
+
       return reply.send({ success: true, data: user });
     });
 

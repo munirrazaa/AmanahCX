@@ -31,11 +31,13 @@ export function dealRoutes(db: DatabaseClient, eventBus: EventBus) {
 
     // List all pipelines for this tenant
     fastify.get('/pipelines', { preHandler: requireScope('deals:read') }, async (req, reply) => {
-      // Scope the open-deal counts and pipeline value to what this user may see
-      // (own + reportees), so summary figures match the filtered deal list.
-      const scopeIds = await db.withTenant(req.tenant.id, (client) =>
-        getVisibleUserIds(client, req.user.sub, req.user.role),
-      );
+      // Scope the open-deal counts and pipeline value to what this user may see.
+      // operations_admin sees all deals tenant-wide (read-only cross-tenant observer).
+      const scopeIds = req.user.role === 'operations_admin'
+        ? null
+        : await db.withTenant(req.tenant.id, (client) =>
+            getVisibleUserIds(client, req.user.sub, req.user.role),
+          );
       const dealScope = ownerScopeSql('d.owner_id', scopeIds); // '' for super_admin
       const pipelines = await db.withTenant(req.tenant.id, async (client) => {
         const result = await client.query(
@@ -72,9 +74,12 @@ export function dealRoutes(db: DatabaseClient, eventBus: EventBus) {
       const offset = (Number(page) - 1) * Number(pageSize);
 
       // Hard visibility filter — only deals owned by the user or their reportees.
-      const scopeIds = await db.withTenant(req.tenant.id, (client) =>
-        getVisibleUserIds(client, req.user.sub, req.user.role),
-      );
+      // operations_admin sees all deals tenant-wide (read-only cross-tenant observer).
+      const scopeIds = req.user.role === 'operations_admin'
+        ? null
+        : await db.withTenant(req.tenant.id, (client) =>
+            getVisibleUserIds(client, req.user.sub, req.user.role),
+          );
 
       const params: unknown[] = [];
       let where = "WHERE 1=1";
@@ -121,9 +126,12 @@ export function dealRoutes(db: DatabaseClient, eventBus: EventBus) {
       if (!pipeline) return reply.code(404).send({ success: false, error: { code: 'NOT_FOUND', message: 'Pipeline not found' } });
 
       // Hard visibility filter — only deals owned by the user or their reportees.
-      const scopeIds = await db.withTenant(req.tenant.id, (client) =>
-        getVisibleUserIds(client, req.user.sub, req.user.role),
-      );
+      // operations_admin sees all deals tenant-wide (read-only cross-tenant observer).
+      const scopeIds = req.user.role === 'operations_admin'
+        ? null
+        : await db.withTenant(req.tenant.id, (client) =>
+            getVisibleUserIds(client, req.user.sub, req.user.role),
+          );
 
       const deals = await db.withTenant(req.tenant.id, async (client) => {
         const result = await client.query(
@@ -175,6 +183,9 @@ export function dealRoutes(db: DatabaseClient, eventBus: EventBus) {
 
     // Create deal
     fastify.post('/', { preHandler: requireScope('deals:write') }, async (req, reply) => {
+      if (req.user.role === 'operations_admin') {
+        return reply.code(403).send({ success: false, error: { code: 'OBSERVER_ONLY', message: 'Operations admin has read-only access. Deal changes must be made by agents or managers.' } });
+      }
       const body = CreateDealSchema.parse(req.body);
       const ownerId = body.ownerId ?? req.user.sub;
 
