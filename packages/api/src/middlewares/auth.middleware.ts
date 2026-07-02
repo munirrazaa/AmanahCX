@@ -2,7 +2,7 @@ import type { FastifyRequest, FastifyReply } from 'fastify';
 import type { AuthToken, ApiScope, UserRole } from '@crm/shared';
 import { DatabaseClient, RedisClient } from '@crm/core';
 import crypto from 'node:crypto';
-import { isTokenRevoked } from '../routes/auth';
+import { isTokenRevoked, getUserRevokedAt } from '../routes/auth';
 
 declare module 'fastify' {
   interface FastifyRequest {
@@ -31,10 +31,20 @@ export function buildAuthMiddleware(db: DatabaseClient, redis: RedisClient) {
     if (authHeader.startsWith('Bearer ')) {
       try {
         await (req as any).jwtVerify();
-        // Check token revocation blocklist (logout / password change invalidation)
+        // Check per-token revocation blocklist (logout / password change)
         const jti = (req.user as any)?.jti;
         if (jti && await isTokenRevoked(redis, jti)) {
           return reply.code(401).send({ success: false, error: { code: 'TOKEN_REVOKED', message: 'Token has been revoked. Please log in again.' } });
+        }
+        // G-R3 — ISO 27001 A.9.2.6: user-level revocation on deactivation
+        // If the user was deactivated after this token was issued, reject it immediately.
+        const userId = (req.user as any)?.sub;
+        if (userId) {
+          const revokedAt = await getUserRevokedAt(redis, userId);
+          const tokenIat  = (req.user as any)?.iat ?? 0;
+          if (revokedAt !== null && tokenIat < revokedAt) {
+            return reply.code(401).send({ success: false, error: { code: 'ACCOUNT_DEACTIVATED', message: 'Your account has been deactivated. Please contact your administrator.' } });
+          }
         }
       } catch {
         return reply.code(401).send({ success: false, error: { code: 'INVALID_TOKEN', message: 'Invalid or expired token' } });
@@ -98,12 +108,13 @@ export function requireRole(...roles: UserRole[]) {
 
 // Role numeric values for comparison
 const ROLE_LEVEL: Record<string, number> = {
-  super_admin:  50,
-  tenant_admin: 40,
-  manager:      30,
-  policy_admin: 25,
-  agent:        20,
-  viewer:       10,
+  super_admin:       50,
+  tenant_admin:      40,
+  operations_admin:  35,
+  policy_admin:      32, // governance role — outranks manager so no operational role can manage a compliance officer
+  manager:           30,
+  agent:             20,
+  viewer:            10,
 };
 
 // Minimum role required for each scope.

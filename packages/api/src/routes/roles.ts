@@ -232,7 +232,7 @@ export function defaultPermissions(baseRole: string): Record<string, boolean> {
 
 const ROLE_HIERARCHY: Record<string, number> = {
   super_admin: 50, platform_admin: 45, tenant_admin: 40,
-  manager: 30, policy_admin: 25, agent: 20, viewer: 10,
+  operations_admin: 35, policy_admin: 32, manager: 30, agent: 20, viewer: 10,
 };
 
 export function rolesRoutes(db: DatabaseClient) {

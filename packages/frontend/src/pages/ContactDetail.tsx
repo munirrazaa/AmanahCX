@@ -5,10 +5,11 @@ import {
   ArrowLeft, User, Building2, Mail, Phone, Tag,
   TrendingUp, CheckSquare, LifeBuoy,
   Edit2, Save, X, Loader2,
-  Clock, Calendar, PhoneCall, CreditCard, ExternalLink, Plus, Star,
+  Clock, Calendar, PhoneCall, CreditCard, ExternalLink, Plus, Star, Trash2, ShieldAlert,
 } from 'lucide-react';
 import { api } from '../services/api';
 import { formatCurrency } from '../utils/format';
+import { useIsAdmin } from '../hooks/useRole';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -466,8 +467,19 @@ const TABS = [
 export function ContactDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const [tab, setTab]       = useState<typeof TABS[number]['key']>('timeline');
-  const [editing, setEditing] = useState(false);
+  const isAdmin = useIsAdmin();
+  const qc = useQueryClient();
+  const [tab, setTab]           = useState<typeof TABS[number]['key']>('timeline');
+  const [editing, setEditing]   = useState(false);
+  const [eraseStep, setEraseStep] = useState<0|1|2>(0); // 0=hidden 1=confirm 2=done
+
+  const eraseMutation = useMutation({
+    mutationFn: () => api.post(`/api/v1/contacts/${id}/erase`, {}),
+    onSuccess: () => {
+      setEraseStep(2);
+      qc.invalidateQueries({ queryKey: ['contact', id] });
+    },
+  });
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['contact', id],
@@ -621,8 +633,8 @@ export function ContactDetail() {
           </div>
         )}
 
-        {/* Edit button */}
-        <div className="px-5 py-4 mt-auto">
+        {/* Edit + GDPR erase buttons */}
+        <div className="px-5 py-4 mt-auto space-y-2">
           <button
             onClick={() => setEditing(true)}
             className="w-full flex items-center justify-center gap-2 py-2 border border-gray-200 rounded-lg text-sm text-gray-700 hover:bg-gray-50"
@@ -630,6 +642,34 @@ export function ContactDetail() {
             <Edit2 className="w-3.5 h-3.5" />
             Edit Contact
           </button>
+          {/* G-P4: GDPR right-to-erasure — tenant_admin only */}
+          {isAdmin && eraseStep === 0 && (
+            <button onClick={() => setEraseStep(1)}
+              className="w-full flex items-center justify-center gap-2 py-2 border border-red-200 rounded-lg text-sm text-red-600 hover:bg-red-50">
+              <Trash2 className="w-3.5 h-3.5" /> Erase Personal Data (GDPR)
+            </button>
+          )}
+          {isAdmin && eraseStep === 1 && (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-3 space-y-2">
+              <p className="text-xs font-semibold text-red-700 flex items-center gap-1.5">
+                <ShieldAlert className="w-3.5 h-3.5" /> Irreversible — erase PII?
+              </p>
+              <p className="text-[11px] text-red-600">Name, email, phone, and NIC will be anonymised. Linked ticket data also cleared. An audit certificate will be saved.</p>
+              <div className="flex gap-2">
+                <button onClick={() => eraseMutation.mutate()} disabled={eraseMutation.isPending}
+                  className="flex-1 py-1.5 rounded-md text-xs font-semibold bg-red-600 text-white hover:bg-red-700 disabled:opacity-40">
+                  {eraseMutation.isPending ? 'Erasing…' : 'Yes, Erase'}
+                </button>
+                <button onClick={() => setEraseStep(0)}
+                  className="flex-1 py-1.5 rounded-md text-xs font-semibold bg-gray-200 text-gray-700 hover:bg-gray-300">
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+          {eraseStep === 2 && (
+            <p className="text-xs text-center text-emerald-600 font-medium py-1">Personal data erased. Audit log saved.</p>
+          )}
         </div>
       </div>
 

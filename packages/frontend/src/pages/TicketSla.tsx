@@ -34,6 +34,7 @@ interface SlaPolicy {
   is_active: boolean;
   reminder_schedule: ReminderStep[];
   ticket_type?: string | null;
+  policy_status?: 'draft' | 'published';
 }
 
 interface Holiday {
@@ -620,8 +621,9 @@ function SlaModal({ policy, onClose }: { policy?: SlaPolicy; onClose: () => void
 
 // ── Policy card ────────────────────────────────────────────────────────────
 
-function PolicyCard({ p, onEdit, onDelete, canEdit }: {
+function PolicyCard({ p, onEdit, onDelete, canEdit, onTogglePublish }: {
   p: SlaPolicy; onEdit: () => void; onDelete: () => void; canEdit: boolean;
+  onTogglePublish?: () => void;
 }) {
   const pc       = PRIORITY_CFG[p.priority] ?? PRIORITY_CFG.medium;
   const schedule = p.reminder_schedule ?? [];
@@ -639,6 +641,12 @@ function PolicyCard({ p, onEdit, onDelete, canEdit }: {
             <h3 className="font-semibold text-gray-900">{p.name}</h3>
             {p.ticket_type && <span className="text-xs text-purple-700 bg-purple-50 border border-purple-100 px-2 py-0.5 rounded-full capitalize">{p.ticket_type}</span>}
             {!p.is_active      && <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">Inactive</span>}
+            {/* G-P5: Draft/Published badge */}
+            {(p.policy_status === 'draft' || p.policy_status === undefined) ? (
+              <span className="text-xs text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">Draft</span>
+            ) : (
+              <span className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">Published</span>
+            )}
             {p.business_hours_only && (() => {
               const sched = p.business_hours_schedule ?? {};
               const activeDays = DAYS.filter(d => sched[d]?.enabled).map(d => DAY_LABELS[d]);
@@ -651,6 +659,16 @@ function PolicyCard({ p, onEdit, onDelete, canEdit }: {
         </div>
         {canEdit && (
           <div className="flex gap-1 shrink-0">
+            {onTogglePublish && (
+              <button onClick={onTogglePublish}
+                className={`px-2 py-1 rounded-lg text-xs font-semibold border transition-colors ${
+                  p.policy_status === 'published'
+                    ? 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'
+                    : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                }`}>
+                {p.policy_status === 'published' ? 'Unpublish' : 'Publish'}
+              </button>
+            )}
             <button onClick={onEdit} className="p-1.5 text-gray-400 hover:text-brand-600 hover:bg-brand-50 rounded-lg"><Pencil className="w-4 h-4" /></button>
             <button onClick={onDelete} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg"><Trash2 className="w-4 h-4" /></button>
           </div>
@@ -931,6 +949,11 @@ export function TicketSla() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['sla-policies'] }),
   });
 
+  const publishMutation = useMutation({
+    mutationFn: (id: string) => api.patch(`/api/v1/tickets/sla-policies/${id}/publish`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['sla-policies'] }),
+  });
+
   return (
     <div className="p-6 max-w-4xl mx-auto space-y-6">
       {/* Header */}
@@ -999,6 +1022,7 @@ export function TicketSla() {
                   canEdit={can.manageSla}
                   onEdit={() => setEditing(p)}
                   onDelete={() => setConfirmPolicy(p)}
+                  onTogglePublish={can.manageSla ? () => publishMutation.mutate(p.id) : undefined}
                 />
               ))}
               {data.length === 0 && (

@@ -10,15 +10,17 @@
 
 import { useAuthStore } from '../store/auth.store';
 
-type Role = 'super_admin' | 'tenant_admin' | 'manager' | 'agent' | 'viewer' | 'policy_admin';
+type Role = 'super_admin' | 'tenant_admin' | 'operations_admin' | 'policy_admin' | 'manager' | 'agent' | 'collaborator' | 'viewer';
 
 const ROLE_RANK: Record<Role, number> = {
-  super_admin:  50,
-  tenant_admin: 40,
-  manager:      30,
-  policy_admin: 25, // independent governance — sits between manager and agent in rank, reports to no department
-  agent:        20,
-  viewer:       10,
+  super_admin:      50,
+  tenant_admin:     40,
+  operations_admin: 35,
+  manager:          30,
+  policy_admin:     25,
+  agent:            20,
+  collaborator:     15, // view + internal notes only — no ticket writes
+  viewer:           10,
 };
 
 function getRank(role: string | undefined): number {
@@ -63,6 +65,18 @@ export function useIsManager(): boolean {
 export function useIsPolicyAdmin(): boolean {
   const { user } = useAuthStore();
   return user?.role === 'policy_admin';
+}
+
+/** Operations Admin — cross-dept read-only observability, no ticket writes */
+export function useIsOperationsAdmin(): boolean {
+  const { user } = useAuthStore();
+  return user?.role === 'operations_admin';
+}
+
+/** Collaborator — view tickets + add internal notes only, no ticket status/priority changes */
+export function useIsCollaborator(): boolean {
+  const { user } = useAuthStore();
+  return user?.role === 'collaborator';
 }
 
 /**
