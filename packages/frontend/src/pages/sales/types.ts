@@ -44,10 +44,18 @@ export interface SalesSettings {
   companyAddress?: BillingAddress; logoUrl?: string;
 }
 
+export interface AgingCustomerRow {
+  contactId: string; customerName: string;
+  lt30: number; d30_60: number; d61_90: number; d91_180: number; d181_365: number; gt365: number;
+  total: number;
+}
+
 export interface DashboardStats {
   totalReceivable: number; overdueAmount: number; paidThisMonth: number; draftAmount: number;
   invoicesByStatus: Record<InvoiceStatus, number>;
   agingBuckets: { label: string; amount: number; count: number }[];
+  agingByCustomer: AgingCustomerRow[];
+  quotationSummary: { totalValue: number; count: number };
   topCustomers: { contactId: string; name: string; amount: number; invoiceCount: number }[];
   topDefaulters: { contactId: string; name: string; amount: number; invoiceCount: number }[];
   monthlyRevenue: { month: string; invoiced: number; collected: number }[];

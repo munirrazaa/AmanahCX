@@ -11,130 +11,13 @@ import { CSS } from '@dnd-kit/utilities';
 import { useDraggable, useDroppable } from '@dnd-kit/core'; // useDraggable for palette, useDroppable for canvas zone
 import { Save, Trash2, Eye, X, AlignLeft, AlignCenter, AlignRight, Loader2, GripVertical } from 'lucide-react';
 import { v4 as uuid } from 'uuid';
+import { api } from '../../services/api';
+import {
+  type ElementType, type ElementProps, type BuilderEl,
+  DEFAULT_PROPS, PALETTE, renderElement,
+} from './templateRenderer';
 
-type ElementType =
-  | 'logo' | 'company_info' | 'client_info' | 'invoice_details'
-  | 'line_items' | 'totals' | 'payment_info' | 'notes' | 'terms'
-  | 'signature' | 'custom_text' | 'divider' | 'spacer';
-
-interface ElementProps {
-  alignment: 'left' | 'center' | 'right';
-  fontSize: number;
-  color: string;
-  customText?: string;
-}
-
-interface BuilderEl {
-  id: string;
-  type: ElementType;
-  label: string;
-  props: ElementProps;
-}
-
-const DEFAULT_PROPS: ElementProps = { alignment: 'left', fontSize: 14, color: '#111827' };
-
-const PALETTE: { type: ElementType; label: string; icon: string }[] = [
-  { type: 'logo',            label: 'Company Logo',     icon: '🖼️' },
-  { type: 'company_info',    label: 'Company Info',     icon: '🏢' },
-  { type: 'client_info',     label: 'Client Info',      icon: '👤' },
-  { type: 'invoice_details', label: 'Invoice Details',  icon: '📋' },
-  { type: 'line_items',      label: 'Line Items Table',  icon: '📊' },
-  { type: 'totals',          label: 'Totals',           icon: '💰' },
-  { type: 'payment_info',    label: 'Payment Info',     icon: '🏦' },
-  { type: 'notes',           label: 'Notes',            icon: '📝' },
-  { type: 'terms',           label: 'Terms & Conditions', icon: '📄' },
-  { type: 'signature',       label: 'Signature',        icon: '✍️' },
-  { type: 'custom_text',     label: 'Custom Text',      icon: 'T'  },
-  { type: 'divider',         label: 'Divider',          icon: '—'  },
-  { type: 'spacer',          label: 'Spacer',           icon: '⬜' },
-];
-
-function getAlignClass(a: 'left' | 'center' | 'right') {
-  return a === 'center' ? 'text-center' : a === 'right' ? 'text-right' : 'text-left';
-}
-
-function renderPreview(el: BuilderEl): React.ReactNode {
-  const align = getAlignClass(el.props.alignment);
-  const style = { fontSize: el.props.fontSize, color: el.props.color };
-
-  switch (el.type) {
-    case 'logo':
-      return (
-        <div className={align}>
-          <div className="w-14 h-14 bg-blue-100 rounded flex items-center justify-center text-blue-600 font-bold text-lg inline-flex">LOGO</div>
-        </div>
-      );
-    case 'company_info':
-      return (
-        <div className={align} style={style}>
-          <div className="font-bold">My Company Inc</div>
-          <div className="text-gray-500" style={{ fontSize: el.props.fontSize - 2 }}>123 Business Ave · billing@company.com</div>
-        </div>
-      );
-    case 'client_info':
-      return (
-        <div className={align} style={style}>
-          <div className="text-xs text-gray-400 uppercase font-semibold mb-1">Billed To</div>
-          <div className="font-bold">Client Name</div>
-          <div className="text-gray-500" style={{ fontSize: el.props.fontSize - 2 }}>client@example.com</div>
-        </div>
-      );
-    case 'invoice_details':
-      return (
-        <div className={`flex gap-6 ${el.props.alignment === 'right' ? 'justify-end' : el.props.alignment === 'center' ? 'justify-center' : ''}`} style={style}>
-          <div><div className="text-xs text-gray-400">Invoice #</div><div className="font-bold">INV-0001</div></div>
-          <div><div className="text-xs text-gray-400">Due Date</div><div className="font-bold">30 Jun 2026</div></div>
-        </div>
-      );
-    case 'line_items':
-      return (
-        <div className="text-xs w-full" style={{ fontSize: el.props.fontSize - 2 }}>
-          <div className="grid grid-cols-4 gap-2 bg-gray-900 text-white rounded px-2 py-1 mb-1">
-            <span>Description</span><span className="text-center">Qty</span><span className="text-right">Price</span><span className="text-right">Total</span>
-          </div>
-          <div className="grid grid-cols-4 gap-2 px-2 py-0.5 text-gray-700">
-            <span>Service item</span><span className="text-center">1</span><span className="text-right">$500</span><span className="text-right">$500</span>
-          </div>
-        </div>
-      );
-    case 'totals':
-      return (
-        <div className={`${el.props.alignment === 'right' ? 'ml-auto' : el.props.alignment === 'center' ? 'mx-auto' : ''} w-48`} style={style}>
-          <div className="flex justify-between text-gray-600"><span>Subtotal</span><span>$1,000</span></div>
-          <div className="flex justify-between text-gray-600"><span>Tax (8%)</span><span>$80</span></div>
-          <div className="flex justify-between font-bold border-t pt-1 mt-1"><span>Total</span><span>$1,080</span></div>
-        </div>
-      );
-    case 'payment_info':
-      return (
-        <div className={align} style={style}>
-          <div className="font-semibold mb-1">Bank Details</div>
-          <div className="text-gray-700">Chase Bank — ACC ****4321</div>
-        </div>
-      );
-    case 'notes':
-      return <div className={`${align} italic text-gray-500`} style={style}>Thank you for your business!</div>;
-    case 'terms':
-      return <div className={`${align} text-gray-400`} style={style}>Payment due within 30 days.</div>;
-    case 'signature':
-      return (
-        <div className={align}>
-          <div className="inline-flex flex-col items-start gap-1">
-            <div className="w-24 border-b-2 border-gray-400" />
-            <div className="text-xs text-gray-400">Authorised Signature</div>
-          </div>
-        </div>
-      );
-    case 'custom_text':
-      return <div className={align} style={style}>{el.props.customText || 'Your custom text here…'}</div>;
-    case 'divider':
-      return <div className="w-full border-t border-gray-300" style={{ borderColor: el.props.color }} />;
-    case 'spacer':
-      return <div className="w-full h-6 bg-gray-50 border border-dashed border-gray-200 rounded" />;
-    default:
-      return null;
-  }
-}
+const renderPreview = renderElement;
 
 function PaletteItem({ type, label, icon }: { type: ElementType; label: string; icon: string }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: `palette-${type}`, data: { type, source: 'palette' } });
@@ -251,9 +134,8 @@ export function SalesBuilder() {
   const { setNodeRef: setCanvasRef } = useDroppable({ id: 'canvas' });
 
   useEffect(() => {
-    fetch('/api/v1/sales/templates', { credentials: 'include' })
-      .then(r => r.ok ? r.json() : null)
-      .then(d => d?.data && setSavedTemplates(d.data.filter((t: any) => t.type === 'builder')))
+    api.get('/api/v1/sales/templates')
+      .then(r => r.data?.data && setSavedTemplates(r.data.data.filter((t: any) => t.type === 'builder')))
       .catch(() => {});
   }, []);
 
@@ -274,7 +156,10 @@ export function SalesBuilder() {
   const onDragEnd = useCallback((e: DragEndEvent) => {
     setIsOver(false); setActiveDragType(null);
     const d = e.active.data.current as any;
-    if (d?.source === 'palette' && d.type && e.over?.id === 'canvas') {
+    // Accept palette drops onto the canvas zone OR any existing canvas element
+    const overCanvas = e.over?.id === 'canvas' ||
+      (e.over && elements.some(el => el.id === e.over!.id));
+    if (d?.source === 'palette' && d.type && overCanvas) {
       // Drop from palette onto canvas
       const def = PALETTE.find(p => p.type === d.type);
       if (def) setElements(prev => [...prev, { id: uuid(), type: d.type, label: def.label, props: { ...DEFAULT_PROPS } }]);
@@ -290,10 +175,9 @@ export function SalesBuilder() {
   }, []);
 
   const loadTemplate = (id: string) => {
-    fetch(`/api/v1/sales/templates`, { credentials: 'include' })
-      .then(r => r.json())
-      .then(d => {
-        const tpl = d?.data?.find((t: any) => t.id === id);
+    api.get('/api/v1/sales/templates')
+      .then(r => {
+        const tpl = r.data?.data?.find((t: any) => t.id === id);
         if (tpl?.layout) { setElements(tpl.layout); setSelected(null); }
       })
       .catch(() => {});
@@ -302,19 +186,13 @@ export function SalesBuilder() {
   const handleSave = async (name: string, isDefault: boolean) => {
     setSaving(true);
     try {
-      const res = await fetch('/api/v1/sales/templates', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, layout: elements, isDefault }),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        setSavedTemplates(prev => [{ id: data.data.id, name }, ...prev]);
-        setShowSaveDialog(false);
-        setSavedMsg('Saved!');
-        setTimeout(() => setSavedMsg(''), 2500);
-      }
+      const res = await api.post('/api/v1/sales/templates', { name, layout: elements, isDefault });
+      setSavedTemplates(prev => [{ id: res.data.data.id, name }, ...prev]);
+      setShowSaveDialog(false);
+      setSavedMsg('Saved!');
+      setTimeout(() => setSavedMsg(''), 2500);
+    } catch {
+      // leave the dialog open so the user can retry
     } finally {
       setSaving(false);
     }

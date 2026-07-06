@@ -48,7 +48,10 @@ interface BotConfig {
   default_queue_id?: string;
   default_priority: string;
   keyword_urgency: string[];
+  self_service_intents: string[];
   queue_name?: string;
+  ivr_menu?: { option: number; label: string; action: string }[];
+  sip_uri?: string;
 }
 
 interface TicketQueue { id: string; name: string; }
@@ -211,12 +214,13 @@ export function VoiceBotConfig() {
         systemPrompt:     body.system_prompt,
         language:         body.language,
         voiceId:          body.voice_id,
-        autoCreateTicket: body.auto_create_ticket,
-        defaultQueueId:   body.default_queue_id || null,
-        defaultPriority:  body.default_priority,
-        keywordUrgency:   body.keyword_urgency,
-        ivrMenu:          body.ivr_menu,
-        sipUri:           body.sip_uri,
+        autoCreateTicket:    body.auto_create_ticket,
+        defaultQueueId:      body.default_queue_id || null,
+        defaultPriority:     body.default_priority,
+        keywordUrgency:      body.keyword_urgency,
+        ivrMenu:             body.ivr_menu,
+        sipUri:              body.sip_uri,
+        selfServiceIntents:  body.self_service_intents ?? [],
       });
       return r.data;
     },
@@ -254,6 +258,7 @@ export function VoiceBotConfig() {
       auto_create_ticket: true,
       default_priority: 'medium',
       keyword_urgency: ['urgent','emergency','critical','asap','immediately'],
+      self_service_intents: [],
     });
     setEditMode(true);
   };
@@ -518,6 +523,41 @@ export function VoiceBotConfig() {
                         </button>
                       </div>
 
+                      {/* Self-service intents — calls matching these are resolved by the bot with no ticket */}
+                      <div className="mb-4 p-3 rounded-lg bg-gray-800/60 border border-gray-700/50">
+                        <p className="text-sm text-gray-300 font-medium mb-1">Self-Service Intents (No Ticket)</p>
+                        <p className="text-xs text-gray-500 mb-3">When the bot detects one of these query types, it resolves the call directly — no ticket is created. Everything else still creates a ticket.</p>
+                        <div className="grid grid-cols-2 gap-2">
+                          {[
+                            { value: 'balance_inquiry',  label: 'Balance / Account Inquiry' },
+                            { value: 'order_status',     label: 'Order Status / Tracking' },
+                            { value: 'branch_hours',     label: 'Branch / Opening Hours' },
+                            { value: 'installment_info', label: 'Installment / EMI Info' },
+                            { value: 'faq',              label: 'General FAQ' },
+                          ].map(({ value, label }) => {
+                            const selected = (formState.self_service_intents ?? []).includes(value);
+                            return (
+                              <label key={value} className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer text-xs transition-colors ${selected ? 'border-brand-500 bg-brand-500/10 text-brand-300' : 'border-gray-700 text-gray-400 hover:border-gray-600'}`}>
+                                <input type="checkbox" className="hidden" checked={selected}
+                                  onChange={() => setFormState(f => {
+                                    const cur = f.self_service_intents ?? [];
+                                    return { ...f, self_service_intents: selected ? cur.filter(i => i !== value) : [...cur, value] };
+                                  })} />
+                                <span className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 ${selected ? 'bg-brand-500 border-brand-500' : 'border-gray-600'}`}>
+                                  {selected && <span className="text-white text-[9px] font-bold">✓</span>}
+                                </span>
+                                {label}
+                              </label>
+                            );
+                          })}
+                        </div>
+                        {(formState.self_service_intents ?? []).length > 0 && (
+                          <p className="text-xs text-brand-400 mt-2">
+                            {(formState.self_service_intents ?? []).length} intent(s) will be handled by bot without a ticket
+                          </p>
+                        )}
+                      </div>
+
                       <div className="grid grid-cols-2 gap-3">
                         <div>
                           <label className="block text-xs text-gray-500 mb-1">Default Queue</label>
@@ -677,6 +717,7 @@ export function VoiceBotConfig() {
                       { label: 'Auto-create ticket',   value: activeConfig.auto_create_ticket ? 'Yes' : 'No' },
                       { label: 'Default priority',     value: activeConfig.default_priority },
                       { label: 'Default queue',        value: activeConfig.queue_name ?? 'Default queue' },
+                      { label: 'Self-service intents', value: (activeConfig.self_service_intents ?? []).length > 0 ? `${(activeConfig.self_service_intents ?? []).length} configured` : 'None (all calls → ticket)' },
                     ].map(({ label, value }) => (
                       <div key={label} className="flex items-center justify-between py-2 border-b border-white/5 last:border-0">
                         <span className="text-xs text-gray-500">{label}</span>

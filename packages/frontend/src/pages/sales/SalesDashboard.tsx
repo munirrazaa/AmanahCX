@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../../services/api';
 import { formatCurrency, getStatusColor, type DashboardStats, type InvoiceStatus } from './types';
-import { TrendingUp, Clock, AlertCircle, FileText } from 'lucide-react';
+import { TrendingUp, Clock, AlertCircle, FileText, FileCheck } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend,
@@ -18,6 +18,7 @@ const PERIOD_OPTIONS = [
 const PIE_COLORS = ['#3b82f6','#f59e0b','#ef4444','#10b981','#6366f1'];
 
 export function SalesDashboard() {
+  const navigate = useNavigate();
   const [period, setPeriod] = useState('this_month');
 
   const { data, isLoading } = useQuery<DashboardStats>({
@@ -34,7 +35,9 @@ export function SalesDashboard() {
 
   const stats = data ?? {
     totalReceivable: 0, overdueAmount: 0, paidThisMonth: 0, draftAmount: 0,
-    invoicesByStatus: {} as any, agingBuckets: [], topCustomers: [], topDefaulters: [], monthlyRevenue: [],
+    invoicesByStatus: {} as any, agingBuckets: [], agingByCustomer: [],
+    quotationSummary: { totalValue: 0, count: 0 },
+    topCustomers: [], topDefaulters: [], monthlyRevenue: [],
   };
 
   const pieData = Object.entries(stats.invoicesByStatus ?? {}).filter(([,v]) => Number(v) > 0).map(([k,v]) => ({ name: k, value: Number(v) }));
@@ -59,14 +62,17 @@ export function SalesDashboard() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         {[
-          { icon: <FileText size={18} className="text-blue-600" />, bg: 'bg-blue-50', label: 'Total Receivable', value: formatCurrency(stats.totalReceivable), sub: 'All open invoices' },
-          { icon: <AlertCircle size={18} className="text-red-600" />, bg: 'bg-red-50', label: 'Overdue', value: formatCurrency(stats.overdueAmount), sub: 'Past due date' },
-          { icon: <TrendingUp size={18} className="text-green-600" />, bg: 'bg-green-50', label: 'Collected This Month', value: formatCurrency(stats.paidThisMonth), sub: 'Payments received' },
-          { icon: <Clock size={18} className="text-amber-600" />, bg: 'bg-amber-50', label: 'Draft', value: formatCurrency(stats.draftAmount), sub: 'Not yet sent' },
+          { icon: <FileText size={18} className="text-blue-600" />, bg: 'bg-blue-50', label: 'Total Receivable', value: formatCurrency(stats.totalReceivable), sub: 'All open invoices', onClick: undefined },
+          { icon: <AlertCircle size={18} className="text-red-600" />, bg: 'bg-red-50', label: 'Overdue', value: formatCurrency(stats.overdueAmount), sub: 'Past due date', onClick: undefined },
+          { icon: <TrendingUp size={18} className="text-green-600" />, bg: 'bg-green-50', label: 'Collected This Month', value: formatCurrency(stats.paidThisMonth), sub: 'Payments received', onClick: undefined },
+          { icon: <Clock size={18} className="text-amber-600" />, bg: 'bg-amber-50', label: 'Draft', value: formatCurrency(stats.draftAmount), sub: 'Not yet sent', onClick: undefined },
+          { icon: <FileCheck size={18} className="text-violet-600" />, bg: 'bg-violet-50', label: 'Open Quotations', value: formatCurrency(stats.quotationSummary.totalValue), sub: `${stats.quotationSummary.count} pending`, onClick: () => navigate('/sales/quotations') },
         ].map(card => (
-          <div key={card.label} className="bg-white rounded-xl border border-gray-200 p-5 flex items-start gap-4">
+          <div key={card.label}
+            onClick={card.onClick}
+            className={`bg-white rounded-xl border border-gray-200 p-5 flex items-start gap-4 ${card.onClick ? 'cursor-pointer hover:border-violet-300 hover:shadow-sm transition-all' : ''}`}>
             <div className={`p-2.5 rounded-lg ${card.bg}`}>{card.icon}</div>
             <div>
               <div className="text-xs text-gray-500">{card.label}</div>
@@ -159,6 +165,43 @@ export function SalesDashboard() {
             ))}
             {stats.topDefaulters.length === 0 && <div className="text-xs text-gray-400 text-center py-4">No defaulters</div>}
           </div>
+        </div>
+      </div>
+
+      {/* Aging of Receivables — per customer, 6 buckets */}
+      <div className="bg-white rounded-xl border border-gray-200">
+        <div className="px-5 py-4 border-b border-gray-100">
+          <div className="text-sm font-semibold text-gray-900">Aging of Receivables</div>
+          <div className="text-xs text-gray-400 mt-0.5">Open invoices grouped by days since payment due date</div>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50 border-b border-gray-100">
+              <tr>
+                <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Customer</th>
+                {['< 30 days','30–60 days','61–90 days','91–180 days','181–365 days','> 365 days','Total'].map(h => (
+                  <th key={h} className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {(stats.agingByCustomer ?? []).map((row) => (
+                <tr key={row.contactId} className="border-b border-gray-50 hover:bg-gray-50">
+                  <td className="px-5 py-3 font-medium text-gray-900">{row.customerName}</td>
+                  <td className="px-4 py-3 text-right text-gray-700">{row.lt30   > 0 ? formatCurrency(row.lt30)     : <span className="text-gray-300">—</span>}</td>
+                  <td className="px-4 py-3 text-right text-gray-700">{row.d30_60 > 0 ? formatCurrency(row.d30_60)  : <span className="text-gray-300">—</span>}</td>
+                  <td className="px-4 py-3 text-right text-amber-600">{row.d61_90 > 0 ? formatCurrency(row.d61_90) : <span className="text-gray-300">—</span>}</td>
+                  <td className="px-4 py-3 text-right text-orange-600">{row.d91_180 > 0 ? formatCurrency(row.d91_180) : <span className="text-gray-300">—</span>}</td>
+                  <td className="px-4 py-3 text-right text-red-500">{row.d181_365 > 0 ? formatCurrency(row.d181_365) : <span className="text-gray-300">—</span>}</td>
+                  <td className="px-4 py-3 text-right text-red-700 font-semibold">{row.gt365 > 0 ? formatCurrency(row.gt365) : <span className="text-gray-300">—</span>}</td>
+                  <td className="px-4 py-3 text-right font-bold text-gray-900">{formatCurrency(row.total)}</td>
+                </tr>
+              ))}
+              {(!stats.agingByCustomer || stats.agingByCustomer.length === 0) && (
+                <tr><td colSpan={8} className="px-5 py-8 text-center text-gray-400 text-sm">No open receivables</td></tr>
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
 

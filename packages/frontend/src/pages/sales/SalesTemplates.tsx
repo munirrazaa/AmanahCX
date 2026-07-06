@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Upload, Trash2, Star, FileText, Layout, Copy, CheckCircle2, Loader2, X } from 'lucide-react';
 import { INVOICE_TEMPLATES } from './types';
+import { api } from '../../services/api';
 
 // ── Preset gallery (hardcoded sector themes) ──────────────────────────────────
 
@@ -112,18 +113,16 @@ export function SalesTemplates() {
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    fetch('/api/v1/sales/templates/merge-fields', { credentials: 'include' })
-      .then(r => r.ok ? r.json() : null)
-      .then(d => d?.data && setMergeFields(d.data))
+    api.get('/api/v1/sales/templates/merge-fields')
+      .then(r => r.data?.data && setMergeFields(r.data.data))
       .catch(() => {});
   }, []);
 
   const loadSaved = () => {
     setLoadingSaved(true);
-    fetch('/api/v1/sales/templates', { credentials: 'include' })
-      .then(r => r.ok ? r.json() : { data: [] })
-      .then(d => setSavedTemplates(d.data ?? []))
-      .catch(() => {})
+    api.get('/api/v1/sales/templates')
+      .then(r => setSavedTemplates(r.data?.data ?? []))
+      .catch(() => setSavedTemplates([]))
       .finally(() => setLoadingSaved(false));
   };
 
@@ -139,37 +138,26 @@ export function SalesTemplates() {
     try {
       const form = new FormData();
       form.append('file', file);
-      const res = await fetch(`/api/v1/sales/templates/upload?name=${encodeURIComponent(file.name.replace(/\.[^.]+$/, ''))}`, {
-        method: 'POST',
-        credentials: 'include',
-        body: form,
-      });
-      const data = await res.json();
-      if (res.ok) {
-        setSavedTemplates(prev => [data.data, ...prev]);
-        setActiveTab('saved');
-      } else {
-        setUploadError(data.error ?? 'Upload failed');
-      }
-    } catch {
-      setUploadError('Upload failed. Please try again.');
+      const res = await api.post(
+        `/api/v1/sales/templates/upload?name=${encodeURIComponent(file.name.replace(/\.[^.]+$/, ''))}`,
+        form,
+      );
+      setSavedTemplates(prev => [res.data.data, ...prev]);
+      setActiveTab('saved');
+    } catch (err: any) {
+      setUploadError(err?.response?.data?.error ?? 'Upload failed. Please try again.');
     } finally {
       setUploading(false);
     }
   };
 
   const handleDelete = async (id: string) => {
-    await fetch(`/api/v1/sales/templates/${id}`, { method: 'DELETE', credentials: 'include' });
+    await api.delete(`/api/v1/sales/templates/${id}`);
     setSavedTemplates(prev => prev.filter(t => t.id !== id));
   };
 
   const handleSetDefault = async (id: string) => {
-    await fetch(`/api/v1/sales/templates/${id}`, {
-      method: 'PATCH',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ isDefault: true }),
-    });
+    await api.patch(`/api/v1/sales/templates/${id}`, { isDefault: true });
     setSavedTemplates(prev => prev.map(t => ({ ...t, is_default: t.id === id })));
   };
 

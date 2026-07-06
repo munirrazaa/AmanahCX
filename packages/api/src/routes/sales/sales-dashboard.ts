@@ -57,6 +57,42 @@ export function salesDashboardRoutes(db: DatabaseClient) {
         ).then(r => r.rows)
       );
 
+      // Aging by customer (6 buckets: <30, 30-60, 61-90, 91-180, 181-365, >365 days since due_date)
+      const agingByCustomer = await db.withTenant(tenantId, (client) =>
+        client.query(
+          `SELECT
+             bc.id   AS contact_id,
+             bc.name AS customer_name,
+             COALESCE(SUM(CASE WHEN CURRENT_DATE - i.due_date < 30  THEN i.total - COALESCE(p.paid,0) ELSE 0 END),0) AS lt_30,
+             COALESCE(SUM(CASE WHEN CURRENT_DATE - i.due_date BETWEEN 30 AND 59   THEN i.total - COALESCE(p.paid,0) ELSE 0 END),0) AS d30_60,
+             COALESCE(SUM(CASE WHEN CURRENT_DATE - i.due_date BETWEEN 60 AND 89   THEN i.total - COALESCE(p.paid,0) ELSE 0 END),0) AS d61_90,
+             COALESCE(SUM(CASE WHEN CURRENT_DATE - i.due_date BETWEEN 90 AND 179  THEN i.total - COALESCE(p.paid,0) ELSE 0 END),0) AS d91_180,
+             COALESCE(SUM(CASE WHEN CURRENT_DATE - i.due_date BETWEEN 180 AND 364 THEN i.total - COALESCE(p.paid,0) ELSE 0 END),0) AS d181_365,
+             COALESCE(SUM(CASE WHEN CURRENT_DATE - i.due_date >= 365              THEN i.total - COALESCE(p.paid,0) ELSE 0 END),0) AS gt_365,
+             COALESCE(SUM(i.total - COALESCE(p.paid,0)),0) AS row_total
+           FROM invoices i
+           JOIN billing_contacts bc ON bc.id = i.billing_contact_id
+           LEFT JOIN (SELECT invoice_id, SUM(amount) as paid FROM invoice_payments GROUP BY invoice_id) p ON p.invoice_id = i.id
+           WHERE i.tenant_id=$1 AND i.status NOT IN ('paid','cancelled') AND (i.total - COALESCE(p.paid,0)) > 0
+           GROUP BY bc.id, bc.name
+           HAVING SUM(i.total - COALESCE(p.paid,0)) > 0
+           ORDER BY row_total DESC`,
+          [tenantId]
+        ).then(r => r.rows)
+      );
+
+      // Quotation totals (draft + sent — not yet converted)
+      const quotationTotals = await db.withTenant(tenantId, (client) =>
+        client.query(
+          `SELECT
+             COALESCE(SUM(total),0) AS total_value,
+             COUNT(*) AS count
+           FROM quotations
+           WHERE tenant_id=$1 AND status IN ('draft','sent') AND converted_to_invoice_id IS NULL`,
+          [tenantId]
+        ).then(r => r.rows)
+      );
+
       // Top customers by total invoiced
       const topCustomers = await db.withTenant(tenantId, (client) =>
         client.query(
@@ -113,6 +149,21 @@ export function salesDashboardRoutes(db: DatabaseClient) {
             cancelled: Number(totals.cancelled_count),
           },
           agingBuckets:  aging.map((r: any) => ({ label: r.bucket, amount: Number(r.amount), count: Number(r.count) })),
+          agingByCustomer: agingByCustomer.map((r: any) => ({
+            contactId: r.contact_id,
+            customerName: r.customer_name,
+            lt30: Number(r.lt_30),
+            d30_60: Number(r.d30_60),
+            d61_90: Number(r.d61_90),
+            d91_180: Number(r.d91_180),
+            d181_365: Number(r.d181_365),
+            gt365: Number(r.gt_365),
+            total: Number(r.row_total),
+          })),
+          quotationSummary: {
+            totalValue: Number(quotationTotals[0]?.total_value ?? 0),
+            count: Number(quotationTotals[0]?.count ?? 0),
+          },
           topCustomers:  topCustomers.map((r: any) => ({ contactId: r.id, name: r.name, amount: Number(r.amount), invoiceCount: Number(r.invoice_count) })),
           topDefaulters: topDefaulters.map((r: any) => ({ contactId: r.id, name: r.name, amount: Number(r.amount), invoiceCount: Number(r.invoice_count) })),
           monthlyRevenue: monthly.map((r: any) => ({ month: r.month, invoiced: Number(r.invoiced), collected: Number(r.collected) })),

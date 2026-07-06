@@ -560,6 +560,28 @@ async function createComplaintFromStructured(
   }
 }
 
+// ── Intent detection from call transcript/summary ────────────────────────
+// Returns a canonical intent string used to match against self_service_intents config.
+
+const INTENT_PATTERNS: Array<{ intent: string; keywords: string[] }> = [
+  { intent: 'balance_inquiry',  keywords: ['balance', 'account balance', 'how much', 'funds', 'available amount'] },
+  { intent: 'order_status',     keywords: ['order status', 'where is my order', 'delivery', 'track', 'shipment', 'dispatch'] },
+  { intent: 'branch_hours',     keywords: ['opening hours', 'branch hours', 'what time', 'when do you open', 'when do you close', 'working hours'] },
+  { intent: 'installment_info', keywords: ['installment', 'remaining', 'emi', 'monthly payment', 'loan balance', 'how many installments'] },
+  { intent: 'faq',              keywords: ['how to', 'how do i', 'what is', 'tell me about', 'explain', 'information about'] },
+  { intent: 'complaint',        keywords: ['complaint', 'issue', 'problem', 'not working', 'broken', 'fraud', 'error'] },
+  { intent: 'inquiry',          keywords: ['inquiry', 'enquiry', 'question', 'product', 'service', 'offering'] },
+  { intent: 'sales',            keywords: ['buy', 'purchase', 'price', 'offer', 'quote', 'sales', 'interested in'] },
+];
+
+function detectIntent(call: NormalisedCall): string {
+  const text = ((call.summary ?? '') + ' ' + (call.transcript ?? '')).toLowerCase();
+  for (const { intent, keywords } of INTENT_PATTERNS) {
+    if (keywords.some(k => text.includes(k))) return intent;
+  }
+  return 'complaint'; // default — safest fallback always creates a ticket
+}
+
 // ── Route factory ─────────────────────────────────────────────────────────
 
 export function voiceBotRoutes(db: DatabaseClient, eventBus: EventBus) {
@@ -683,9 +705,28 @@ export function voiceBotRoutes(db: DatabaseClient, eventBus: EventBus) {
           return reply.code(200).send({ received: true, processed: false, reason: 'duplicate' });
         }
 
-        // Auto-create ticket if configured (default: true)
+        // Self-service check — if the detected intent is in the tenant's self-service list,
+        // resolve the call without creating a ticket and mark resolution_type = 'self_service'.
+        const selfServiceIntents: string[] = botConfig?.self_service_intents ?? [];
+        const detectedIntent = detectIntent(callData);
+        const isSelfService = selfServiceIntents.length > 0 &&
+          selfServiceIntents.some(i => i.toLowerCase() === detectedIntent.toLowerCase());
+
         let ticketId: string | null = null;
-        if (botConfig?.auto_create_ticket !== false) {
+        let resolutionType = 'ticket_created';
+
+        if (isSelfService) {
+          resolutionType = 'self_service';
+          await db.withSuperAdmin(async (c) => {
+            await c.query(
+              `UPDATE voice_bot_calls
+                 SET resolution_type = 'self_service',
+                     self_service_response = $2
+               WHERE id = $1`,
+              [botCall.id, `Bot resolved: ${detectedIntent} query handled without agent`],
+            );
+          });
+        } else if (botConfig?.auto_create_ticket !== false) {
           ticketId = await createTicketFromBotCall(
             db, eventBus, tenantId, botCall.id, callData, botConfig,
           );
@@ -696,6 +737,7 @@ export function voiceBotRoutes(db: DatabaseClient, eventBus: EventBus) {
           processed: true,
           botCallId: botCall.id,
           ticketId,
+          resolutionType,
         });
       });
     }
@@ -732,12 +774,13 @@ export function voiceBotRoutes(db: DatabaseClient, eventBus: EventBus) {
       sipUri:             z.string().optional(),
       ivrMenu:            z.array(z.object({
         option:      z.number().int().min(1).max(9),
-        intent:      z.enum(['complaint', 'inquiry', 'sales', 'agent']),
+        intent:      z.enum(['complaint', 'inquiry', 'sales', 'agent', 'self_service']),
         label:       z.string(),
         ticketType:  z.enum(['complaint', 'inquiry', 'sales']).optional(),
         queueId:     z.string().uuid().optional().nullable(),
         description: z.string().optional(),
       })).optional(),
+      selfServiceIntents: z.array(z.string()).optional(),
     });
 
     fastify.put('/config', { preHandler: requireRole('tenant_admin', 'super_admin') }, async (req, reply) => {
@@ -749,23 +792,24 @@ export function voiceBotRoutes(db: DatabaseClient, eventBus: EventBus) {
               (tenant_id, provider, is_active, assistant_id, phone_number,
                greeting_message, system_prompt, language, voice_id,
                auto_create_ticket, default_queue_id, default_priority, keyword_urgency,
-               sip_uri, ivr_menu)
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+               sip_uri, ivr_menu, self_service_intents)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
             ON CONFLICT (tenant_id, provider) DO UPDATE SET
-              is_active          = EXCLUDED.is_active,
-              assistant_id       = EXCLUDED.assistant_id,
-              phone_number       = EXCLUDED.phone_number,
-              greeting_message   = EXCLUDED.greeting_message,
-              system_prompt      = EXCLUDED.system_prompt,
-              language           = EXCLUDED.language,
-              voice_id           = EXCLUDED.voice_id,
-              auto_create_ticket = EXCLUDED.auto_create_ticket,
-              default_queue_id   = EXCLUDED.default_queue_id,
-              default_priority   = EXCLUDED.default_priority,
-              keyword_urgency    = EXCLUDED.keyword_urgency,
-              sip_uri            = EXCLUDED.sip_uri,
-              ivr_menu           = EXCLUDED.ivr_menu,
-              updated_at         = NOW()
+              is_active             = EXCLUDED.is_active,
+              assistant_id          = EXCLUDED.assistant_id,
+              phone_number          = EXCLUDED.phone_number,
+              greeting_message      = EXCLUDED.greeting_message,
+              system_prompt         = EXCLUDED.system_prompt,
+              language              = EXCLUDED.language,
+              voice_id              = EXCLUDED.voice_id,
+              auto_create_ticket    = EXCLUDED.auto_create_ticket,
+              default_queue_id      = EXCLUDED.default_queue_id,
+              default_priority      = EXCLUDED.default_priority,
+              keyword_urgency       = EXCLUDED.keyword_urgency,
+              sip_uri               = EXCLUDED.sip_uri,
+              ivr_menu              = EXCLUDED.ivr_menu,
+              self_service_intents  = EXCLUDED.self_service_intents,
+              updated_at            = NOW()
             RETURNING *`,
            [
              req.tenant.id,
@@ -783,6 +827,7 @@ export function voiceBotRoutes(db: DatabaseClient, eventBus: EventBus) {
              body.keywordUrgency  ?? URGENCY_KEYWORDS,
              body.sipUri          ?? null,
              JSON.stringify(body.ivrMenu ?? DEFAULT_IVR_MENU),
+             body.selfServiceIntents ?? [],
            ],
         );
         return r.rows;
@@ -869,13 +914,36 @@ export function voiceBotRoutes(db: DatabaseClient, eventBus: EventBus) {
         return r.rows;
       });
 
-      const ticketId = await createTicketFromBotCall(db, eventBus, tenantId, botCall.id, fakeCallData, botConfig);
+      // Apply same self-service logic as the real webhook path
+      const selfServiceIntents: string[] = botConfig?.self_service_intents ?? [];
+      const detectedIntent = detectIntent(fakeCallData);
+      const isSelfService = selfServiceIntents.length > 0 &&
+        selfServiceIntents.some(i => i.toLowerCase() === detectedIntent.toLowerCase());
+
+      let ticketId: string | null = null;
+      let resolutionType = 'ticket_created';
+
+      if (isSelfService) {
+        resolutionType = 'self_service';
+        await db.withSuperAdmin(async (c) => {
+          await c.query(
+            `UPDATE voice_bot_calls SET resolution_type='self_service', self_service_response=$2 WHERE id=$1`,
+            [botCall.id, `Bot resolved: ${detectedIntent} query handled without agent`],
+          );
+        });
+      } else {
+        ticketId = await createTicketFromBotCall(db, eventBus, tenantId, botCall.id, fakeCallData, botConfig);
+      }
 
       return reply.send({
         success: true,
-        message: 'Test call simulated successfully',
+        message: isSelfService
+          ? `Self-service: bot resolved "${detectedIntent}" without creating a ticket`
+          : 'Test call simulated — ticket created',
         botCallId: botCall.id,
         ticketId,
+        resolutionType,
+        detectedIntent,
         provider: body.provider,
       });
     });
@@ -1017,7 +1085,9 @@ export function voiceBotRoutes(db: DatabaseClient, eventBus: EventBus) {
              COUNT(*) FILTER (WHERE extracted_priority = 'urgent' AND created_at >= $1 AND created_at <= $2) AS urgent_tickets,
              COUNT(*) FILTER (WHERE provider = 'vapi'   AND created_at >= $1 AND created_at <= $2) AS vapi_calls,
              COUNT(*) FILTER (WHERE provider = 'retell' AND created_at >= $1 AND created_at <= $2) AS retell_calls,
-             COUNT(*) FILTER (WHERE provider = 'bland'  AND created_at >= $1 AND created_at <= $2) AS bland_calls
+             COUNT(*) FILTER (WHERE provider = 'bland'  AND created_at >= $1 AND created_at <= $2) AS bland_calls,
+             COUNT(*) FILTER (WHERE resolution_type = 'self_service' AND created_at >= $1 AND created_at <= $2) AS self_service_resolved,
+             COUNT(*) FILTER (WHERE resolution_type = 'agent_transfer' AND created_at >= $1 AND created_at <= $2) AS agent_transfers
            FROM voice_bot_calls`,
           [fromDate, toDate],
         );

@@ -3,49 +3,6 @@ _Most recent at top. Treated as the primary record for development tracking._
 
 ---
 
-## Change Log - 2026-07-01 (Call Recordings + CX Insights Dashboard)
-
-### New Features
-
-**Call Recordings module**
-- New `GET /api/v1/recordings` endpoint — unified list combining `voice_bot_calls` + `human_agent_calls` via UNION query
-- Access: operations_admin, policy_admin, manager (team-scoped), agent (own calls only)
-- Filters: call type (all/bot/human), tag/topic, date range, agent, pagination (20/page)
-- Legal hold toggle on individual recordings (policy_admin only)
-- Frontend page: `packages/frontend/src/pages/CallRecordings.tsx` — expandable rows with audio player, transcript toggle, legal hold button
-- Role-scoped: agent sees own calls only, manager sees team's calls, ops_admin/policy_admin see all
-
-**CX Insights Dashboard — Full Call Centre Analytics**
-- New `GET /api/v1/recordings/insights` endpoint — comprehensive call centre analytics from a single CTE-based SQL query
-- Returns: KPI summary (10 metrics), by_day, by_hour, by_direction, by_duration, top_agents, topics (top 20), topic_by_day
-- `callType` filter param: 'all' | 'bot' | 'human'
-- Frontend page: `packages/frontend/src/pages/CallInsights.tsx`
-  - All Calls / Voice Bot / Human filter tabs — all charts re-scope instantly
-  - 10 KPI cards: total, inbound, outbound, bot vs human splits, avg handle time (bot/human breakdown), recordings, tagged, longest, shortest
-  - Call Volume by Day — stacked bar chart (bot purple, human green)
-  - Calls by Hour of Day — blue = business hours (09:00–17:00)
-  - Inbound vs Outbound donut chart
-  - Duration Buckets horizontal bar chart
-  - Top Agents table with proportional bars and avg handle time
-  - **Topic Word Cloud** — topics sized by frequency (12px → 38px), colour-coded, clickable to filter
-  - Topic Date-Grid Heatmap — blue intensity by day, last 14 days
-  - Topic filter chips — click to filter recordings list
-  - Filtered recordings list with audio player and transcript expand
-
-**Operations Admin role (operations_admin, rank 35)**
-- New role added between policy_admin (32) and manager (30)
-- Cross-dept read-only oversight: sees all tickets, all recordings, all CX Insights
-- Cannot edit/delete tickets, cannot change system settings
-- Added to `packages/shared/src/types/user.ts`, `packages/frontend/src/hooks/useRole.ts`
-- Sidebar: CX Insights and Call Recordings visible to operations_admin and policy_admin
-
-**Database migrations (applied)**
-- `040_human_agent_calls.sql`: new `human_agent_calls` table with legal_hold, tags, RLS; adds legal_hold/tags to `voice_bot_calls`; GIN indexes on tags for both tables
-
-**HTML Reference Document updated — AmanahCX-Roles-and-Flow.html (v2.1)**
-- New section: Sales End-to-End Flow (10 steps — inquiry → lead qualification → ticket+deal → ACD routing → proposal → negotiation → won/lost → reporting)
-- New section: Role Login Dashboards — Manager, Line Manager, Agent, Viewer mockups for Complaints/Sales/Support departments with gap analysis vs Zendesk, Salesforce, Freshdesk
-- New section: Sector-Wise CRM Fields — Insurance, Banking, Telecom, Utilities, Retail/E-Commerce contact fields, ticket request types, regulatory notes, and Custom Fields Module roadmap
 ## Change Log - 2026-07-06 (Sales Module — Aging Table, Quotations, Template Fix, Builder Fix)
 
 ### Added

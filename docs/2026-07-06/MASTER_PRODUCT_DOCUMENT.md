@@ -2,7 +2,7 @@
 **AI Operations Platform — Multi-Tenant CRM, Contact-Centre & Sales Suite**
 _Single source of truth for system requirements & behaviour. Update only affected sections on each change._
 
-Last updated: 2026-07-01 (Call Recordings module, CX Insights full call-centre dashboard, operations_admin role, topic word cloud, Sales end-to-end flow, role login mockups, sector-wise CRM fields in HTML reference)
+Last updated: 2026-06-29 (ticket-contact linking UI, AmanahCX rebrand, dept-scoped manager filter, admin user invite with manager; + 7 CRM gap features)
 
 ---
 

@@ -62,7 +62,7 @@ export function invoiceTemplateRoutes(db: DatabaseClient) {
                   CASE WHEN type='builder' THEN layout ELSE NULL END as layout
            FROM invoice_templates WHERE tenant_id=$1 ORDER BY is_default DESC, created_at DESC`,
           [tenantId]
-        )
+        ).then(r => r.rows)
       );
       return reply.send({ success: true, data: rows });
     });

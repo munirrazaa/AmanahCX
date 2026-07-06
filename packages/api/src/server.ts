@@ -42,6 +42,7 @@ import { billingContactRoutes } from './routes/sales/billing-contacts';
 import { salesSettingsRoutes } from './routes/sales/sales-settings';
 import { salesDashboardRoutes } from './routes/sales/sales-dashboard';
 import { invoiceTemplateRoutes } from './routes/sales/invoice-templates';
+import { quotationRoutes }      from './routes/sales/quotations';
 import { sectorRoutes } from './routes/sector';
 import { departmentRoutes } from './routes/departments';
 import { opportunityRoutes } from './routes/opportunities';
@@ -356,6 +357,7 @@ async function buildServer() {
   await fastify.register(salesSettingsRoutes(db),      { prefix: '/api/v1/sales/settings' });
   await fastify.register(salesDashboardRoutes(db),     { prefix: '/api/v1/sales/dashboard' });
   await fastify.register(invoiceTemplateRoutes(db),    { prefix: '/api/v1/sales/templates' });
+  await fastify.register(quotationRoutes(db),          { prefix: '/api/v1/sales/quotations' });
   await fastify.register(sectorRoutes(db),         { prefix: '/api/v1/sector' });
   await fastify.register(departmentRoutes(db),     { prefix: '/api/v1/departments' });
   await fastify.register(opportunityRoutes(db),    { prefix: '/api/v1/opportunities' });

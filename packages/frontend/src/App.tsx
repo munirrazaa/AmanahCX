@@ -6,7 +6,7 @@ import {
   CheckSquare, BarChart3, Settings as SettingsIcon, Zap, Shield,
   LogOut, CreditCard, BarChart2, LifeBuoy, List, Clock, Mail, Bot,
   FileText, Layers, MessageCircle, Key, Bell, Lock, ChevronDown, ChevronRight,
-  FileSpreadsheet, ShoppingCart, BookOpen, Tag,
+  FileSpreadsheet, ShoppingCart, BookOpen, Tag, FileCheck,
 } from 'lucide-react';
 import { useAuthStore } from './store/auth.store';
 import { useIsSuperAdmin, useIsAdmin, useIsTenantAdmin, useHasRole, useIsPolicyAdmin } from './hooks/useRole';
@@ -55,6 +55,8 @@ import { SalesReports }      from './pages/sales/SalesReports';
 import { SalesTemplates }    from './pages/sales/SalesTemplates';
 import { SalesBuilder }      from './pages/sales/SalesBuilder';
 import { SalesSettingsPage } from './pages/sales/SalesSettings';
+import { QuotationList }    from './pages/sales/QuotationList';
+import { QuotationCreate }  from './pages/sales/QuotationCreate';
 import { TeamReports }       from './pages/TeamReports';
 import { TicketReports }     from './pages/TicketReports';
 import { Reports }           from './pages/Reports';
@@ -432,6 +434,19 @@ function Sidebar() {
               <CreditCard className="w-4 h-4" />
               Sales & Invoices
             </NavLink>
+            <NavLink to="/sales/quotations"
+              className={({ isActive }) =>
+                `flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm transition-all ${
+                  isActive ? 'text-white font-semibold' : 'text-white/60 hover:text-white hover:bg-white/10'
+                }`
+              }
+              style={({ isActive }) => isActive ? {
+                background: 'rgba(99,102,241,0.2)', borderLeft: '2px solid #818CF8',
+              } : {}}
+            >
+              <FileCheck className="w-4 h-4" />
+              Quotations
+            </NavLink>
             <NavLink to="/sales/reports"
               className={({ isActive }) =>
                 `flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm transition-all ${
@@ -757,8 +772,10 @@ function AppLayout() {
           <Route path="/sales/payments"   element={op(<SalesPayments />)} />
           <Route path="/sales/reports"    element={op(<SalesReports />)} />
           <Route path="/sales/templates"  element={op(<SalesTemplates />)} />
-          <Route path="/sales/builder"    element={op(<SalesBuilder />)} />
+          <Route path="/sales/builder"      element={op(<SalesBuilder />)} />
           <Route path="/sales/settings"   element={op(<SalesSettingsPage />)} />
+          <Route path="/sales/quotations" element={op(<QuotationList />)} />
+          <Route path="/sales/quotations/new" element={op(<QuotationCreate />)} />
           <Route path="/governance"   element={isTenantAdmin ? <GovernancePage /> : <Navigate to="/dashboard" replace />} />
           <Route path="/orders"       element={isTenantAdmin ? <OrdersPage /> : <Navigate to="/dashboard" replace />} />
           <Route path="*"            element={<Navigate to={homePath} replace />} />
