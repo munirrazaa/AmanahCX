@@ -1215,7 +1215,7 @@ function TenantUsersModal({ tenant, onClose }: { tenant: any; onClose: () => voi
                     <td className="px-4 py-2.5 text-xs font-mono text-gray-600">{u.email}</td>
                     <td className="px-4 py-2.5 text-xs capitalize text-gray-600">{u.role?.replace('_', ' ')}</td>
                     <td className="px-4 py-2.5">
-                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold capitalize ${u.status === 'active' ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-500'}`}>{u.status}</span>
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold capitalize ${u.is_active ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-500'}`}>{u.is_active ? 'Active' : 'Inactive'}</span>
                     </td>
                     <td className="px-4 py-2.5 text-xs text-gray-400">{new Date(u.created_at).toLocaleDateString('en-GB')}</td>
                     <td className="px-4 py-2.5">
@@ -1305,13 +1305,13 @@ function CreateUserModal({ tenantId, onClose }: { tenantId: string; onClose: () 
 
 // ── Edit User Modal ────────────────────────────────────────────────────────
 function EditUserModal({ user, onClose }: { user: any; onClose: () => void }) {
-  const [form, setForm] = useState({ name: user.name, email: user.email, role: user.role, status: user.status, password: '' });
+  const [form, setForm] = useState({ name: user.name, email: user.email, role: user.role, is_active: user.is_active ?? true, password: '' });
   const [showPw, setShowPw] = useState(false);
   const [changePass, setChangePass] = useState(false);
   const [error, setError] = useState('');
   const mutation = useMutation({
     mutationFn: () => api.patch(`/super-admin/users/${user.id}`, {
-      name: form.name, email: form.email, role: form.role, status: form.status,
+      name: form.name, email: form.email, role: form.role, status: form.is_active ? 'active' : 'inactive',
       ...(changePass && form.password ? { password: form.password } : {}),
     }),
     onSuccess: onClose,
@@ -1344,9 +1344,10 @@ function EditUserModal({ user, onClose }: { user: any; onClose: () => void }) {
           </div>
           <div>
             <label className="text-xs font-medium text-gray-500 block mb-1">Status</label>
-            <select value={form.status} onChange={set('status')}
+            <select value={form.is_active ? 'active' : 'inactive'} onChange={e => setForm(f => ({ ...f, is_active: e.target.value === 'active' }))}
               className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg outline-none focus:border-brand-400 bg-white">
-              {['active','inactive'].map(s => <option key={s} value={s} className="capitalize">{s}</option>)}
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
             </select>
           </div>
           <div>
@@ -2846,7 +2847,7 @@ function SuperAdminSettings() {
                     <td className="px-4 py-2.5 text-xs font-mono text-gray-600">{u.email}</td>
                     <td className="px-4 py-2.5 text-xs capitalize text-gray-600">{u.role?.replace(/_/g, ' ')}</td>
                     <td className="px-4 py-2.5">
-                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold capitalize ${u.status === 'active' ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-500'}`}>{u.status}</span>
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold capitalize ${u.is_active ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-500'}`}>{u.is_active ? 'Active' : 'Inactive'}</span>
                     </td>
                     <td className="px-4 py-2.5 text-xs text-gray-400">{new Date(u.created_at).toLocaleDateString('en-GB')}</td>
                     <td className="px-4 py-2.5">
