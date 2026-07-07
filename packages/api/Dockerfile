@@ -27,6 +27,5 @@ EXPOSE 3000
 HEALTHCHECK --interval=15s --timeout=5s --start-period=40s --retries=3 \
   CMD wget -qO- "http://localhost:${PORT:-3000}/health" || exit 1
 
-# DB schema is migrated out-of-band on Supabase; the server connects as a
-# non-superuser role (crm_app) that cannot run DDL. So just run the server (tsx).
-CMD ["sh", "-c", "npx tsx packages/api/src/server.ts"]
+# Run pending migrations then start the server (migrate.ts is idempotent — skips already-applied).
+CMD ["sh", "-c", "npx tsx packages/api/src/scripts/migrate.ts && npx tsx packages/api/src/server.ts"]
