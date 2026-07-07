@@ -1236,7 +1236,7 @@ export function ticketRoutes(db: DatabaseClient, eventBus: EventBus) {
     fastify.delete('/:id', { preHandler: requireRole('super_admin', 'tenant_admin') }, async (req, reply) => {
       const { id } = req.params as { id: string };
       const [ticket] = await db.withTenant(req.tenant.id, async (client) => {
-        const r = await client.query(`SELECT id, status, ticket_number FROM tickets WHERE id = $1`, [id]);
+        const r = await client.query(`SELECT id, status, ticket_number FROM tickets WHERE id = $1 AND tenant_id = $2`, [id, req.tenant.id]);
         return r.rows;
       });
       if (!ticket) return reply.code(404).send({ success: false, error: { code: 'NOT_FOUND', message: 'Ticket not found' } });
@@ -1247,7 +1247,7 @@ export function ticketRoutes(db: DatabaseClient, eventBus: EventBus) {
         });
       }
       await db.withTenant(req.tenant.id, async (client) => {
-        await client.query(`DELETE FROM tickets WHERE id = $1`, [id]);
+        await client.query(`DELETE FROM tickets WHERE id = $1 AND tenant_id = $2`, [id, req.tenant.id]);
       });
       return reply.send({ success: true, data: { deleted: ticket.ticket_number } });
     });
@@ -1397,8 +1397,8 @@ export function ticketRoutes(db: DatabaseClient, eventBus: EventBus) {
            LEFT JOIN contacts c      ON t.contact_id            = c.id
            LEFT JOIN ticket_queues q ON t.queue_id              = q.id
            LEFT JOIN sla_policies s  ON t.sla_policy_id         = s.id
-           WHERE t.id = $1`,
-          [id],
+           WHERE t.id = $1 AND t.tenant_id = $2`,
+          [id, req.tenant.id],
         );
         const cr = await client.query(
           `SELECT
@@ -1494,7 +1494,7 @@ export function ticketRoutes(db: DatabaseClient, eventBus: EventBus) {
       let assigneeBefore: string | null | undefined;
       if (body.priority || 'assigneeId' in body) {
         const [cur] = await db.withTenant(req.tenant.id, async (client) => {
-          const r = await client.query(`SELECT priority, assignee_id FROM tickets WHERE id = $1`, [id]);
+          const r = await client.query(`SELECT priority, assignee_id FROM tickets WHERE id = $1 AND tenant_id = $2`, [id, req.tenant.id]);
           return r.rows;
         });
         if (!cur) return reply.code(404).send({ success: false, error: { code: 'NOT_FOUND', message: 'Ticket not found' } });
@@ -1531,7 +1531,7 @@ export function ticketRoutes(db: DatabaseClient, eventBus: EventBus) {
       // SLA pause/resume on pending transitions
       if (body.status) {
         const [cur] = await db.withTenant(req.tenant.id, async (client) => {
-          const r = await client.query(`SELECT status, sla_paused_at, sla_pause_elapsed_s, sla_due_at FROM tickets WHERE id = $1`, [id]);
+          const r = await client.query(`SELECT status, sla_paused_at, sla_pause_elapsed_s, sla_due_at FROM tickets WHERE id = $1 AND tenant_id = $2`, [id, req.tenant.id]);
           return r.rows;
         });
         if (cur) {
@@ -1633,7 +1633,7 @@ export function ticketRoutes(db: DatabaseClient, eventBus: EventBus) {
 
       // Read current ticket to capture previous assignee
       const [currentTicket] = await db.withTenant(tenantId, async (client) => {
-        const r = await client.query('SELECT * FROM tickets WHERE id = $1', [id]);
+        const r = await client.query('SELECT * FROM tickets WHERE id = $1 AND tenant_id = $2', [id, tenantId]);
         return r.rows;
       });
       if (!currentTicket) return reply.code(404).send({ success: false, error: { code: 'NOT_FOUND', message: 'Ticket not found' } });
@@ -1737,8 +1737,8 @@ ${note ? `<p><strong>Reason:</strong> ${note}</p>` : ''}
                   s.business_hours_only, s.business_hours_schedule
            FROM tickets t
            LEFT JOIN sla_policies s ON t.sla_policy_id = s.id
-           WHERE t.id = $1`,
-          [id],
+           WHERE t.id = $1 AND t.tenant_id = $2`,
+          [id, tenantId],
         );
         return r.rows;
       });
@@ -1817,7 +1817,7 @@ ${note ? `<p><strong>Reason:</strong> ${note}</p>` : ''}
       const userId   = req.user.sub;
 
       const [ticket] = await db.withTenant(tenantId, (client) =>
-        client.query(`SELECT * FROM tickets WHERE id = $1`, [id]).then((r) => r.rows),
+        client.query(`SELECT * FROM tickets WHERE id = $1 AND tenant_id = $2`, [id, tenantId]).then((r) => r.rows),
       );
       if (!ticket) return reply.code(404).send({ success: false, error: { code: 'NOT_FOUND', message: 'Ticket not found' } });
       if (ticket.ticket_type !== 'sales') {
@@ -1903,7 +1903,7 @@ ${note ? `<p><strong>Reason:</strong> ${note}</p>` : ''}
 
       // Fetch ticket
       const [ticket] = await db.withTenant(tenantId, async (client) => {
-        const r = await client.query(`SELECT * FROM tickets WHERE id = $1`, [id]);
+        const r = await client.query(`SELECT * FROM tickets WHERE id = $1 AND tenant_id = $2`, [id, tenantId]);
         return r.rows;
       });
       if (!ticket) return reply.code(404).send({ success: false, error: { code: 'NOT_FOUND', message: 'Ticket not found' } });
@@ -1962,8 +1962,8 @@ ${note ? `<p><strong>Reason:</strong> ${note}</p>` : ''}
         const check = await client.query(
           `SELECT t.id, t.queue_id, t.status, t.assignee_id, t.ticket_number, t.subject
            FROM tickets t
-           WHERE t.id = $1`,
-          [id],
+           WHERE t.id = $1 AND t.tenant_id = $2`,
+          [id, tenantId],
         );
         const tkt = check.rows[0];
         if (!tkt) return [null];
@@ -2098,7 +2098,7 @@ ${note ? `<p><strong>Reason:</strong> ${note}</p>` : ''}
       const newStatus = isManager ? 'cancelled' : 'cancel_requested';
 
       const [ticket] = await db.withTenant(tenantId, async (client) => {
-        const existing = await client.query(`SELECT status FROM tickets WHERE id = $1`, [id]);
+        const existing = await client.query(`SELECT status FROM tickets WHERE id = $1 AND tenant_id = $2`, [id, tenantId]);
         if (!existing.rows[0]) return [];
         const current = existing.rows[0].status;
         if (['cancelled','closed'].includes(current)) {

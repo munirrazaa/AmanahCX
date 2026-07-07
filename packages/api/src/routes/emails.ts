@@ -438,15 +438,15 @@ export function emailRoutes(db: DatabaseClient, eventBus: EventBus) {
 
         const topRecipients = await c.query(
           `SELECT
-             COALESCE(con.first_name || ' ' || COALESCE(con.last_name,''), e.to_address) AS name,
-             e.to_address AS email,
+             COALESCE(con.first_name || ' ' || COALESCE(con.last_name,''), e.to_email) AS name,
+             e.to_email AS email,
              COUNT(*) AS emails_received,
              COUNT(*) FILTER (WHERE e.opened_at IS NOT NULL) AS opened
            FROM emails e
            LEFT JOIN contacts con ON e.contact_id = con.id
            WHERE e.created_at >= $1 AND e.created_at <= $2
              AND e.status != 'archived'
-           GROUP BY e.to_address, con.first_name, con.last_name
+           GROUP BY e.to_email, con.first_name, con.last_name
            ORDER BY emails_received DESC
            LIMIT 10`,
           [fromDate, toDate],
