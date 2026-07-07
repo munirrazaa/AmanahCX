@@ -38,7 +38,18 @@ async function migrate() {
 
       logger.info(`Applying ${file}...`);
       const sql = fs.readFileSync(path.join(migrationsDir, file), 'utf-8');
-      await client.query(sql);
+      try {
+        await client.query(sql);
+      } catch (err: any) {
+        // If objects already exist (code 42P07 = duplicate table, 42701 = duplicate column)
+        // mark as applied and continue — migration was run before tracking was in place
+        if (err.code === '42P07' || err.code === '42701' || err.message?.includes('already exists')) {
+          logger.warn(`${file} partially applied (objects already exist) — marking as done`);
+          await client.query('INSERT INTO _migrations (filename) VALUES ($1) ON CONFLICT DO NOTHING', [file]);
+          continue;
+        }
+        throw err;
+      }
       await client.query('INSERT INTO _migrations (filename) VALUES ($1)', [file]);
       logger.info(`Applied ${file}`);
     }
