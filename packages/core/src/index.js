@@ -1,0 +1,21 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.SmsService = exports.EmailService = exports.buildRedisClient = exports.logger = exports.TenantService = exports.ModuleRegistry = exports.CRM_EVENTS = exports.EventBus = exports.DatabaseClient = void 0;
+var client_1 = require("./database/client");
+Object.defineProperty(exports, "DatabaseClient", { enumerable: true, get: function () { return client_1.DatabaseClient; } });
+var event_bus_1 = require("./events/event-bus");
+Object.defineProperty(exports, "EventBus", { enumerable: true, get: function () { return event_bus_1.EventBus; } });
+Object.defineProperty(exports, "CRM_EVENTS", { enumerable: true, get: function () { return event_bus_1.CRM_EVENTS; } });
+var module_registry_1 = require("./modules/module-registry");
+Object.defineProperty(exports, "ModuleRegistry", { enumerable: true, get: function () { return module_registry_1.ModuleRegistry; } });
+var tenant_service_1 = require("./tenant/tenant.service");
+Object.defineProperty(exports, "TenantService", { enumerable: true, get: function () { return tenant_service_1.TenantService; } });
+var logger_1 = require("./config/logger");
+Object.defineProperty(exports, "logger", { enumerable: true, get: function () { return logger_1.logger; } });
+var redis_1 = require("./config/redis");
+Object.defineProperty(exports, "buildRedisClient", { enumerable: true, get: function () { return redis_1.buildRedisClient; } });
+var email_service_1 = require("./email.service");
+Object.defineProperty(exports, "EmailService", { enumerable: true, get: function () { return email_service_1.EmailService; } });
+var sms_service_1 = require("./sms.service");
+Object.defineProperty(exports, "SmsService", { enumerable: true, get: function () { return sms_service_1.SmsService; } });
+//# sourceMappingURL=index.js.map
