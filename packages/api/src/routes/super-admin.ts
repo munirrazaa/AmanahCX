@@ -1127,7 +1127,7 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
       const { id } = req.params as { id: string };
       const rows = await db.withSuperAdmin(async (client) => {
         const r = await client.query(
-          `SELECT id, name, email, role, status, created_at, last_login_at FROM users WHERE tenant_id = $1 ORDER BY role, name`,
+          `SELECT id, name, email, role, is_active, created_at, last_login_at FROM users WHERE tenant_id = $1 ORDER BY role, name`,
           [id],
         );
         return r.rows;
