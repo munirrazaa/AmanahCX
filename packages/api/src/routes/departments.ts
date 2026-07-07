@@ -10,7 +10,7 @@ const DEPT_TYPES = [
 
 const CreateSchema = z.object({
   name:           z.string().min(1).max(100),
-  department_type: z.enum(DEPT_TYPES),
+  department_type: z.enum(DEPT_TYPES).optional(),
   description:    z.string().optional(),
   head_user_id:   z.string().uuid().optional(),
   color:          z.string().optional(),
