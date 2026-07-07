@@ -277,6 +277,7 @@ async function buildServer() {
       '/api/v1/opportunities',
       '/api/v1/sales',
       '/api/v1/governance',
+      '/api/v1/super-admin',
     ];
     if (
       req.url.startsWith('/api/v1/') &&
