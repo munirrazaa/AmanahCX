@@ -339,7 +339,7 @@ export function settingsRoutes(db: DatabaseClient, redis: RedisClient) {
         const r = await client.query(`SELECT active_modules, settings FROM tenants WHERE id = $1`, [req.tenant.id]);
         return r.rows;
       });
-      const licensedModules: string[] = row?.active_modules ?? ['crm'];
+      const licensedModules: string[] = row?.active_modules ?? ['crm', 'ticketing', 'emails', 'analytics'];
       // If tenant admin hasn't explicitly configured enabled_modules, default to all licensed
       const enabledModules: string[] = row?.settings?.enabled_modules ?? licensedModules;
 
@@ -365,7 +365,7 @@ export function settingsRoutes(db: DatabaseClient, redis: RedisClient) {
         const r = await client.query(`SELECT active_modules, settings FROM tenants WHERE id = $1`, [req.tenant.id]);
         return r.rows;
       });
-      const licensedModules: string[] = row?.active_modules ?? ['crm'];
+      const licensedModules: string[] = row?.active_modules ?? ['crm', 'ticketing', 'emails', 'analytics'];
       // Start from current enabled state (or default to all licensed)
       const currentEnabled: string[] = row?.settings?.enabled_modules ?? [...licensedModules];
       let updatedEnabled = [...currentEnabled];
