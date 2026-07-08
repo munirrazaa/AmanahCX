@@ -38,18 +38,22 @@ async function migrate() {
 
       logger.info(`Applying ${file}...`);
       const sql = fs.readFileSync(path.join(migrationsDir, file), 'utf-8');
+      await client.query('SAVEPOINT migration_sp');
       try {
         await client.query(sql);
       } catch (err: any) {
         // If objects already exist (code 42P07 = duplicate table, 42701 = duplicate column)
-        // mark as applied and continue — migration was run before tracking was in place
+        // roll back to savepoint (clears the aborted-txn state), mark as applied and continue
         if (err.code === '42P07' || err.code === '42701' || err.message?.includes('already exists')) {
+          await client.query('ROLLBACK TO SAVEPOINT migration_sp');
           logger.warn(`${file} partially applied (objects already exist) — marking as done`);
           await client.query('INSERT INTO _migrations (filename) VALUES ($1) ON CONFLICT DO NOTHING', [file]);
           continue;
         }
+        await client.query('ROLLBACK TO SAVEPOINT migration_sp');
         throw err;
       }
+      await client.query('RELEASE SAVEPOINT migration_sp');
       await client.query('INSERT INTO _migrations (filename) VALUES ($1)', [file]);
       logger.info(`Applied ${file}`);
     }
