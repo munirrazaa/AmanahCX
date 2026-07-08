@@ -16,7 +16,15 @@ declare module 'fastify' {
 export function buildTenantMiddleware(tenantService: TenantService) {
   return async function tenantMiddleware(req: FastifyRequest, reply: FastifyReply): Promise<void> {
     // Skip for super-admin routes and public routes
-    if (req.url.startsWith('/super-admin') || req.url.startsWith('/public')) return;
+    if (req.url.includes('/super-admin') || req.url.startsWith('/public')) return;
+
+    // super_admin has no operational access — their scope is platform provisioning only (/super-admin/*)
+    if ((req as any).user?.role === 'super_admin') {
+      return reply.code(403).send({
+        success: false,
+        error: { code: 'FORBIDDEN', message: 'Platform administrators do not have access to workspace data.' },
+      });
+    }
 
     let tenant: Tenant | null = null;
 

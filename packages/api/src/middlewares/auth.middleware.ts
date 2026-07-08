@@ -217,7 +217,7 @@ export function requireEntitlement(...features: string[]) {
 
 // Granular permission guard — enforces a specific action key (e.g. 'invoices:edit')
 // against the user's role permission map carried in the JWT.
-//   • super_admin / tenant_admin → full access (bypass)
+//   • tenant_admin → full access (bypass)
 //   • key present & true (or legacy 'full'/'view') → allow
 //   • key explicitly false → deny
 //   • key ABSENT from the map → allow (backward-compat: the role predates this
@@ -225,7 +225,7 @@ export function requireEntitlement(...features: string[]) {
 export function requirePermission(key: string) {
   return async (req: FastifyRequest, reply: FastifyReply): Promise<void> => {
     const role = req.user?.role;
-    if (role === 'super_admin' || role === 'tenant_admin') return;
+    if (role === 'tenant_admin') return;
     const perms = (req.user as any)?.permissions as Record<string, unknown> | undefined;
     if (!perms) return; // no map at all → don't block
     const v = perms[key];
