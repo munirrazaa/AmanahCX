@@ -1,5 +1,5 @@
 # CRM Platform — Master Testing Checklist
-**Version:** 1.0 | **Date:** 2026-06-09 | **Platform:** Multi-Tenant SaaS CRM
+**Version:** 1.1 | **Date:** 2026-07-08 | **Platform:** Multi-Tenant SaaS CRM
 
 ---
 
@@ -319,9 +319,30 @@ For each sector:
 | ST-02 | Manager | manager | Update tenant settings | 403 — admin only | |
 | ST-03 | Agent | agent | Update tenant settings | 403 | |
 | ST-04 | Any user | any | Update own user preferences | 200 OK | |
-| ST-05 | Admin | tenant_admin | Create webhook | 201 OK | |
-| ST-06 | Manager | manager | Create webhook | 200 OK (manager can manage webhooks) | |
+| ST-05 | Tenant Admin | tenant_admin | Create webhook | 201 OK | |
+| ST-06 | Manager | manager | Create webhook | 403 — admin only | |
 | ST-07 | Agent | agent | Create webhook | 403 | |
+| ST-08 | Tenant Admin | tenant_admin | Generate API key | 201 — full key shown once | |
+| ST-09 | Tenant Admin | tenant_admin | List API keys | 200 — keys shown masked | |
+| ST-10 | Tenant Admin | tenant_admin | Revoke API key | 204 OK | |
+| ST-11 | Manager | manager | Generate API key | 403 — admin only | |
+| ST-12 | Agent | agent | Generate API key | 403 | |
+
+### 4.9 SLA Policies & Holidays
+
+> **Role design:** `policy_admin` is the only operational role for SLA management. `tenant_admin` assigns this role to users but does not manage SLA policies directly. `super_admin` has no access to workspace data.
+
+| TC# | User | Role | Action | Expected | Pass/Fail |
+|-----|------|------|--------|----------|-----------|
+| SLA-01 | Policy Admin | policy_admin | Create SLA policy | 201 OK | |
+| SLA-02 | Policy Admin | policy_admin | Edit SLA policy | 200 OK | |
+| SLA-03 | Policy Admin | policy_admin | Publish SLA policy | 200 OK | |
+| SLA-04 | Policy Admin | policy_admin | Delete SLA policy | 204 OK | |
+| SLA-05 | Policy Admin | policy_admin | Create holiday | 201 OK | |
+| SLA-06 | Tenant Admin | tenant_admin | Create SLA policy | 403 — not operational role | |
+| SLA-07 | Manager | manager | Create SLA policy | 403 | |
+| SLA-08 | Agent | agent | Create SLA policy | 403 | |
+| SLA-09 | Any role | any | View SLA policies (GET) | 200 — read is open to all | |
 
 ### 4.8 Billing Module
 
