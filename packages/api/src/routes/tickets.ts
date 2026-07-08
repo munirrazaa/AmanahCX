@@ -87,6 +87,7 @@ const ListQuerySchema = z.object({
   overdue:    z.coerce.boolean().optional(),
   contactId:  z.string().uuid().optional(),
   search:     z.string().optional(),
+  tags:       z.string().optional(),   // comma-separated tag names
   sortBy:     z.enum(['created_at','updated_at','priority','sla_due_at']).default('created_at'),
   sortOrder:  z.enum(['asc','desc']).default('desc'),
 });
@@ -1319,6 +1320,13 @@ export function ticketRoutes(db: DatabaseClient, eventBus: EventBus) {
         );
         params.push(`%${query.search}%`);
         idx++;
+      }
+      if (query.tags) {
+        const tagList = query.tags.split(',').map(t => t.trim()).filter(Boolean);
+        if (tagList.length > 0) {
+          where.push(`t.tags && $${idx++}::text[]`);
+          params.push(tagList);
+        }
       }
 
       const whereStr = where.join(' AND ');
