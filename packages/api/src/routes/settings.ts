@@ -415,7 +415,7 @@ export function settingsRoutes(db: DatabaseClient, redis: RedisClient) {
         const r = await client.query(`SELECT active_modules FROM tenants WHERE id = $1`, [tenantId]);
         return r.rows;
       });
-      const licensed: string[] = row?.active_modules ?? ['crm'];
+      const licensed: string[] = row?.active_modules ?? ['crm', 'ticketing', 'emails', 'analytics'];
       // Map of module key → top-level permission key(s) in the permissions object
       // This tells us which permissions control each module so we can enforce 'none'
       const MODULE_PERMISSION_KEYS: Record<string, string[]> = {
