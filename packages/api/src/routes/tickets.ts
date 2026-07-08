@@ -169,19 +169,19 @@ async function findSlaPolicy(
 ): Promise<{ id: string; resolution_hours: number } | null> {
   const rows = await db.withTenant(tenantId, async (client) => {
     if (slaPolicyId) {
-      const r = await client.query('SELECT id, resolution_hours FROM sla_policies WHERE id = $1', [slaPolicyId]);
+      const r = await client.query('SELECT id, resolution_hours FROM sla_policies WHERE id = $1 AND tenant_id = $2', [slaPolicyId, tenantId]);
       return r.rows;
     }
     // Fetch all active policies matching priority, ordered by specificity (most conditions first)
     const r = await client.query(
       `SELECT id, resolution_hours, match_conditions FROM sla_policies
-       WHERE priority = $1 AND is_active = true AND COALESCE(policy_status,'published') = 'published'
+       WHERE tenant_id = $2 AND priority = $1 AND is_active = true AND COALESCE(policy_status,'published') = 'published'
        ORDER BY (
          (CASE WHEN match_conditions->>'channels'    IS NOT NULL AND jsonb_array_length(match_conditions->'channels')    > 0 THEN 1 ELSE 0 END) +
          (CASE WHEN match_conditions->>'departments' IS NOT NULL AND jsonb_array_length(match_conditions->'departments') > 0 THEN 1 ELSE 0 END) +
          (CASE WHEN match_conditions->>'tags'        IS NOT NULL AND jsonb_array_length(match_conditions->'tags')        > 0 THEN 1 ELSE 0 END)
        ) DESC, created_at ASC`,
-      [priority],
+      [priority, tenantId],
     );
     if (!r.rows.length) return [];
     if (!context) return [r.rows[0]];
@@ -897,13 +897,13 @@ export function ticketRoutes(db: DatabaseClient, eventBus: EventBus) {
         if (role === 'policy_admin' && governedDepts.length > 0) {
           const r = await client.query(
             `SELECT * FROM sla_policies
-             WHERE (ticket_type = ANY($1) OR ticket_type IS NULL)
+             WHERE tenant_id = $1 AND (ticket_type = ANY($2) OR ticket_type IS NULL)
              ORDER BY priority DESC, name ASC`,
-            [governedDepts],
+            [req.tenant.id, governedDepts],
           );
           return r.rows;
         }
-        const r = await client.query('SELECT * FROM sla_policies ORDER BY priority DESC, name ASC');
+        const r = await client.query('SELECT * FROM sla_policies WHERE tenant_id = $1 ORDER BY priority DESC, name ASC', [req.tenant.id]);
         return r.rows;
       });
       return reply.send({ success: true, data: policies });
@@ -942,7 +942,7 @@ export function ticketRoutes(db: DatabaseClient, eventBus: EventBus) {
       // Verify policy is within governed departments before allowing edit
       if (governedDepts.length > 0) {
         const existing = await db.withTenant(req.tenant.id, async (c) => {
-          const r = await c.query('SELECT ticket_type FROM sla_policies WHERE id = $1', [id]);
+          const r = await c.query('SELECT ticket_type FROM sla_policies WHERE id = $1 AND tenant_id = $2', [id, req.tenant.id]);
           return r.rows[0];
         });
         if (existing?.ticket_type && !governedDepts.includes(existing.ticket_type)) {
@@ -969,7 +969,7 @@ export function ticketRoutes(db: DatabaseClient, eventBus: EventBus) {
              reminder_schedule       = COALESCE($14::jsonb, reminder_schedule),
              ticket_type             = COALESCE($16,        ticket_type),
              updated_at              = NOW()
-           WHERE id = $15 RETURNING *`,
+           WHERE id = $15 AND tenant_id = $17 RETURNING *`,
           [body.name, body.description, body.priority, body.firstResponseHours,
            body.resolutionHours, body.reminderPct, body.l1EscalationPct,
            body.l2EscalationPct, body.businessHoursOnly,
@@ -978,7 +978,7 @@ export function ticketRoutes(db: DatabaseClient, eventBus: EventBus) {
            body.matchConditions !== undefined ? JSON.stringify(body.matchConditions) : null,
            body.isActive,
            body.reminderSchedule !== undefined ? JSON.stringify(body.reminderSchedule) : null, id,
-           body.ticketType ?? null],
+           body.ticketType ?? null, req.tenant.id],
         );
         return r.rows;
       });
@@ -989,8 +989,8 @@ export function ticketRoutes(db: DatabaseClient, eventBus: EventBus) {
     fastify.delete('/sla-policies/:id', { preHandler: requireRole('policy_admin') }, async (req, reply) => {
       const { id } = req.params as { id: string };
       await db.withTenant(req.tenant.id, async (client) => {
-        await client.query('UPDATE tickets SET sla_policy_id = NULL WHERE sla_policy_id = $1', [id]);
-        await client.query('DELETE FROM sla_policies WHERE id = $1', [id]);
+        await client.query('UPDATE tickets SET sla_policy_id = NULL WHERE sla_policy_id = $1 AND tenant_id = $2', [id, req.tenant.id]);
+        await client.query('DELETE FROM sla_policies WHERE id = $1 AND tenant_id = $2', [id, req.tenant.id]);
       });
       return reply.code(204).send();
     });
@@ -2291,8 +2291,8 @@ ${note ? `<p><strong>Reason:</strong> ${note}</p>` : ''}
 
       const [policy] = await db.withTenant(tenantId, async (client) => {
         const r = await client.query(
-          `UPDATE sla_policies SET policy_status=$1, updated_at=NOW() WHERE id=$2 RETURNING *`,
-          [body.status, policyId]);
+          `UPDATE sla_policies SET policy_status=$1, updated_at=NOW() WHERE id=$2 AND tenant_id=$3 RETURNING *`,
+          [body.status, policyId, tenantId]);
         return r.rows;
       });
 
