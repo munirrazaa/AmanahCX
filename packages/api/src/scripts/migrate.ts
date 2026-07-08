@@ -44,7 +44,7 @@ async function migrate() {
       } catch (err: any) {
         // If objects already exist (code 42P07 = duplicate table, 42701 = duplicate column)
         // roll back to savepoint (clears the aborted-txn state), mark as applied and continue
-        if (err.code === '42P07' || err.code === '42701' || err.message?.includes('already exists')) {
+        if (err.code === '42P07' || err.code === '42701' || err.code === '42704' || err.message?.includes('already exists')) {
           await client.query('ROLLBACK TO SAVEPOINT migration_sp');
           logger.warn(`${file} partially applied (objects already exist) — marking as done`);
           await client.query('INSERT INTO _migrations (filename) VALUES ($1) ON CONFLICT DO NOTHING', [file]);

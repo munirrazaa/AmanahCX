@@ -13,4 +13,7 @@ CREATE TABLE IF NOT EXISTS platform_roles (
 ALTER TABLE users ADD COLUMN IF NOT EXISTS platform_role_id UUID REFERENCES platform_roles(id) ON DELETE SET NULL;
 CREATE INDEX IF NOT EXISTS idx_users_platform_role ON users(platform_role_id) WHERE platform_role_id IS NOT NULL;
 
-GRANT ALL ON platform_roles TO crm;
+DO $$ BEGIN
+  GRANT ALL ON platform_roles TO crm;
+EXCEPTION WHEN undefined_object THEN NULL;
+END $$;
