@@ -589,7 +589,7 @@ export function settingsRoutes(db: DatabaseClient, redis: RedisClient) {
         // Email failure should not block the invite — user is created, admin can resend
       }
 
-      return reply.code(201).send({ success: true, data: user });
+      return reply.code(201).send({ success: true, data: user, invite_url: inviteUrl });
     });
 
     // Remove team member
