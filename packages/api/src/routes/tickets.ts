@@ -909,7 +909,7 @@ export function ticketRoutes(db: DatabaseClient, eventBus: EventBus) {
       return reply.send({ success: true, data: policies });
     });
 
-    fastify.post('/sla-policies', { preHandler: requireRole('policy_admin') }, async (req, reply) => {
+    fastify.post('/sla-policies', { preHandler: requireRole('policy_admin','tenant_admin','super_admin') }, async (req, reply) => {
       const body = CreateSlaSchema.parse(req.body);
       const governedDepts: string[] = (req.user as any)?.governed_departments ?? [];
       // Enforce scope: ticket_type must be within governed departments (or null if governing all)
@@ -936,7 +936,7 @@ export function ticketRoutes(db: DatabaseClient, eventBus: EventBus) {
       return reply.code(201).send({ success: true, data: policy });
     });
 
-    fastify.patch('/sla-policies/:id', { preHandler: requireRole('policy_admin') }, async (req, reply) => {
+    fastify.patch('/sla-policies/:id', { preHandler: requireRole('policy_admin','tenant_admin','super_admin') }, async (req, reply) => {
       const { id } = req.params as { id: string };
       const governedDepts: string[] = (req.user as any)?.governed_departments ?? [];
       // Verify policy is within governed departments before allowing edit
@@ -986,7 +986,7 @@ export function ticketRoutes(db: DatabaseClient, eventBus: EventBus) {
       return reply.send({ success: true, data: policy });
     });
 
-    fastify.delete('/sla-policies/:id', { preHandler: requireRole('policy_admin') }, async (req, reply) => {
+    fastify.delete('/sla-policies/:id', { preHandler: requireRole('policy_admin','tenant_admin','super_admin') }, async (req, reply) => {
       const { id } = req.params as { id: string };
       await db.withTenant(req.tenant.id, async (client) => {
         await client.query('UPDATE tickets SET sla_policy_id = NULL WHERE sla_policy_id = $1', [id]);
@@ -1010,7 +1010,7 @@ export function ticketRoutes(db: DatabaseClient, eventBus: EventBus) {
       return reply.send({ success: true, data: holidays });
     });
 
-    fastify.post('/holidays', { preHandler: requireRole('policy_admin') }, async (req, reply) => {
+    fastify.post('/holidays', { preHandler: requireRole('policy_admin','tenant_admin','super_admin') }, async (req, reply) => {
       const body = HolidaySchema.parse(req.body);
       const [holiday] = await db.withTenant(req.tenant.id, async (client) => {
         const r = await client.query(
@@ -1025,7 +1025,7 @@ export function ticketRoutes(db: DatabaseClient, eventBus: EventBus) {
       return reply.code(201).send({ success: true, data: holiday });
     });
 
-    fastify.patch('/holidays/:id', { preHandler: requireRole('policy_admin') }, async (req, reply) => {
+    fastify.patch('/holidays/:id', { preHandler: requireRole('policy_admin','tenant_admin','super_admin') }, async (req, reply) => {
       const { id } = req.params as { id: string };
       const body = HolidaySchema.partial().parse(req.body);
       const [holiday] = await db.withTenant(req.tenant.id, async (client) => {
@@ -1043,7 +1043,7 @@ export function ticketRoutes(db: DatabaseClient, eventBus: EventBus) {
       return reply.send({ success: true, data: holiday });
     });
 
-    fastify.delete('/holidays/:id', { preHandler: requireRole('policy_admin') }, async (req, reply) => {
+    fastify.delete('/holidays/:id', { preHandler: requireRole('policy_admin','tenant_admin','super_admin') }, async (req, reply) => {
       const { id } = req.params as { id: string };
       await db.withTenant(req.tenant.id, async (client) => {
         await client.query('DELETE FROM sla_holidays WHERE id = $1', [id]);
