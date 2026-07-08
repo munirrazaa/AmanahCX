@@ -470,16 +470,29 @@ export function settingsRoutes(db: DatabaseClient, redis: RedisClient) {
         custom_role_id:        z.string().uuid().optional(),
         permissions:           z.record(z.string()).optional(),
         department:            z.string().max(100).optional(),
+        departmentId:          z.string().uuid().optional(),   // camelCase alias — looked up to name
         // Gap 8: explicit dept type — prevents fragile keyword matching on ambiguous dept names
         departmentType:        z.enum(DEPT_TYPES).optional(),
         manager_id:            z.string().uuid().nullable().optional(),
+        managerId:             z.string().uuid().nullable().optional(), // camelCase alias
         governed_departments:  z.array(z.string()).optional(),
       });
       const parsed = InviteSchema.safeParse(req.body);
       if (!parsed.success) {
         return reply.code(400).send({ success: false, error: { code: 'INVALID_INPUT', message: parsed.error.issues[0]?.message ?? 'Invalid input' } });
       }
-      const { email, name, role, custom_role_id, permissions: customPermissions, department, departmentType, manager_id, governed_departments } = parsed.data;
+      let { email, name, role, custom_role_id, permissions: customPermissions, department, departmentType, manager_id, governed_departments } = parsed.data;
+      // Resolve camelCase aliases
+      const managerId_alias = parsed.data.managerId;
+      if (!manager_id && managerId_alias) manager_id = managerId_alias;
+      const departmentId = parsed.data.departmentId;
+      if (!department && departmentId) {
+        const [dRow] = await db.withTenant(req.tenant.id, async (c) => {
+          const r = await c.query('SELECT name FROM departments WHERE id = $1 AND tenant_id = $2', [departmentId, req.tenant.id]);
+          return r.rows;
+        });
+        if (dRow) department = dRow.name;
+      }
 
       // Delegated administration: managers can only invite roles below their own level
       if (inviterRole === 'manager') {
