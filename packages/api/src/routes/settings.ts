@@ -275,6 +275,12 @@ export function settingsRoutes(db: DatabaseClient, redis: RedisClient) {
 
     // List team members (super_admin excluded — internal platform role)
     fastify.get('/team', { preHandler: requireRole('super_admin', 'tenant_admin', 'manager') }, async (req, reply) => {
+      const { department, role: roleFilter } = req.query as { department?: string; role?: string };
+      const params: unknown[] = [req.tenant.id];
+      const filters: string[] = [];
+      if (department) { params.push(department); filters.push(`u.department = $${params.length}`); }
+      if (roleFilter)  { params.push(roleFilter);  filters.push(`u.role = $${params.length}`); }
+      const whereExtra = filters.length ? `AND ${filters.join(' AND ')}` : '';
       const members = await db.withTenant(req.tenant.id, async (client) => {
         const result = await client.query(
           `SELECT u.id, u.name, u.email, u.role, u.permissions, u.is_active, u.created_at,
@@ -285,9 +291,9 @@ export function settingsRoutes(db: DatabaseClient, redis: RedisClient) {
            FROM users u
            LEFT JOIN users m ON m.id = u.manager_id AND m.tenant_id = $1
            LEFT JOIN roles r ON r.id = u.custom_role_id
-           WHERE u.tenant_id = $1 AND u.role != 'super_admin'
+           WHERE u.tenant_id = $1 AND u.role != 'super_admin' ${whereExtra}
            ORDER BY u.name ASC`,
-          [req.tenant.id],
+          params,
         );
         return result.rows;
       });

@@ -22,7 +22,7 @@ export function webhookRoutes(db: DatabaseClient, _eventBus: EventBus) {
 
     fastify.get('/', { preHandler }, async (req, reply) => {
       const webhooks = await db.withTenant(req.tenant.id, async (client) => {
-        const result = await client.query('SELECT id, name, url, events, is_active, created_at FROM webhooks ORDER BY created_at DESC');
+        const result = await client.query('SELECT id, name, url, events, is_active, created_at FROM webhooks WHERE tenant_id = $1 ORDER BY created_at DESC', [req.tenant.id]);
         return result.rows;
       });
       return reply.send({ success: true, data: webhooks });
@@ -52,7 +52,7 @@ export function webhookRoutes(db: DatabaseClient, _eventBus: EventBus) {
     fastify.delete('/:id', { preHandler }, async (req, reply) => {
       const { id } = req.params as { id: string };
       await db.withTenant(req.tenant.id, async (client) => {
-        await client.query('DELETE FROM webhooks WHERE id = $1', [id]);
+        await client.query('DELETE FROM webhooks WHERE id = $1 AND tenant_id = $2', [id, req.tenant.id]);
       });
       return reply.code(204).send();
     });
@@ -74,7 +74,7 @@ export function webhookRoutes(db: DatabaseClient, _eventBus: EventBus) {
     fastify.post('/:id/test', { preHandler }, async (req, reply) => {
       const { id } = req.params as { id: string };
       const [webhook] = await db.withTenant(req.tenant.id, async (client) => {
-        const result = await client.query('SELECT * FROM webhooks WHERE id = $1', [id]);
+        const result = await client.query('SELECT * FROM webhooks WHERE id = $1 AND tenant_id = $2', [id, req.tenant.id]);
         return result.rows;
       });
       if (!webhook) return reply.code(404).send({ success: false, error: { code: 'NOT_FOUND', message: 'Webhook not found' } });

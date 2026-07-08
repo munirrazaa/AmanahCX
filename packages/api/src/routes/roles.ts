@@ -478,7 +478,7 @@ export function rolesRoutes(db: DatabaseClient) {
       }
 
       await db.withSuperAdmin(async (client) => {
-        await client.query('DELETE FROM roles WHERE id = $1', [id]);
+        await client.query('DELETE FROM roles WHERE id = $1 AND tenant_id = $2', [id, req.tenant.id]);
       });
 
       return reply.code(204).send();

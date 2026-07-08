@@ -27,7 +27,8 @@ export function apiKeyRoutes(db: DatabaseClient) {
       const keys = await db.withTenant(req.tenant.id, async (client) => {
         const result = await client.query(
           `SELECT id, name, key_prefix, scopes, expires_at, last_used_at, created_at
-           FROM api_keys ORDER BY created_at DESC`,
+           FROM api_keys WHERE tenant_id = $1 ORDER BY created_at DESC`,
+          [req.tenant.id],
         );
         return result.rows;
       });
@@ -65,7 +66,7 @@ export function apiKeyRoutes(db: DatabaseClient) {
     fastify.delete('/:id', { preHandler: adminOnly }, async (req, reply) => {
       const { id } = req.params as { id: string };
       await db.withTenant(req.tenant.id, async (client) => {
-        await client.query('DELETE FROM api_keys WHERE id = $1', [id]);
+        await client.query('DELETE FROM api_keys WHERE id = $1 AND tenant_id = $2', [id, req.tenant.id]);
       });
       return reply.code(204).send();
     });

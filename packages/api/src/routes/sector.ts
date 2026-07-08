@@ -34,8 +34,9 @@ export function sectorRoutes(db: DatabaseClient) {
         const r = await client.query(
           `SELECT id, name, label, field_type, options, is_required, sort_order
            FROM custom_field_definitions
-           WHERE entity = 'contact'
+           WHERE tenant_id = $1 AND entity = 'contact'
            ORDER BY sort_order, label`,
+          [tenantId],
         );
         return r.rows;
       });
@@ -61,9 +62,9 @@ export function sectorRoutes(db: DatabaseClient) {
         const r = await client.query(
           `SELECT id, name, label, field_type, options, is_required, sort_order, entity
            FROM custom_field_definitions
-           WHERE entity = $1
+           WHERE tenant_id = $1 AND entity = $2
            ORDER BY sort_order, label`,
-          [entity],
+          [tenantId, entity],
         );
         return r.rows;
       });
@@ -145,8 +146,8 @@ export function sectorRoutes(db: DatabaseClient) {
 
       await db.withTenant(tenantId, async (client) => {
         await client.query(
-          `DELETE FROM custom_field_definitions WHERE id = $1`,
-          [id],
+          `DELETE FROM custom_field_definitions WHERE id = $1 AND tenant_id = $2`,
+          [id, tenantId],
         );
       });
 
