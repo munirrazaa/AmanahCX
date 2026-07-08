@@ -470,7 +470,7 @@ export function rolesRoutes(db: DatabaseClient) {
 
       // Check if any users have this role
       const [{ count }] = await db.withSuperAdmin(async (client) => {
-        const r = await client.query('SELECT COUNT(*) as count FROM users WHERE custom_role_id = $1', [id]);
+        const r = await client.query('SELECT COUNT(*) as count FROM users WHERE custom_role_id = $1 AND tenant_id = $2', [id, req.tenant.id]);
         return r.rows;
       });
       if (parseInt(count) > 0) {

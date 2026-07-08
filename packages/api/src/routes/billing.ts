@@ -120,9 +120,10 @@ export function billingRoutes(db: DatabaseClient, eventBus: EventBus) {
       const [counts] = await db.withTenant(tenantId, async (client) => {
         const result = await client.query(
           `SELECT
-             (SELECT COUNT(*) FROM contacts)  AS contacts,
-             (SELECT COUNT(*) FROM users)     AS seats,
-             (SELECT COUNT(*) FROM pipelines) AS pipelines`,
+             (SELECT COUNT(*) FROM contacts  WHERE tenant_id = $1) AS contacts,
+             (SELECT COUNT(*) FROM users     WHERE tenant_id = $1) AS seats,
+             (SELECT COUNT(*) FROM pipelines WHERE tenant_id = $1) AS pipelines`,
+          [tenantId],
         );
         return result.rows;
       });

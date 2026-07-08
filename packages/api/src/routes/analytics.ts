@@ -759,21 +759,23 @@ export function analyticsRoutes(db: DatabaseClient) {
       client: any,
       userId: string,
       role: string,
+      tenantId: string,
     ): Promise<string[]> {
       if (role === 'tenant_admin' || role === 'super_admin') {
-        const r = await client.query(`SELECT id FROM users WHERE role != 'super_admin'`);
+        const r = await client.query(`SELECT id FROM users WHERE tenant_id = $1 AND role != 'super_admin'`, [tenantId]);
         return r.rows.map((row: any) => row.id);
       }
       // Recursive CTE: start from the manager, collect everyone below
       const r = await client.query(`
         WITH RECURSIVE hierarchy AS (
-          SELECT id FROM users WHERE manager_id = $1
+          SELECT id FROM users WHERE tenant_id = $2 AND manager_id = $1
           UNION ALL
           SELECT u.id FROM users u
           INNER JOIN hierarchy h ON u.manager_id = h.id
+          WHERE u.tenant_id = $2
         )
         SELECT id FROM hierarchy
-      `, [userId]);
+      `, [userId, tenantId]);
       return r.rows.map((row: any) => row.id);
     }
 
@@ -816,7 +818,7 @@ export function analyticsRoutes(db: DatabaseClient) {
         if (reporteeId) {
           userIds = [reporteeId];
         } else {
-          const hierarchyIds = await getHierarchyUserIds(client, userId, role);
+          const hierarchyIds = await getHierarchyUserIds(client, userId, role, tenantId);
           // For non-admins, hierarchyIds only contains reports; add self so they always see own data
           const isAdmin = ['tenant_admin', 'super_admin'].includes(role);
           userIds = isAdmin ? hierarchyIds : [userId, ...hierarchyIds.filter(id => id !== userId)];
@@ -886,7 +888,7 @@ export function analyticsRoutes(db: DatabaseClient) {
 
       const reportees = await db.withTenant(req.tenant.id, async (client) => {
         const isAdmin = ['tenant_admin', 'super_admin'].includes(role);
-        const hierarchyIds = await getHierarchyUserIds(client, userId, role);
+        const hierarchyIds = await getHierarchyUserIds(client, userId, role, tenantId);
         // Always include self; for non-admins prepend userId
         const ids = isAdmin ? hierarchyIds : [userId, ...hierarchyIds.filter((id: string) => id !== userId)];
         if (ids.length === 0) return [];
@@ -931,7 +933,7 @@ export function analyticsRoutes(db: DatabaseClient) {
         if (reporteeId) {
           ids = [reporteeId];
         } else {
-          const hierarchyIds = await getHierarchyUserIds(client, userId, role);
+          const hierarchyIds = await getHierarchyUserIds(client, userId, role, tenantId);
           ids = isAdmin ? hierarchyIds : [userId, ...hierarchyIds.filter((id: string) => id !== userId)];
         }
         if (ids.length === 0) return [];
