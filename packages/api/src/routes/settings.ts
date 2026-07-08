@@ -339,7 +339,11 @@ export function settingsRoutes(db: DatabaseClient, redis: RedisClient) {
         const r = await client.query(`SELECT active_modules, settings FROM tenants WHERE id = $1`, [req.tenant.id]);
         return r.rows;
       });
-      const licensedModules: string[] = row?.active_modules ?? ['crm', 'ticketing', 'emails', 'analytics'];
+      const _stored: string[] | null = row?.active_modules;
+      const licensedModules: string[] =
+        (!_stored || (_stored.length === 1 && _stored[0] === 'crm'))
+          ? ['crm', 'ticketing', 'emails', 'analytics']
+          : _stored;
       // If tenant admin hasn't explicitly configured enabled_modules, default to all licensed
       const enabledModules: string[] = row?.settings?.enabled_modules ?? licensedModules;
 
@@ -365,7 +369,13 @@ export function settingsRoutes(db: DatabaseClient, redis: RedisClient) {
         const r = await client.query(`SELECT active_modules, settings FROM tenants WHERE id = $1`, [req.tenant.id]);
         return r.rows;
       });
-      const licensedModules: string[] = row?.active_modules ?? ['crm', 'ticketing', 'emails', 'analytics'];
+      const CORE_DEFAULT = ['crm', 'ticketing', 'emails', 'analytics'];
+      // Treat ['crm']-only as unset (old bootstrap default) — fall back to full core set
+      const storedModules: string[] | null = row?.active_modules;
+      const licensedModules: string[] =
+        (!storedModules || (storedModules.length === 1 && storedModules[0] === 'crm'))
+          ? CORE_DEFAULT
+          : storedModules;
       // Start from current enabled state (or default to all licensed)
       const currentEnabled: string[] = row?.settings?.enabled_modules ?? [...licensedModules];
       let updatedEnabled = [...currentEnabled];
