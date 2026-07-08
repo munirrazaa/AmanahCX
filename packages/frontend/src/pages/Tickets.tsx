@@ -920,7 +920,7 @@ function TicketPanel({ ticketId, onClose }: { ticketId: string; onClose: () => v
   const [assigneeReason, setAssigneeReason] = useState('');
   const [deleteConfirm, setDeleteConfirm] = useState(false);
 
-  const { data: teamMembers } = useQuery<Array<{ id: string; name: string; role: string }>>({
+  const { data: teamMembers } = useQuery<Array<{ id: string; name: string; role: string; is_active: boolean }>>({
     queryKey: ['team-members'],
     queryFn: () => api.get('/api/v1/settings/team').then(r => r.data.data ?? []),
     enabled: editOpen,
@@ -1079,7 +1079,7 @@ function TicketPanel({ ticketId, onClose }: { ticketId: string; onClose: () => v
                 <select value={editAssignee} onChange={e => setEditAssignee(e.target.value)}
                   className="mt-0.5 w-full text-xs border border-brand-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-brand-400">
                   <option value="">— keep current —</option>
-                  {(teamMembers ?? []).filter(m => ['agent','manager'].includes(m.role)).map(m => (
+                  {(teamMembers ?? []).filter(m => ['agent','manager'].includes(m.role) && m.is_active !== false).map(m => (
                     <option key={m.id} value={m.id}>{m.name}</option>
                   ))}
                 </select>
