@@ -3,20 +3,23 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Save, Loader2, Building2, Users, Clock,
   UserPlus, Trash2, Edit2, Check, X, Search, Crown,
-  ShieldCheck, UserCheck, Eye,
+  ShieldCheck, UserCheck, Eye, EyeOff, Copy, KeyRound, Webhook,
   Route, Tag, Plus, AlertCircle, Layers, ToggleLeft, ToggleRight,
+  RefreshCw, Globe, FlaskConical, ChevronDown, ChevronUp,
 } from 'lucide-react';
 import { api } from '../services/api';
 import { MilestoneSettings } from './MilestoneSettings';
 import { useAuthStore } from '../store/auth.store';
 import { useIsAdmin } from '../hooks/useRole';
 
-type Tab = 'workspace' | 'tags' | 'milestones';
+type Tab = 'workspace' | 'tags' | 'milestones' | 'api-keys' | 'webhooks';
 
 const TABS: { id: Tab; label: string; icon: any }[] = [
   { id: 'workspace',  label: 'General',     icon: Building2 },
   { id: 'tags',       label: 'Tags',        icon: Tag       },
   { id: 'milestones', label: 'Milestones',  icon: Layers    },
+  { id: 'api-keys',   label: 'API Keys',    icon: KeyRound  },
+  { id: 'webhooks',   label: 'Webhooks',    icon: Webhook   },
 ];
 
 function WorkspaceSettings() {
@@ -1093,10 +1096,326 @@ export function ModulesSettings() {
   );
 }
 
+// ── API Keys ─────────────────────────────────────────────────────────────────
+const AVAILABLE_SCOPES = [
+  { value: 'contacts:read',   label: 'Contacts — Read'   },
+  { value: 'contacts:write',  label: 'Contacts — Write'  },
+  { value: 'deals:read',      label: 'Deals — Read'      },
+  { value: 'deals:write',     label: 'Deals — Write'     },
+  { value: 'activities:read', label: 'Activities — Read' },
+  { value: 'activities:write',label: 'Activities — Write'},
+  { value: 'voice:read',      label: 'Voice — Read'      },
+  { value: 'voice:write',     label: 'Voice — Write'     },
+  { value: 'analytics:read',  label: 'Analytics — Read'  },
+  { value: 'webhooks:manage', label: 'Webhooks — Manage' },
+];
+
+function ApiKeysSettings() {
+  const qc = useQueryClient();
+  const [showCreate, setShowCreate] = useState(false);
+  const [name, setName] = useState('');
+  const [scopes, setScopes] = useState<string[]>(['contacts:read']);
+  const [newKey, setNewKey] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  const { data: keys = [], isLoading } = useQuery({
+    queryKey: ['api-keys'],
+    queryFn: () => api.get('/api/v1/api-keys').then((r: any) => r.data.data),
+  });
+
+  const createMut = useMutation({
+    mutationFn: (body: any) => api.post('/api/v1/api-keys', body).then((r: any) => r.data.data),
+    onSuccess: (data) => {
+      setNewKey(data.key);
+      setShowCreate(false);
+      setName('');
+      setScopes(['contacts:read']);
+      qc.invalidateQueries({ queryKey: ['api-keys'] });
+    },
+  });
+
+  const revokeMut = useMutation({
+    mutationFn: (id: string) => api.delete(`/api/v1/api-keys/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['api-keys'] }),
+  });
+
+  const copy = (val: string) => {
+    navigator.clipboard.writeText(val);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const toggleScope = (s: string) =>
+    setScopes(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s]);
+
+  return (
+    <div className="max-w-2xl space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-lg font-semibold text-gray-900">API Keys</h2>
+          <p className="text-sm text-gray-500 mt-0.5">Keys for programmatic access. Each key is shown once — store it securely.</p>
+        </div>
+        <button onClick={() => setShowCreate(true)}
+          className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white"
+          style={{ background: 'linear-gradient(135deg,#29ABE2,#1a8cbf)' }}>
+          <Plus className="w-4 h-4" /> Generate New Key
+        </button>
+      </div>
+
+      {/* One-time key display */}
+      {newKey && (
+        <div className="p-4 rounded-xl border border-green-200 bg-green-50 space-y-2">
+          <p className="text-sm font-semibold text-green-800">Key generated — copy it now. It won't be shown again.</p>
+          <div className="flex items-center gap-2">
+            <code className="flex-1 text-xs bg-white border border-green-200 rounded-lg px-3 py-2 font-mono break-all">{newKey}</code>
+            <button onClick={() => copy(newKey)}
+              className="shrink-0 p-2 rounded-lg border border-green-300 hover:bg-green-100 transition-colors">
+              {copied ? <Check className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4 text-green-700" />}
+            </button>
+          </div>
+          <button onClick={() => setNewKey(null)} className="text-xs text-green-700 underline">Dismiss</button>
+        </div>
+      )}
+
+      {/* Create form */}
+      {showCreate && (
+        <div className="p-5 rounded-xl border border-gray-200 bg-gray-50 space-y-4">
+          <h3 className="text-sm font-semibold text-gray-800">New API Key</h3>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Key Name</label>
+            <input value={name} onChange={e => setName(e.target.value)}
+              placeholder="e.g. Mobile App, Zapier Integration"
+              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-400" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-2">Scopes</label>
+            <div className="grid grid-cols-1 gap-1.5 max-h-48 overflow-y-auto pr-1">
+              {AVAILABLE_SCOPES.map(s => (
+                <label key={s.value} className="flex items-center gap-2 cursor-pointer select-none">
+                  <input type="checkbox" checked={scopes.includes(s.value)} onChange={() => toggleScope(s.value)}
+                    className="rounded border-gray-300 text-brand-600 shrink-0" />
+                  <span className="text-xs text-gray-700">{s.label}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button onClick={() => createMut.mutate({ name, scopes })} disabled={!name || scopes.length === 0 || createMut.isPending}
+              className="px-4 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-50 flex items-center gap-2"
+              style={{ background: '#29ABE2' }}>
+              {createMut.isPending && <Loader2 className="w-4 h-4 animate-spin" />} Generate
+            </button>
+            <button onClick={() => setShowCreate(false)}
+              className="px-4 py-2 rounded-lg text-sm text-gray-600 border border-gray-200 hover:bg-white">Cancel</button>
+          </div>
+        </div>
+      )}
+
+      {/* Keys list */}
+      {isLoading ? (
+        <div className="flex items-center gap-2 text-sm text-gray-500"><Loader2 className="w-4 h-4 animate-spin" /> Loading…</div>
+      ) : keys.length === 0 ? (
+        <div className="text-center py-12 text-gray-400">
+          <KeyRound className="w-10 h-10 mx-auto mb-3 opacity-30" />
+          <p className="text-sm">No API keys yet. Generate one to get started.</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {keys.map((k: any) => (
+            <div key={k.id} className="flex items-center gap-3 p-4 rounded-xl border border-gray-100 bg-white">
+              <KeyRound className="w-4 h-4 text-gray-400 shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-gray-900">{k.name}</p>
+                <p className="text-xs text-gray-400 font-mono mt-0.5">{k.key_prefix}••••••••••••••••••••••</p>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  Created {new Date(k.created_at).toLocaleDateString()}
+                  {k.last_used_at && ` · Last used ${new Date(k.last_used_at).toLocaleDateString()}`}
+                </p>
+              </div>
+              <button onClick={() => { if (confirm(`Revoke "${k.name}"?`)) revokeMut.mutate(k.id); }}
+                className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors">
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Webhooks ──────────────────────────────────────────────────────────────────
+const WEBHOOK_EVENTS = [
+  'contact.created','contact.updated','deal.created','deal.updated','deal.stage_changed',
+  'ticket.created','ticket.updated','ticket.closed','ticket.assigned',
+  'activity.created',
+];
+
+function WebhooksSettings() {
+  const qc = useQueryClient();
+  const [showCreate, setShowCreate] = useState(false);
+  const [whUrl, setWhUrl] = useState('');
+  const [whName, setWhName] = useState('');
+  const [whEvents, setWhEvents] = useState<string[]>(['ticket.created']);
+  const [expandedLogs, setExpandedLogs] = useState<string | null>(null);
+
+  const { data: webhooks = [], isLoading } = useQuery({
+    queryKey: ['webhooks'],
+    queryFn: () => api.get('/api/v1/webhooks').then((r: any) => r.data.data),
+  });
+
+  const { data: logs = [] } = useQuery({
+    queryKey: ['webhook-logs', expandedLogs],
+    queryFn: () => expandedLogs
+      ? api.get(`/api/v1/webhooks/${expandedLogs}/deliveries`).then((r: any) => r.data.data)
+      : [],
+    enabled: !!expandedLogs,
+  });
+
+  const createMut = useMutation({
+    mutationFn: (body: any) => api.post('/api/v1/webhooks', body).then((r: any) => r.data),
+    onSuccess: () => { setShowCreate(false); setWhUrl(''); setWhName(''); setWhEvents(['ticket.created']); qc.invalidateQueries({ queryKey: ['webhooks'] }); },
+  });
+
+  const testMut = useMutation({
+    mutationFn: (id: string) => api.post(`/api/v1/webhooks/${id}/test`).then((r: any) => r.data),
+  });
+
+  const deleteMut = useMutation({
+    mutationFn: (id: string) => api.delete(`/api/v1/webhooks/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['webhooks'] }),
+  });
+
+  const toggleEvent = (e: string) =>
+    setWhEvents(prev => prev.includes(e) ? prev.filter(x => x !== e) : [...prev, e]);
+
+  return (
+    <div className="max-w-2xl space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-lg font-semibold text-gray-900">Webhooks</h2>
+          <p className="text-sm text-gray-500 mt-0.5">Send real-time event notifications to external URLs.</p>
+        </div>
+        <button onClick={() => setShowCreate(true)}
+          className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white"
+          style={{ background: 'linear-gradient(135deg,#29ABE2,#1a8cbf)' }}>
+          <Plus className="w-4 h-4" /> Add Webhook
+        </button>
+      </div>
+
+      {/* Create form */}
+      {showCreate && (
+        <div className="p-5 rounded-xl border border-gray-200 bg-gray-50 space-y-4">
+          <h3 className="text-sm font-semibold text-gray-800">New Webhook</h3>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Name</label>
+            <input value={whName} onChange={e => setWhName(e.target.value)} placeholder="e.g. Slack Notifications"
+              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-400" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">URL</label>
+            <input value={whUrl} onChange={e => setWhUrl(e.target.value)} placeholder="https://your-server.com/webhook"
+              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-400" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-2">Events</label>
+            <div className="grid grid-cols-2 gap-1.5">
+              {WEBHOOK_EVENTS.map(e => (
+                <label key={e} className="flex items-center gap-2 cursor-pointer select-none">
+                  <input type="checkbox" checked={whEvents.includes(e)} onChange={() => toggleEvent(e)}
+                    className="rounded border-gray-300 text-brand-600" />
+                  <span className="text-xs text-gray-700 font-mono">{e}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button onClick={() => createMut.mutate({ name: whName, url: whUrl, events: whEvents })}
+              disabled={!whName || !whUrl || whEvents.length === 0 || createMut.isPending}
+              className="px-4 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-50 flex items-center gap-2"
+              style={{ background: '#29ABE2' }}>
+              {createMut.isPending && <Loader2 className="w-4 h-4 animate-spin" />} Create
+            </button>
+            <button onClick={() => setShowCreate(false)}
+              className="px-4 py-2 rounded-lg text-sm text-gray-600 border border-gray-200 hover:bg-white">Cancel</button>
+          </div>
+        </div>
+      )}
+
+      {/* List */}
+      {isLoading ? (
+        <div className="flex items-center gap-2 text-sm text-gray-500"><Loader2 className="w-4 h-4 animate-spin" /> Loading…</div>
+      ) : webhooks.length === 0 ? (
+        <div className="text-center py-12 text-gray-400">
+          <Globe className="w-10 h-10 mx-auto mb-3 opacity-30" />
+          <p className="text-sm">No webhooks configured yet.</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {webhooks.map((wh: any) => (
+            <div key={wh.id} className="rounded-xl border border-gray-100 bg-white overflow-hidden">
+              <div className="flex items-center gap-3 p-4">
+                <Globe className="w-4 h-4 text-gray-400 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-900">{wh.name || 'Unnamed'}</p>
+                  <p className="text-xs text-gray-400 truncate">{wh.url}</p>
+                  <div className="flex gap-1 mt-1 flex-wrap">
+                    {(wh.events || []).slice(0, 4).map((e: string) => (
+                      <span key={e} className="text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded font-mono">{e}</span>
+                    ))}
+                    {(wh.events || []).length > 4 && <span className="text-xs text-gray-400">+{wh.events.length - 4} more</span>}
+                  </div>
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  <button onClick={() => testMut.mutate(wh.id)} title="Send test event"
+                    disabled={testMut.isPending}
+                    className="p-1.5 rounded-lg text-gray-400 hover:text-brand-600 hover:bg-brand-50 transition-colors">
+                    <FlaskConical className="w-4 h-4" />
+                  </button>
+                  <button onClick={() => setExpandedLogs(expandedLogs === wh.id ? null : wh.id)} title="View delivery logs"
+                    className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-50 transition-colors">
+                    {expandedLogs === wh.id ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                  </button>
+                  <button onClick={() => { if (confirm(`Delete webhook "${wh.name}"?`)) deleteMut.mutate(wh.id); }}
+                    className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors">
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+              {/* Delivery logs */}
+              {expandedLogs === wh.id && (
+                <div className="border-t border-gray-100 p-4 bg-gray-50">
+                  <p className="text-xs font-semibold text-gray-500 mb-2">Delivery Logs</p>
+                  {logs.length === 0 ? (
+                    <p className="text-xs text-gray-400">No deliveries yet.</p>
+                  ) : (
+                    <div className="space-y-1.5 max-h-40 overflow-y-auto">
+                      {logs.map((log: any) => (
+                        <div key={log.id} className="flex items-center gap-2 text-xs">
+                          <span className={`w-2 h-2 rounded-full shrink-0 ${log.status === 'success' ? 'bg-green-500' : log.status === 'failed' ? 'bg-red-500' : 'bg-yellow-400'}`} />
+                          <span className="text-gray-500 font-mono">{log.event}</span>
+                          <span className="text-gray-400 ml-auto">{log.response_status ? `HTTP ${log.response_status}` : log.status}</span>
+                          <span className="text-gray-300">{new Date(log.created_at).toLocaleTimeString()}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 const TAB_CONTENT: Record<Tab, React.FC> = {
   workspace:  WorkspaceSettings,
   tags:       TagsSettings,
   milestones: MilestoneSettings,
+  'api-keys': ApiKeysSettings,
+  webhooks:   WebhooksSettings,
 };
 
 export function Settings() {
