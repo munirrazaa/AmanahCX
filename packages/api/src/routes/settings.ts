@@ -283,10 +283,11 @@ export function settingsRoutes(db: DatabaseClient, redis: RedisClient) {
                   m.name AS manager_name,
                   r.name AS role_name, r.color AS role_color
            FROM users u
-           LEFT JOIN users m ON m.id = u.manager_id
+           LEFT JOIN users m ON m.id = u.manager_id AND m.tenant_id = $1
            LEFT JOIN roles r ON r.id = u.custom_role_id
-           WHERE u.role != 'super_admin'
+           WHERE u.tenant_id = $1 AND u.role != 'super_admin'
            ORDER BY u.name ASC`,
+          [req.tenant.id],
         );
         return result.rows;
       });
@@ -303,9 +304,9 @@ export function settingsRoutes(db: DatabaseClient, redis: RedisClient) {
                   r.name AS role_name, r.color AS role_color
            FROM users u
            LEFT JOIN roles r ON r.id = u.custom_role_id
-           WHERE u.manager_id = $1 AND u.role != 'super_admin'
+           WHERE u.tenant_id = $2 AND u.manager_id = $1 AND u.role != 'super_admin'
            ORDER BY u.name ASC`,
-          [targetId],
+          [targetId, req.tenant.id],
         );
         return result.rows;
       });
@@ -468,7 +469,7 @@ export function settingsRoutes(db: DatabaseClient, redis: RedisClient) {
         }
         // Enforce department scope — invitee must be in manager's own department
         const [inviter] = await db.withTenant(req.tenant.id, async (c) => {
-          const r = await c.query('SELECT department, department_type FROM users WHERE id = $1', [req.user.sub]);
+          const r = await c.query('SELECT department, department_type FROM users WHERE id = $1 AND tenant_id = $2', [req.user.sub, req.tenant.id]);
           return r.rows;
         });
         if (inviter?.department && department && inviter.department !== department) {
@@ -624,7 +625,7 @@ export function settingsRoutes(db: DatabaseClient, redis: RedisClient) {
         let i = 1;
 
         // Fetch current user state to derive permissions when only department changes
-        const [current] = (await client.query('SELECT role, department, department_type FROM users WHERE id = $1', [userId])).rows;
+        const [current] = (await client.query('SELECT role, department, department_type FROM users WHERE id = $1 AND tenant_id = $2', [userId, req.tenant.id])).rows;
         const effectiveRole     = role ?? current?.role ?? 'agent';
         const effectiveDept     = department !== undefined ? department : current?.department;
         const effectiveDeptType = departmentType !== undefined ? departmentType : current?.department_type;
@@ -756,7 +757,7 @@ export function settingsRoutes(db: DatabaseClient, redis: RedisClient) {
       }
       const bcrypt = (await import('bcryptjs')).default;
       const [user] = await db.withTenant(req.tenant.id, async (client) => {
-        const result = await client.query('SELECT password_hash FROM users WHERE id = $1', [req.user.sub]);
+        const result = await client.query('SELECT password_hash FROM users WHERE id = $1 AND tenant_id = $2', [req.user.sub, req.tenant.id]);
         return result.rows;
       });
       if (!user || !(await bcrypt.compare(currentPassword, user.password_hash))) {
@@ -787,7 +788,7 @@ export function settingsRoutes(db: DatabaseClient, redis: RedisClient) {
     // GET /api/v1/settings/me/status — return current agent status
     fastify.get('/me/status', async (req, reply) => {
       const [row] = await db.withTenant(req.tenant.id, async (client) => {
-        const r = await client.query(`SELECT agent_status FROM users WHERE id = $1`, [req.user.sub]);
+        const r = await client.query(`SELECT agent_status FROM users WHERE id = $1 AND tenant_id = $2`, [req.user.sub, req.tenant.id]);
         return r.rows;
       });
       return reply.send({ success: true, data: { status: row?.agent_status ?? 'offline' } });
@@ -817,10 +818,11 @@ export function settingsRoutes(db: DatabaseClient, redis: RedisClient) {
                   r.name AS role_name, r.color AS role_color
            FROM users u
            LEFT JOIN roles r ON r.id = u.custom_role_id
-           WHERE u.role NOT IN ('super_admin','tenant_admin')
+           WHERE u.tenant_id = $1 AND u.role NOT IN ('super_admin','tenant_admin')
            ORDER BY
              CASE u.agent_status WHEN 'online' THEN 1 WHEN 'busy' THEN 2 WHEN 'away' THEN 3 ELSE 4 END,
              u.name ASC`,
+          [req.tenant.id],
         );
         return result.rows;
       });
