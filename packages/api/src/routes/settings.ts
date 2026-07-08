@@ -632,6 +632,7 @@ export function settingsRoutes(db: DatabaseClient, redis: RedisClient) {
     fastify.patch('/team/:userId', { preHandler: requireRole('super_admin', 'tenant_admin') }, async (req, reply) => {
       const { userId } = req.params as { userId: string };
       const PatchSchema = z.object({
+        name:           z.string().min(1).max(100).optional(),
         // Restrict to tenant-level roles only — super_admin cannot be self-assigned
         role:           z.enum(['tenant_admin', 'manager', 'agent', 'viewer']).optional(),
         department:     z.string().max(100).nullable().optional(),
@@ -645,7 +646,7 @@ export function settingsRoutes(db: DatabaseClient, redis: RedisClient) {
       if (!parsed.success) {
         return reply.code(400).send({ success: false, error: { code: 'INVALID_INPUT', message: parsed.error.issues[0]?.message ?? 'Invalid input' } });
       }
-      const { role, department, departmentType, permissions: customPermissions, manager_id, custom_role_id, is_active } = parsed.data;
+      const { name: patchName, role, department, departmentType, permissions: customPermissions, manager_id, custom_role_id, is_active } = parsed.data;
 
       const [user] = await db.withTenant(req.tenant.id, async (client) => {
         // Build dynamic update
@@ -659,6 +660,10 @@ export function settingsRoutes(db: DatabaseClient, redis: RedisClient) {
         const effectiveDept     = department !== undefined ? department : current?.department;
         const effectiveDeptType = departmentType !== undefined ? departmentType : current?.department_type;
 
+        if (patchName !== undefined) {
+          updates.push(`name = $${i++}`);
+          vals.push(patchName);
+        }
         if (role !== undefined) {
           updates.push(`role = $${i++}`);
           vals.push(role);
