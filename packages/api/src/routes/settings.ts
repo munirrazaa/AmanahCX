@@ -452,7 +452,7 @@ export function settingsRoutes(db: DatabaseClient, redis: RedisClient) {
         email:           z.string().email(),
         name:            z.string().max(100).optional(),
         // Tenant admins can assign up to manager; managers can only assign agent/viewer/policy_admin
-        role:                  z.enum(['tenant_admin', 'manager', 'agent', 'viewer', 'policy_admin']).default('agent'),
+        role:                  z.enum(['tenant_admin', 'manager', 'agent', 'viewer', 'policy_admin']).optional(),
         custom_role_id:        z.string().uuid().optional(),
         permissions:           z.record(z.string()).optional(),
         department:            z.string().max(100).optional(),
@@ -498,18 +498,27 @@ export function settingsRoutes(db: DatabaseClient, redis: RedisClient) {
       // Enforce: any module not licensed by super admin is forced to 'none'
       const perms = await applyModuleLicensing(req.tenant.id, rawPerms);
 
-      // 1. Create (or update) user account with role + permissions + department
+      // 1. Create (or update) user account with role + permissions + department.
+      //    On conflict (re-invite), only overwrite fields the caller explicitly provided —
+      //    role/name/permissions are preserved from the existing record if omitted.
       const [user] = await db.withTenant(req.tenant.id, async (client) => {
         const result = await client.query(
           `INSERT INTO users (tenant_id, email, name, role, password_hash, permissions, custom_role_id, department, department_type, manager_id, governed_departments)
            VALUES ($1, $2, $3, $4, 'INVITE_PENDING', $5, $6, $7, $8, $9, $10)
            ON CONFLICT (tenant_id, email) DO UPDATE
-             SET role = EXCLUDED.role, name = EXCLUDED.name,
-                 permissions = EXCLUDED.permissions, custom_role_id = EXCLUDED.custom_role_id,
-                 department = EXCLUDED.department, department_type = EXCLUDED.department_type,
-                 manager_id = EXCLUDED.manager_id, governed_departments = EXCLUDED.governed_departments
+             SET role        = CASE WHEN $11 THEN EXCLUDED.role        ELSE users.role        END,
+                 name        = CASE WHEN $12 THEN EXCLUDED.name        ELSE users.name        END,
+                 permissions = CASE WHEN $11 THEN EXCLUDED.permissions ELSE users.permissions END,
+                 custom_role_id   = COALESCE(EXCLUDED.custom_role_id, users.custom_role_id),
+                 department       = COALESCE(EXCLUDED.department,      users.department),
+                 department_type  = COALESCE(EXCLUDED.department_type, users.department_type),
+                 manager_id       = COALESCE(EXCLUDED.manager_id,      users.manager_id),
+                 governed_departments = EXCLUDED.governed_departments
            RETURNING id, email, name, role, permissions, custom_role_id, department, department_type, manager_id, governed_departments`,
-          [req.tenant.id, email, displayName, assignedRole, JSON.stringify(perms), custom_role_id ?? null, department ?? null, departmentType ?? null, manager_id ?? null, governed_departments ?? []],
+          [req.tenant.id, email, displayName, assignedRole, JSON.stringify(perms), custom_role_id ?? null, department ?? null, departmentType ?? null, manager_id ?? null, governed_departments ?? [],
+           role !== undefined,  // $11: was role explicitly provided?
+           name !== undefined,  // $12: was name explicitly provided?
+          ],
         );
         return result.rows;
       });
