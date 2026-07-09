@@ -25,7 +25,7 @@ type BusinessHoursSchedule = Record<string, DaySchedule>;
 
 interface SlaPolicy {
   id: string; name: string; description?: string; priority: string;
-  first_response_hours: number; resolution_hours: number;
+  first_response_hours: number; resolution_hours: number; time_unit?: string;
   reminder_pct: number; l1_escalation_pct: number; l2_escalation_pct: number;
   business_hours_only: boolean;
   business_hours_schedule: BusinessHoursSchedule;
@@ -279,6 +279,7 @@ function SlaModal({ policy, onClose }: { policy?: SlaPolicy; onClose: () => void
     priority:           policy?.priority             ?? 'medium',
     firstResponseHours: policy?.first_response_hours ?? 4,
     resolutionHours:    policy?.resolution_hours      ?? 24,
+    timeUnit:           policy?.time_unit            ?? 'hours',
     reminderPct:        policy?.reminder_pct          ?? 80,
     l1EscalationPct:    policy?.l1_escalation_pct     ?? 100,
     l2EscalationPct:    policy?.l2_escalation_pct     ?? 150,
@@ -414,18 +415,27 @@ function SlaModal({ policy, onClose }: { policy?: SlaPolicy; onClose: () => void
           {/* Response times */}
           <div className="border-t border-gray-100 pt-4">
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Response Times</p>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-3 gap-3">
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">First Response (hours)</label>
+                <label className="block text-xs font-medium text-gray-600 mb-1">First Response</label>
                 <input type="number" min={0} value={form.firstResponseHours} onChange={set('firstResponseHours')}
                   className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-brand-400" />
                 <p className="text-xs text-gray-400 mt-1">From ticket creation → first agent reply</p>
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Resolution (hours)</label>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Resolution</label>
                 <input type="number" min={1} value={form.resolutionHours} onChange={set('resolutionHours')}
                   className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-brand-400" />
                 <p className="text-xs text-gray-400 mt-1">From agent acceptance → resolved</p>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Time Unit</label>
+                <select value={form.timeUnit} onChange={set('timeUnit')}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-brand-400">
+                  <option value="hours">Hours</option>
+                  <option value="minutes">Minutes</option>
+                </select>
+                <p className="text-xs text-gray-400 mt-1">Apply to both fields above</p>
               </div>
             </div>
             {/* Business hours toggle + per-day schedule (Zendesk/Freshdesk standard) */}
