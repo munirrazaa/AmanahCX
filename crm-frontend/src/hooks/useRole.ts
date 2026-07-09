@@ -10,12 +10,13 @@
 
 import { useAuthStore } from '../store/auth.store';
 
-type Role = 'super_admin' | 'tenant_admin' | 'manager' | 'agent' | 'viewer';
+type Role = 'super_admin' | 'tenant_admin' | 'manager' | 'policy_admin' | 'agent' | 'viewer';
 
 const ROLE_RANK: Record<Role, number> = {
   super_admin:  50,
   tenant_admin: 40,
   manager:      30,
+  policy_admin: 32,
   agent:        20,
   viewer:       10,
 };
