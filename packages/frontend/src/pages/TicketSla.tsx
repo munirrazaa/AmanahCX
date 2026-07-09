@@ -337,20 +337,12 @@ function SlaModal({ policy, onClose }: { policy?: SlaPolicy; onClose: () => void
   const mutation = useMutation({
     mutationFn: () => {
       const splitCSV = (s: string) => s.split(',').map(x => x.trim()).filter(Boolean);
-      const { matchChannels, matchDepartments, matchTags, reminderPct, l1EscalationPct, l2EscalationPct, firstResponseHours, resolutionHours, businessHoursOnly, pauseOnPending, isActive, ...rest } = form;
+      const { matchChannels, matchDepartments, matchTags, ...rest } = form;
       const payload = {
         ...rest,
-        first_response_hours: firstResponseHours,
-        resolution_hours: resolutionHours,
-        reminder_pct: reminderPct,
-        l1_escalation_pct: l1EscalationPct,
-        l2_escalation_pct: l2EscalationPct,
-        business_hours_only: businessHoursOnly,
-        pause_on_pending: pauseOnPending,
-        is_active: isActive,
-        reminder_schedule: schedule,
-        business_hours_schedule: bizHours,
-        match_conditions: {
+        reminderSchedule: schedule,
+        businessHoursSchedule: bizHours,
+        matchConditions: {
           channels:    splitCSV(matchChannels),
           departments: splitCSV(matchDepartments),
           tags:        splitCSV(matchTags),
@@ -361,7 +353,6 @@ function SlaModal({ policy, onClose }: { policy?: SlaPolicy; onClose: () => void
         : api.post('/api/v1/tickets/sla-policies', payload);
     },
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['sla-policies'] }); onClose(); },
-    onError: (error: any) => console.error('SLA Policy save failed:', error?.response?.data ?? error),
   });
 
   const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
