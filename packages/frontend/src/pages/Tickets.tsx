@@ -681,16 +681,16 @@ function CreateTicketModal({ queues, onClose }: { queues: Queue[]; onClose: () =
             </div>
           </div>
 
-          {!selectedContact && (
-            <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2.5">
-              A customer must be selected before a ticket can be created. Search for the customer above.
+          {!selectedContact && !form.reporterEmail && (
+            <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5">
+              💡 Search for an existing customer above, or enter an email address to auto-create a new one.
             </p>
           )}
         </div>
 
         <div className="px-6 pb-5 flex gap-2 sticky bottom-0 bg-white pt-3 border-t border-gray-100">
           <button onClick={onClose} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-500 hover:bg-gray-50">Cancel</button>
-          <button onClick={() => mutation.mutate()} disabled={!form.subject || !selectedContact || mutation.isPending}
+          <button onClick={() => mutation.mutate()} disabled={!form.subject || (!selectedContact && !form.reporterEmail) || mutation.isPending}
             className="flex-1 py-2.5 bg-brand-600 text-white rounded-xl text-sm font-semibold hover:bg-brand-500 disabled:opacity-40 flex items-center justify-center gap-2">
             {mutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
             Create Ticket

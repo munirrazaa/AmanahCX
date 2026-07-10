@@ -1058,16 +1058,43 @@ export function ticketRoutes(db: DatabaseClient, eventBus: EventBus) {
     fastify.post('/', { preHandler: requireScope('tickets:write') }, async (req, reply) => {
       const body       = CreateTicketSchema.parse(req.body);
 
-      // Every ticket must be linked to a contact — enforced here and on the frontend.
-      // Voice bot tickets always provide a contactId (auto-created from caller phone).
-      if (!body.contactId && body.channel !== 'voice_bot') {
-        return reply.code(400).send({
-          success: false,
-          error: { code: 'CONTACT_REQUIRED', message: 'A contact must be selected before creating a ticket.' },
+      const tenantId   = req.tenant.id;
+      let contactId    = body.contactId;
+
+      // Auto-create contact if not provided — HubSpot + Zoho pattern
+      if (!contactId && (body.reporterEmail || body.reporterPhone)) {
+        const [existingContact] = await db.withTenant(tenantId, async (client) => {
+          if (body.reporterEmail) {
+            const r = await client.query(
+              `SELECT id FROM contacts WHERE email = $1 AND tenant_id = $2 LIMIT 1`,
+              [body.reporterEmail, tenantId]
+            );
+            return r.rows;
+          }
+          return [];
         });
+
+        if (existingContact) {
+          contactId = existingContact.id;
+        } else {
+          // Auto-create new contact
+          const nameParts = body.reporterName?.split(' ') ?? [];
+          const firstName = nameParts[0] ?? 'Customer';
+          const lastName = nameParts.slice(1).join(' ') || '';
+
+          const [newContact] = await db.withTenant(tenantId, async (client) => {
+            const r = await client.query(
+              `INSERT INTO contacts (tenant_id, first_name, last_name, email, phone, mobile, status, created_by)
+               VALUES ($1, $2, $3, $4, $5, $6, 'active', $7)
+               RETURNING id`,
+              [tenantId, firstName, lastName || null, body.reporterEmail ?? null, body.reporterPhone ?? null, body.reporterWhatsapp ?? null, req.user.sub]
+            );
+            return r.rows;
+          });
+          contactId = newContact.id;
+        }
       }
 
-      const tenantId   = req.tenant.id;
       const ticketNum  = await nextTicketNumber(db, tenantId);
       const sla        = await findSlaPolicy(db, tenantId, body.slaPolicyId, body.priority, {
         channel:    body.channel,
@@ -1095,7 +1122,7 @@ export function ticketRoutes(db: DatabaseClient, eventBus: EventBus) {
           [tenantId, ticketNum, body.subject, body.description ?? null,
            status, body.priority, body.channel,
            queueId ?? null, sla?.id ?? null,
-           body.contactId ?? null, body.companyId ?? null,
+           contactId ?? null, body.companyId ?? null,
            body.assigneeId ?? null,
            body.reporterEmail ?? null, body.reporterName ?? null, body.reporterPhone ?? null,
             body.reporterWhatsapp ?? null, body.preferredChannel ?? 'email',
