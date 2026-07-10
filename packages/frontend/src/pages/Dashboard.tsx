@@ -1293,6 +1293,14 @@ export function Dashboard() {
     retry: false,
   });
 
+  // Active modules for this tenant — quick actions must only show features actually allocated
+  const { data: activeModules = [] } = useQuery<{ id: string }[]>({
+    queryKey: ['modules'],
+    queryFn: () => api.get('/api/v1/modules').then(r => r.data.data),
+    staleTime: 60_000,
+  });
+  const moduleIds = new Set(activeModules.map(m => m.id));
+
   const isTenantAdmin = role === 'tenant_admin';
   const isManager     = ['manager','super_admin'].includes(role);
 
@@ -1302,29 +1310,32 @@ export function Dashboard() {
     : role === 'agent'       ? 'Agent View'
     : 'Viewer View';
 
-  // Quick action bar varies by role
-  const quickLinks: { label: string; to: string; icon: React.ElementType; color: string }[] = isTenantAdmin
+  // Quick action bar varies by role — each entry lists which module must be
+  // active for this tenant before the button is shown (undefined = always shown).
+  const quickLinksRaw: { label: string; to: string; icon: React.ElementType; color: string; requiresModule?: string }[] = isTenantAdmin
     ? [
         { label: 'Manage Users',   to: '/settings',       icon: Users,  color: C.cyan   },
         { label: 'Roles',          to: '/roles',          icon: Shield, color: C.purple },
-        { label: 'Voice Bot',      to: '/voice-bot',      icon: Bot,    color: C.purple },
+        { label: 'Voice Bot',      to: '/voice-bot',      icon: Bot,    color: C.purple, requiresModule: 'voice' },
         { label: 'Email Logs',     to: '/emails',         icon: Mail,   color: C.green  },
       ]
     : isViewer
     ? []
     : isManager
     ? [
-        { label: 'New Ticket',     to: '/tickets',         icon: Ticket,      color: C.orange },
-        { label: 'Voice Calls',    to: '/voice',           icon: PhoneCall,   color: C.cyan   },
-        { label: 'Bot Calls',      to: '/voice-bot',       icon: Bot,         color: C.purple },
-        { label: 'Ticket Reports', to: '/ticket-reports',  icon: BarChart2,   color: C.gold   },
+        { label: 'New Ticket',     to: '/tickets',         icon: Ticket,      color: C.orange, requiresModule: 'ticketing' },
+        { label: 'Voice Calls',    to: '/voice',           icon: PhoneCall,   color: C.cyan,   requiresModule: 'voice' },
+        { label: 'Bot Calls',      to: '/voice-bot',       icon: Bot,         color: C.purple, requiresModule: 'voice' },
+        { label: 'Ticket Reports', to: '/ticket-reports',  icon: BarChart2,   color: C.gold,   requiresModule: 'ticketing' },
       ]
     : [
-        { label: 'New Ticket',  to: '/tickets',            icon: Ticket,      color: C.orange },
-        { label: 'Voice Calls', to: '/voice',              icon: PhoneCall,   color: C.cyan   },
-        { label: 'Bot Calls',   to: '/voice-bot',          icon: Bot,         color: C.purple },
-        { label: 'New Invoice', to: '/sales/invoices/new', icon: TrendingUp,  color: C.green  },
+        { label: 'New Ticket',  to: '/tickets',            icon: Ticket,      color: C.orange, requiresModule: 'ticketing' },
+        { label: 'Voice Calls', to: '/voice',              icon: PhoneCall,   color: C.cyan,   requiresModule: 'voice' },
+        { label: 'Bot Calls',   to: '/voice-bot',          icon: Bot,         color: C.purple, requiresModule: 'voice' },
+        { label: 'New Invoice', to: '/sales/invoices/new', icon: TrendingUp,  color: C.green,  requiresModule: 'sales' },
       ];
+
+  const quickLinks = quickLinksRaw.filter(l => !l.requiresModule || moduleIds.has(l.requiresModule));
 
   return (
     <div className="min-h-screen bg-gray-50">

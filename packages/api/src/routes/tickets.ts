@@ -1339,12 +1339,20 @@ export function ticketRoutes(db: DatabaseClient, eventBus: EventBus) {
           ? ` OR (t.assignee_id IS NULL AND t.status = 'open' AND t.queue_id IN` +
             `      (SELECT queue_id FROM queue_members WHERE user_id = $${idx + 2}))`
           : '';
+        // Managers/supervisors also see unclaimed tickets waiting in their team's queues
+        // (industry-standard supervisor visibility, matching Zendesk/Freshdesk team-queue
+        // views) — scoped to queues at least one of their reports belongs to, or tickets
+        // with no queue at all, rather than every unclaimed ticket tenant-wide.
+        const managerQueueClause = req.user.role === 'manager'
+          ? ` OR (t.assignee_id IS NULL AND t.status = 'open' AND (t.queue_id IS NULL OR t.queue_id IN` +
+            `      (SELECT queue_id FROM queue_members WHERE user_id = ANY($${idx}::uuid[]))))`
+          : '';
         // D-F3: originators see their own tickets from creation (not just after acceptance)
         where.push(
           `(t.assignee_id = ANY($${idx}::uuid[])` +
           ` OR (t.created_by = $${idx + 1}` +
           `     AND (t.assignee_id IS NULL OR t.assignee_id != ALL($${idx}::uuid[])))` +
-          `${agentQueueClause})`,
+          `${agentQueueClause}${managerQueueClause})`,
         );
         if (req.user.role === 'agent') {
           params.push(visibleIds, userId, userId);
