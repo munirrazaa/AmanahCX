@@ -27,6 +27,8 @@ export const useAuthStore = create<AuthState>()(
         const { token, user, tenant } = data.data;
         api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
         set({ user, tenant, token, isAuthenticated: true });
+        // Ensure sessionStorage is immediately updated
+        sessionStorage.setItem('crm-auth', JSON.stringify({ token, user, tenant }));
       },
 
       logout: () => {
