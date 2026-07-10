@@ -42,7 +42,7 @@ export function defaultPermissions(role: string): Record<string, string> {
     default:
       return {
         dashboard: 'view', contacts: 'full', companies: 'view', deals: 'view',
-        activities: 'full', tickets: 'full', emails: 'full', analytics: 'none',
+        activities: 'full', tickets: 'full', emails: 'full', analytics: 'view',
         voice: 'view', voicebot: 'none', integrations: 'none', settings: 'none', billing: 'none',
       };
   }

@@ -5,8 +5,14 @@ import { requireFeature, requireScope, requireRole } from '../middlewares/auth.m
 export function analyticsRoutes(db: DatabaseClient) {
   return async function (fastify: FastifyInstance) {
     const preHandler = [requireFeature('analytics'), requireScope('analytics:read')];
-    // ops-dashboard is the home screen for all roles — not gated by analytics feature flag
-    const dashPreHandler = [requireScope('analytics:read')];
+    // ops-dashboard is the home screen for all roles — not gated by analytics feature flag.
+    // Fixed 2026-07-10: this previously still required requireScope('analytics:read'), which
+    // checks permissions.analytics — the same key applyModuleLicensing forces to 'none' for any
+    // tenant without the paid Analytics module licensed. That silently reintroduced the exact
+    // gate this comment says shouldn't exist, blocking every agent's home screen on tenants that
+    // never purchased Analytics (e.g. Core CRM + Ticketing only). No scope check is needed here —
+    // the global auth hook already requires a valid JWT for every non-public route.
+    const dashPreHandler: never[] = [];
 
     // Dashboard summary
     fastify.get('/dashboard', { preHandler }, async (req, reply) => {
