@@ -90,8 +90,11 @@ async function buildServer() {
 
   // Start webhook delivery worker (polls every 5 s, exponential backoff retries)
   const stopWebhookWorker = startWebhookWorker(db);
-  // Start webhook dispatcher — BullMQ worker that fans out crm-events to tenant webhooks
-  const stopWebhookDispatcher = startWebhookDispatcher(db, redis.native);
+  // Start webhook dispatcher — BullMQ worker that fans out crm-events to tenant webhooks.
+  // Requires a real Redis connection (BullMQ can't run against the in-memory fallback).
+  const stopWebhookDispatcher = hasRealRedis
+    ? startWebhookDispatcher(db, redis.native)
+    : async () => {};
   // Start analytics MV refresh worker (warms up on boot, refreshes hourly)
   const stopAnalyticsRefresh = startAnalyticsRefreshWorker(db);
   const stopRetentionWorker  = startRetentionExpiryWorker(db);
