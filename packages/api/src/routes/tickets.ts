@@ -1084,8 +1084,8 @@ export function ticketRoutes(db: DatabaseClient, eventBus: EventBus) {
 
           const [newContact] = await db.withTenant(tenantId, async (client) => {
             const r = await client.query(
-              `INSERT INTO contacts (tenant_id, first_name, last_name, email, phone, mobile, status, created_by)
-               VALUES ($1, $2, $3, $4, $5, $6, 'active', $7)
+              `INSERT INTO contacts (tenant_id, first_name, last_name, email, phone, mobile, status, source, owner_id)
+               VALUES ($1, $2, $3, $4, $5, $6, 'customer', 'ticket', $7)
                RETURNING id`,
               [tenantId, firstName, lastName || null, body.reporterEmail ?? null, body.reporterPhone ?? null, body.reporterWhatsapp ?? null, req.user.sub]
             );
@@ -1237,6 +1237,39 @@ export function ticketRoutes(db: DatabaseClient, eventBus: EventBus) {
       }).parse(req.body);
 
       const tenantId  = req.tenant.id;
+      let contactId   = body.contactId;
+
+      // Auto-create contact if not provided — same find-or-create rule as manual ticket creation.
+      // Voice bot tickets are phone-first, so match on phone number.
+      if (!contactId && body.reporterPhone) {
+        const [existingContact] = await db.withTenant(tenantId, async (client) => {
+          const r = await client.query(
+            `SELECT id FROM contacts WHERE (phone = $1 OR mobile = $1) AND tenant_id = $2 LIMIT 1`,
+            [body.reporterPhone, tenantId]
+          );
+          return r.rows;
+        });
+
+        if (existingContact) {
+          contactId = existingContact.id;
+        } else {
+          const nameParts = body.reporterName?.split(' ') ?? [];
+          const firstName = nameParts[0] ?? 'Caller';
+          const lastName = nameParts.slice(1).join(' ') || '';
+
+          const [newContact] = await db.withTenant(tenantId, async (client) => {
+            const r = await client.query(
+              `INSERT INTO contacts (tenant_id, first_name, last_name, phone, mobile, status, source, owner_id)
+               VALUES ($1, $2, $3, $4, $5, 'customer', 'voice_bot', $6)
+               RETURNING id`,
+              [tenantId, firstName, lastName || null, body.reporterPhone, body.reporterWhatsapp ?? body.reporterPhone, req.user.sub]
+            );
+            return r.rows;
+          });
+          contactId = newContact.id;
+        }
+      }
+
       const ticketNum = await nextTicketNumber(db, tenantId);
       const sla       = await findSlaPolicy(db, tenantId, undefined, body.priority);
 
@@ -1252,7 +1285,7 @@ export function ticketRoutes(db: DatabaseClient, eventBus: EventBus) {
           [tenantId, ticketNum, body.subject, body.description ?? null,
            body.priority,
            qr.rows[0]?.id ?? null, sla?.id ?? null,
-           body.contactId ?? null, body.voiceCallId,
+           contactId ?? null, body.voiceCallId,
            body.reporterName ?? null, body.reporterPhone ?? null],
         );
         return r.rows;
