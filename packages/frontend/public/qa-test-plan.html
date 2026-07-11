@@ -1,0 +1,856 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AmanahCX — Manual Test Plan</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;background:#f0f2f7;color:#1a1a2e;font-size:13px}
+/* ── Header ── */
+header{background:#1a1a2e;color:#fff;padding:14px 24px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+header h1{font-size:17px;font-weight:600}
+header .sub{font-size:11px;opacity:.55;margin-top:2px}
+.sync-status{font-size:11px;padding:4px 10px;border-radius:12px;font-weight:500;white-space:nowrap}
+.sync-ok{background:#064e3b;color:#6ee7b7}
+.sync-err{background:#7f1d1d;color:#fca5a5}
+.sync-busy{background:#1e3a5f;color:#93c5fd}
+/* ── Tabs ── */
+.tabs{background:#fff;border-bottom:1px solid #e0e0e0;display:flex;padding:0 24px;gap:2px;overflow-x:auto}
+.tab{padding:11px 18px;cursor:pointer;font-size:13px;font-weight:500;color:#666;border-bottom:3px solid transparent;white-space:nowrap;flex-shrink:0}
+.tab.active{color:#2563eb;border-bottom-color:#2563eb}
+.tab:hover:not(.active){color:#333}
+/* ── Pages ── */
+.page{display:none;padding:20px 24px}
+.page.active{display:block}
+/* ── Session bar ── */
+.session-bar{background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:14px 18px;margin-bottom:18px;display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap}
+.session-bar label{font-size:11px;color:#888;display:block;margin-bottom:4px;font-weight:500}
+.session-bar input,.session-bar select{padding:7px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;background:#fff;color:#1a1a2e;min-width:140px}
+.session-bar .sep{width:1px;background:#e5e7eb;align-self:stretch;flex-shrink:0}
+.session-name-display{font-size:14px;font-weight:600;color:#1a1a2e}
+.session-date-display{font-size:12px;color:#888;margin-top:2px}
+/* ── Buttons ── */
+.btn{padding:7px 14px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;border:none;white-space:nowrap}
+.btn-blue{background:#2563eb;color:#fff}
+.btn-blue:hover{background:#1d4ed8}
+.btn-green{background:#dcfce7;color:#16a34a;border:1px solid #86efac}
+.btn-green:hover{background:#bbf7d0}
+.btn-red{background:#fee2e2;color:#dc2626;border:1px solid #fca5a5}
+.btn-red:hover{background:#fecaca}
+.btn-gray{background:#f3f4f6;color:#374151;border:1px solid #d1d5db}
+.btn-gray:hover{background:#e5e7eb}
+.btn-amber{background:#fef3c7;color:#92400e;border:1px solid #fde68a}
+.btn-amber:hover{background:#fde68a}
+/* ── KPI row ── */
+.kpi-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:20px}
+.kpi{background:#fff;border-radius:10px;padding:14px;border:1px solid #e8eaed;text-align:center}
+.kpi .val{font-size:26px;font-weight:700;line-height:1}
+.kpi .lbl{font-size:10px;color:#888;margin-top:3px;text-transform:uppercase;letter-spacing:.04em}
+.kpi.k-total .val{color:#1a1a2e}
+.kpi.k-tested .val{color:#2563eb}
+.kpi.k-pass .val{color:#16a34a}
+.kpi.k-fail .val{color:#dc2626}
+.kpi.k-skip .val{color:#f59e0b}
+.kpi.k-crit .val{color:#7c3aed}
+/* ── Module grid ── */
+.module-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));gap:14px}
+.mc{background:#fff;border-radius:10px;border:1px solid #e8eaed;padding:14px;position:relative;overflow:hidden}
+.mc::before{content:'';position:absolute;top:0;left:0;bottom:0;width:4px;border-radius:4px 0 0 4px}
+.mc.s-none::before{background:#d1d5db}
+.mc.s-partial::before{background:#3b82f6}
+.mc.s-done-pass::before{background:#16a34a}
+.mc.s-done-fail::before{background:#dc2626}
+.mc-head{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px}
+.mc-name{font-size:12px;font-weight:600;color:#1a1a2e;line-height:1.3}
+.mc-pct{font-size:22px;font-weight:700;color:#3b82f6;flex-shrink:0;margin-left:8px}
+.mc-pct.full{color:#16a34a}
+.mc-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:8px}
+.mc-stat{text-align:center}
+.mc-stat .n{font-size:15px;font-weight:700}
+.mc-stat .l{font-size:9px;color:#888;margin-top:1px;text-transform:uppercase}
+.mc-stat.t .n{color:#1a1a2e}
+.mc-stat.p .n{color:#16a34a}
+.mc-stat.f .n{color:#dc2626}
+.mc-stat.c .n{color:#d97706}
+.prog{height:5px;background:#f0f0f0;border-radius:3px;overflow:hidden;display:flex}
+.prog-p{height:100%;background:#16a34a}
+.prog-f{height:100%;background:#dc2626}
+.prog-s{height:100%;background:#f59e0b}
+.mc-alert{margin-top:6px;font-size:10px;font-weight:600}
+/* ── Filter bar ── */
+.filter-bar{background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:10px 14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px}
+.filter-bar label{font-size:11px;color:#666;white-space:nowrap}
+.filter-bar select,.filter-bar input[type=text]{padding:5px 9px;border:1px solid #d1d5db;border-radius:5px;font-size:12px;background:#fff}
+/* ── Tests table ── */
+.tbl-wrap{background:#fff;border-radius:10px;border:1px solid #e8eaed;overflow:hidden}
+table{width:100%;border-collapse:collapse;font-size:12px}
+thead th{background:#f8f9fc;padding:9px 10px;text-align:left;font-weight:600;color:#555;border-bottom:1px solid #e8eaed;white-space:nowrap}
+tbody td{padding:0;border-bottom:1px solid #f3f4f6;vertical-align:top}
+tbody tr:last-child td{border-bottom:none}
+tbody tr:hover{background:#fafbff}
+.tc-inner{padding:8px 10px}
+.id-badge{font-weight:700;color:#2563eb;font-size:11px}
+.sub-lbl{font-size:10px;color:#9ca3af;margin-top:1px}
+.crit-dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:#d97706;margin-right:4px;vertical-align:middle;flex-shrink:0}
+.new-badge{background:#ede9fe;color:#7c3aed;font-size:9px;font-weight:700;padding:1px 5px;border-radius:6px;letter-spacing:.03em;vertical-align:middle}
+.mc-new-badge{background:#7c3aed;color:#fff;font-size:9px;font-weight:700;padding:2px 7px;border-radius:8px;letter-spacing:.03em;margin-left:6px}
+.sec-hdr td{background:#f0f4ff;font-weight:700;color:#1e3a8a;padding:7px 10px;font-size:11px;text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid #dbeafe}
+/* ── Result buttons ── */
+.rb-wrap{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:6px}
+.rb{padding:3px 10px;border-radius:4px;font-size:11px;font-weight:600;cursor:pointer;border:1px solid transparent}
+.rb-pass{background:#f0fdf4;color:#16a34a;border-color:#bbf7d0}
+.rb-pass.on{background:#16a34a;color:#fff;border-color:#16a34a}
+.rb-fail{background:#fff1f2;color:#dc2626;border-color:#fecaca}
+.rb-fail.on{background:#dc2626;color:#fff;border-color:#dc2626}
+.rb-skip{background:#fffbeb;color:#b45309;border-color:#fde68a}
+.rb-skip.on{background:#f59e0b;color:#fff;border-color:#f59e0b}
+/* ── Text areas ── */
+.mini-textarea{width:100%;padding:5px 7px;border:1px solid #e5e7eb;border-radius:5px;font-size:11px;font-family:inherit;resize:vertical;min-height:38px;color:#1a1a2e;background:#fff;transition:border-color .15s}
+.mini-textarea:focus{border-color:#3b82f6;outline:none}
+.field-lbl{font-size:10px;color:#9ca3af;margin-bottom:2px;font-weight:500;display:flex;align-items:center;gap:3px}
+.field-lbl .dot{width:5px;height:5px;border-radius:50%;flex-shrink:0}
+.dot-rem{background:#6366f1}
+.dot-chg{background:#f59e0b}
+.saving-spinner{font-size:10px;color:#3b82f6;margin-left:6px;display:none}
+/* ── Tested-at badge ── */
+.tested-at{font-size:10px;color:#9ca3af;margin-top:4px}
+/* ── Session history ── */
+.session-list{display:flex;flex-direction:column;gap:10px}
+.session-item{background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:14px 18px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.session-item.active-session{border-color:#3b82f6;background:#eff6ff}
+.si-info{}
+.si-name{font-size:13px;font-weight:600}
+.si-meta{font-size:11px;color:#888;margin-top:2px}
+.si-stats{display:flex;gap:12px}
+.si-stat{text-align:center}
+.si-stat .n{font-size:15px;font-weight:700}
+.si-stat .l{font-size:10px;color:#888}
+.si-stat.sp .n{color:#16a34a}
+.si-stat.sf .n{color:#dc2626}
+.si-stat.st .n{color:#2563eb}
+/* ── Modal ── */
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;z-index:100;padding:20px}
+.modal{background:#fff;border-radius:12px;padding:24px;width:100%;max-width:460px;box-shadow:0 20px 60px rgba(0,0,0,.25)}
+.modal h3{font-size:16px;font-weight:600;margin-bottom:16px}
+.form-row{margin-bottom:12px}
+.form-row label{font-size:11px;font-weight:600;color:#555;display:block;margin-bottom:4px}
+.form-row input,.form-row textarea{width:100%;padding:8px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;font-family:inherit}
+.form-row textarea{min-height:60px;resize:vertical}
+.modal-btns{display:flex;gap:8px;justify-content:flex-end;margin-top:18px}
+/* ── Toast ── */
+.toast{position:fixed;bottom:20px;right:20px;background:#1a1a2e;color:#fff;padding:10px 18px;border-radius:8px;font-size:12px;z-index:200;opacity:0;transition:opacity .2s;pointer-events:none}
+.toast.show{opacity:1}
+/* ── Loader ── */
+.loader{text-align:center;padding:40px;color:#888;font-size:13px}
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>AmanahCX — Manual Test Plan</h1>
+    <div class="sub">Platform: amanahcx.vercel.app &nbsp;·&nbsp; All demo passwords: Demo1234! &nbsp;·&nbsp; Results stored in Supabase &nbsp;·&nbsp; v2 (2026-07-11): +36 new tests — Messaging, Role Dashboards, Nav/Notifications, Contact channel benchmarking</div>
+  </div>
+  <span class="sync-status sync-busy" id="sync-status">Connecting…</span>
+</header>
+
+<div class="tabs">
+  <div class="tab active" data-page="dashboard">Dashboard</div>
+  <div class="tab" data-page="tests">Test Cases</div>
+  <div class="tab" data-page="history">Session History</div>
+</div>
+
+<!-- DASHBOARD -->
+<div class="page active" id="page-dashboard">
+  <div class="session-bar" id="session-bar">
+    <div>
+      <label>Active Session</label>
+      <div class="session-name-display" id="active-session-name">—</div>
+      <div class="session-date-display" id="active-session-date">No session selected</div>
+    </div>
+    <div class="sep"></div>
+    <div><button class="btn btn-blue" onclick="openNewSessionModal()">+ New Session</button></div>
+    <div><button class="btn btn-gray" onclick="showPage('history')">Switch Session</button></div>
+    <div style="margin-left:auto"><button class="btn btn-green" onclick="exportCSV()">Export CSV</button></div>
+  </div>
+  <div class="kpi-row" id="kpi-row"><div class="loader">Loading…</div></div>
+  <div class="module-grid" id="module-grid"></div>
+</div>
+
+<!-- TEST CASES -->
+<div class="page" id="page-tests">
+  <div class="filter-bar">
+    <label>Module:</label>
+    <select id="filter-sec" onchange="renderTests()"><option value="">All Modules</option></select>
+    <label>Result:</label>
+    <select id="filter-res" onchange="renderTests()">
+      <option value="">All</option>
+      <option value="pass">Passed</option>
+      <option value="fail">Failed</option>
+      <option value="skip">Skipped</option>
+      <option value="pending">Untested</option>
+    </select>
+    <label><input type="checkbox" id="filter-crit" onchange="renderTests()"> Critical only</label>
+    <label><input type="checkbox" id="filter-new" onchange="renderTests()"> New tests only (added 2026-07-11)</label>
+    <input type="text" id="filter-q" placeholder="Search ID or keyword…" oninput="renderTests()" style="width:200px">
+    <span style="margin-left:auto;font-size:11px;color:#888" id="tc-count"></span>
+  </div>
+  <div class="tbl-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th style="width:76px">ID</th>
+          <th style="width:110px">Module</th>
+          <th style="min-width:180px">Test Step</th>
+          <th style="min-width:160px">Expected Result</th>
+          <th style="width:180px">Result &amp; Remarks</th>
+          <th style="width:180px">Changes Required</th>
+        </tr>
+      </thead>
+      <tbody id="tests-body"><tr><td colspan="6" class="loader">Select or create a session first.</td></tr></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- HISTORY -->
+<div class="page" id="page-history">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+    <h2 style="font-size:15px;font-weight:600">All Test Sessions</h2>
+    <button class="btn btn-blue" onclick="openNewSessionModal()">+ New Session</button>
+  </div>
+  <div class="session-list" id="session-list"><div class="loader">Loading…</div></div>
+</div>
+
+<!-- New Session Modal -->
+<div class="modal-bg" id="modal-new-session" style="display:none">
+  <div class="modal">
+    <h3>Create New Test Session</h3>
+    <div class="form-row">
+      <label>Session Name *</label>
+      <input type="text" id="ns-name" placeholder="e.g. Sprint 1 — Full Regression">
+    </div>
+    <div class="form-row">
+      <label>Tester Name</label>
+      <input type="text" id="ns-tester" placeholder="Your name">
+    </div>
+    <div class="form-row">
+      <label>Date *</label>
+      <input type="date" id="ns-date">
+    </div>
+    <div class="form-row">
+      <label>Notes / Scope</label>
+      <textarea id="ns-notes" placeholder="e.g. Testing Telecom and Education sectors only"></textarea>
+    </div>
+    <div class="modal-btns">
+      <button class="btn btn-gray" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-blue" onclick="createSession()">Create &amp; Activate</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── Supabase init ────────────────────────────────────────────────────────────
+const { createClient } = supabase;
+const SB = createClient(
+  'https://ovjjzdtxujwyulcbtjfa.supabase.co',
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im92amp6ZHR4dWp3eXVsY2J0amZhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEwOTQxODUsImV4cCI6MjA5NjY3MDE4NX0.ZKfP5GI53z_6EJTV0bdVQMqYisH70SVFYrek19fKkUA'
+);
+
+// ── Test definitions ─────────────────────────────────────────────────────────
+const TESTS = [
+{id:'SA-01',sec:'SA',sn:'Super Admin — Workspace Setup',sub:'Login',desc:'Open amanahcx.vercel.app in a fresh browser tab',exp:'Login page loads, no "Start free trial" link visible',crit:true},
+{id:'SA-02',sec:'SA',sn:'Super Admin — Workspace Setup',sub:'Login',desc:'Enter Super Admin email + password → click Sign in',exp:'Redirects to Super Admin dashboard',crit:true},
+{id:'SA-03',sec:'SA',sn:'Super Admin — Workspace Setup',sub:'Login',desc:'Enter wrong password → click Sign in',exp:'Error message shown, stay on login page',crit:true},
+{id:'SA-04',sec:'SA',sn:'Super Admin — Workspace Setup',sub:'Login',desc:'Leave email blank → click Sign in',exp:'Validation error shown for required field',crit:false},
+{id:'SA-05',sec:'SA',sn:'Super Admin — Workspace Setup',sub:'Create Tenant',desc:'Navigate to Tenants / Workspaces section in sidebar',exp:'List of existing tenants shown',crit:true},
+{id:'SA-06',sec:'SA',sn:'Super Admin — Workspace Setup',sub:'Create Tenant',desc:'Click "Create Workspace" button',exp:'New workspace form/modal opens',crit:true},
+{id:'SA-07',sec:'SA',sn:'Super Admin — Workspace Setup',sub:'Create Tenant',desc:'Fill: Name, admin email, sector = Telecom, plan tier',exp:'All fields accept input without errors',crit:true},
+{id:'SA-08',sec:'SA',sn:'Super Admin — Workspace Setup',sub:'Create Tenant',desc:'Submit the create workspace form',exp:'New tenant appears in list; confirmation shown',crit:true},
+{id:'SA-09',sec:'SA',sn:'Super Admin — Workspace Setup',sub:'Create Tenant',desc:'Attempt to create a tenant with a duplicate email',exp:'Error: email already in use',crit:false},
+{id:'SA-10',sec:'SA',sn:'Super Admin — Workspace Setup',sub:'Create Tenant',desc:'Create a second tenant with sector = Education',exp:'Second tenant created successfully',crit:false},
+{id:'SA-11',sec:'SA',sn:'Super Admin — Workspace Setup',sub:'Assign Modules',desc:'Open a tenant → go to Modules / Entitlements tab',exp:'Module list shows all available modules',crit:true},
+{id:'SA-12',sec:'SA',sn:'Super Admin — Workspace Setup',sub:'Assign Modules',desc:'Enable Tickets and CRM Contacts only → Save',exp:'Only those two modules saved as enabled for this tenant',crit:true},
+{id:'SA-13',sec:'SA',sn:'Super Admin — Workspace Setup',sub:'Assign Modules',desc:'Enable ALL modules for second tenant → Save',exp:'All modules enabled and saved',crit:true},
+{id:'SA-14',sec:'SA',sn:'Super Admin — Workspace Setup',sub:'Assign Modules',desc:'Reload page and reopen tenant → Modules tab',exp:'Module selections persist after reload',crit:true},
+{id:'SA-15',sec:'SA',sn:'Super Admin — Workspace Setup',sub:'Assign Modules',desc:'Disable a module that is currently enabled → Save',exp:'Module toggled off, saved correctly',crit:false},
+{id:'SA-16',sec:'SA',sn:'Super Admin — Workspace Setup',sub:'User Management',desc:'Open any tenant → Users tab',exp:'List of users within that tenant shown',crit:true},
+{id:'SA-17',sec:'SA',sn:'Super Admin — Workspace Setup',sub:'User Management',desc:'Confirm tenant admin user exists with role tenant_admin',exp:'Admin record visible with correct role label',crit:true},
+{id:'SA-18',sec:'SA',sn:'Super Admin — Workspace Setup',sub:'User Management',desc:'Open a different tenant — verify users shown are ONLY from that tenant',exp:'Users list changes when switching tenants; no cross-tenant users visible',crit:true},
+{id:'TA-01',sec:'TA',sn:'Tenant Admin — Modules',sub:'Login',desc:'Login with Telecom Demo admin credentials',exp:'Lands on tenant dashboard (not Super Admin dashboard)',crit:true},
+{id:'TA-02',sec:'TA',sn:'Tenant Admin — Modules',sub:'Login',desc:'Check sidebar navigation links',exp:'Only modules assigned by Super Admin are visible in the sidebar',crit:true},
+{id:'TA-03',sec:'TA',sn:'Tenant Admin — Modules',sub:'Login',desc:'Manually type URL for a module NOT assigned (e.g. /deals)',exp:'Redirected away OR access denied — cannot bypass',crit:true},
+{id:'TA-04',sec:'TA',sn:'Tenant Admin — Modules',sub:'Login',desc:'Log out → log in as Education Demo admin',exp:'Modules visible match what was assigned to Education tenant',crit:true},
+{id:'TA-05',sec:'TA',sn:'Tenant Admin — Modules',sub:'Module Settings',desc:'Go to Settings → Modules (as tenant admin)',exp:'Only shows modules that Super Admin licensed',crit:true},
+{id:'TA-06',sec:'TA',sn:'Tenant Admin — Modules',sub:'Module Settings',desc:'Toggle OFF a licensed module (e.g. Activities)',exp:'Module disappears from sidebar for all users in this tenant',crit:false},
+{id:'TA-07',sec:'TA',sn:'Tenant Admin — Modules',sub:'Module Settings',desc:'Toggle the module back ON',exp:'Module reappears in sidebar',crit:false},
+{id:'TA-08',sec:'TA',sn:'Tenant Admin — Modules',sub:'Module Settings',desc:'Attempt to enable a module that Super Admin did NOT license',exp:'Option not available — cannot add unlicensed modules',crit:true},
+{id:'TU-01',sec:'TU',sn:'Departments & Users',sub:'Departments',desc:'Go to Settings → Departments → click Add Department',exp:'New department form opens',crit:false},
+{id:'TU-02',sec:'TU',sn:'Departments & Users',sub:'Departments',desc:'Enter department name "Technical Support" → Save',exp:'Department appears in the list',crit:true},
+{id:'TU-03',sec:'TU',sn:'Departments & Users',sub:'Departments',desc:'Create a second department "Billing"',exp:'Both departments visible in list',crit:false},
+{id:'TU-04',sec:'TU',sn:'Departments & Users',sub:'Departments',desc:'Try to create a department with a blank name',exp:'Validation error — name is required',crit:false},
+{id:'TU-05',sec:'TU',sn:'Departments & Users',sub:'Departments',desc:'Edit the name of an existing department → Save',exp:'Updated name reflected in the list immediately',crit:false},
+{id:'TU-06',sec:'TU',sn:'Departments & Users',sub:'Create Managers',desc:'Go to Settings → Team → click Invite User',exp:'Invite form opens',crit:true},
+{id:'TU-07',sec:'TU',sn:'Departments & Users',sub:'Create Managers',desc:'Fill: name, email, role = Manager, department = Technical Support → Send Invite',exp:'Manager user created; appears in team list with role Manager',crit:true},
+{id:'TU-08',sec:'TU',sn:'Departments & Users',sub:'Create Managers',desc:'Create a second manager for Billing department',exp:'Second manager created; assigned to Billing',crit:false},
+{id:'TU-09',sec:'TU',sn:'Departments & Users',sub:'Create Managers',desc:'Check manager profile — verify Line Manager field',exp:'Manager record shows correct reporting line',crit:false},
+{id:'TU-10',sec:'TU',sn:'Departments & Users',sub:'Create Agents',desc:'Invite: role = Agent, department = Technical Support, line manager = Manager 1',exp:'Agent created; shows under Manager 1 reportees',crit:true},
+{id:'TU-11',sec:'TU',sn:'Departments & Users',sub:'Create Agents',desc:'Invite a second agent under the same manager',exp:'Both agents visible under Manager 1',crit:false},
+{id:'TU-12',sec:'TU',sn:'Departments & Users',sub:'Create Agents',desc:'Invite an agent under Manager 2 (Billing department)',exp:'Agent appears under Manager 2 only',crit:false},
+{id:'TU-13',sec:'TU',sn:'Departments & Users',sub:'Filters',desc:'Settings → Team → filter by department = Billing',exp:'Only Billing users shown',crit:false},
+{id:'TU-14',sec:'TU',sn:'Departments & Users',sub:'Filters',desc:'Filter by role = Agent',exp:'Only agent-role users shown across all departments',crit:false},
+{id:'TU-15',sec:'TU',sn:'Departments & Users',sub:'Hierarchy',desc:'Open Manager 1 profile → check Reportees list',exp:'Shows exactly the agents assigned to Manager 1 — no agents from Manager 2',crit:true},
+{id:'TU-16',sec:'TU',sn:'Departments & Users',sub:'Deactivate',desc:'Deactivate an agent → check they no longer appear in assignment dropdowns',exp:'Deactivated agent hidden from new ticket assignment lists',crit:false},
+{id:'CF-01',sec:'CF',sn:'Custom Fields',sub:'Telecom',desc:'Telecom Demo → Contacts → Add Contact → verify sector custom fields',exp:'Mobile Number, Service Plan, Contract End Date, IMEI Number, Account Type visible',crit:true},
+{id:'CF-02',sec:'CF',sn:'Custom Fields',sub:'Transport',desc:'Transport Demo → verify contact custom fields',exp:'Vehicle Registration, Driver Licence No, Route/Line, Fleet ID, Passenger Category',crit:true},
+{id:'CF-03',sec:'CF',sn:'Custom Fields',sub:'Logistics',desc:'Logistics Demo → verify contact custom fields',exp:'Shipper Account, Warehouse Zone, Preferred Carrier, Customs Clearance Status',crit:true},
+{id:'CF-04',sec:'CF',sn:'Custom Fields',sub:'Insurance',desc:'Insurance Demo → verify contact custom fields',exp:'Policy Number, Policy Type, Premium Amount, Renewal Date, Claim History',crit:true},
+{id:'CF-05',sec:'CF',sn:'Custom Fields',sub:'Education',desc:'Education Demo → verify contact custom fields',exp:'Student ID, Programme, Year of Study, Faculty, Enrollment Status',crit:true},
+{id:'CF-06',sec:'CF',sn:'Custom Fields',sub:'eCommerce',desc:'eCommerce Demo → verify contact custom fields',exp:'Customer Tier, Order Frequency, Last Order Date, Preferred Payment, Loyalty Points',crit:true},
+{id:'CF-07',sec:'CF',sn:'Custom Fields',sub:'General Business',desc:'General Business Demo → verify contact custom fields',exp:'Industry, Annual Revenue, Employee Count, Lead Source',crit:true},
+{id:'CF-08',sec:'CF',sn:'Custom Fields',sub:'Ticket Fields',desc:'Telecom Demo → create ticket → verify ticket custom fields',exp:'Network Issue Type, Signal Strength, Affected Device, Fault Reference No visible',crit:true},
+{id:'CF-09',sec:'CF',sn:'Custom Fields',sub:'Ticket Fields',desc:'Insurance Demo → create ticket → verify ticket custom fields',exp:'Claim Number, Claim Type, Incident Date, Damage Estimate visible',crit:true},
+{id:'CF-10',sec:'CF',sn:'Custom Fields',sub:'Ticket Fields',desc:'Education Demo → create ticket → verify ticket custom fields',exp:'Course Code, Exam/Assessment, Academic Issue Type visible',crit:true},
+{id:'CF-11',sec:'CF',sn:'Custom Fields',sub:'Management',desc:'Settings → Custom Fields → Add new Text field for Contact → Save',exp:'New field saved and appears in contact form',crit:false},
+{id:'CF-12',sec:'CF',sn:'Custom Fields',sub:'Management',desc:'Add dropdown field with 3 options → Save',exp:'Dropdown appears in contact form with all 3 options selectable',crit:false},
+{id:'CF-13',sec:'CF',sn:'Custom Fields',sub:'Management',desc:'Mark a field as Required → try to save contact without it',exp:'Validation error — required field cannot be blank',crit:false},
+{id:'CF-14',sec:'CF',sn:'Custom Fields',sub:'Management',desc:'Delete a custom field',exp:'Field removed from form; existing data no longer shown',crit:false},
+{id:'SL-01',sec:'SL',sn:'SLA, Queues & Tags',sub:'SLA',desc:'Settings → SLA Policies → click Add Policy',exp:'SLA form opens',crit:false},
+{id:'SL-02',sec:'SL',sn:'SLA, Queues & Tags',sub:'SLA',desc:'Create policy: first response = 2h, resolution = 24h, priority = Urgent',exp:'Policy created and listed',crit:true},
+{id:'SL-03',sec:'SL',sn:'SLA, Queues & Tags',sub:'SLA',desc:'Create ticket with priority = Urgent',exp:'Ticket shows SLA due date = created_at + 24h',crit:true},
+{id:'SL-04',sec:'SL',sn:'SLA, Queues & Tags',sub:'SLA',desc:'Delete the SLA policy',exp:'Policy removed; new tickets show no SLA due',crit:false},
+{id:'SL-05',sec:'SL',sn:'SLA, Queues & Tags',sub:'Queues',desc:'Settings → Queues → Add Queue named "Escalation Queue"',exp:'Queue created and visible',crit:false},
+{id:'SL-06',sec:'SL',sn:'SLA, Queues & Tags',sub:'Queues',desc:'Assign an agent to the queue',exp:'Agent shown as member of that queue',crit:false},
+{id:'SL-07',sec:'SL',sn:'SLA, Queues & Tags',sub:'Queues',desc:'Create a ticket assigned to the Escalation Queue',exp:'Ticket appears in queue view; routed to queue members',crit:false},
+{id:'SL-08',sec:'SL',sn:'SLA, Queues & Tags',sub:'Tags',desc:'Settings → Tags → Add tag "Billing Issue" with a colour',exp:'Tag created; appears in ticket tag dropdown',crit:false},
+{id:'SL-09',sec:'SL',sn:'SLA, Queues & Tags',sub:'Tags',desc:'Add tag to a ticket',exp:'Tag pill shows on ticket card and detail view',crit:false},
+{id:'SL-10',sec:'SL',sn:'SLA, Queues & Tags',sub:'Tags',desc:'Filter ticket list by tag',exp:'Only tickets with that tag are displayed',crit:false},
+{id:'MG-01',sec:'MG',sn:'Manager — Ticket Handling',sub:'Visibility',desc:'Log in as Manager 1 → open Tickets list',exp:'Tickets include those assigned to Manager 1 AND their agents — not other departments',crit:true},
+{id:'MG-02',sec:'MG',sn:'Manager — Ticket Handling',sub:'Create',desc:'Create ticket: Title, Description, Priority = High, assign to Agent 1',exp:'Ticket saved; appears in list with status Open',crit:true},
+{id:'MG-03',sec:'MG',sn:'Manager — Ticket Handling',sub:'Status',desc:'Open ticket → change Status to "In Progress"',exp:'Status updates; status badge changes colour',crit:true},
+{id:'MG-04',sec:'MG',sn:'Manager — Ticket Handling',sub:'Notes',desc:'Open ticket → add an internal note',exp:'Note saved under Internal Notes section only',crit:false},
+{id:'MG-05',sec:'MG',sn:'Manager — Ticket Handling',sub:'Reply',desc:'Open ticket → add a customer Reply',exp:'Reply appears in conversation thread',crit:false},
+{id:'MG-06',sec:'MG',sn:'Manager — Ticket Handling',sub:'Escalate',desc:'Escalate the ticket',exp:'Escalation badge/indicator appears on the ticket',crit:false},
+{id:'MG-07',sec:'MG',sn:'Manager — Ticket Handling',sub:'Reassign',desc:'Reassign ticket to Agent 2',exp:'Ticket shows Agent 2 as assignee; Agent 2 can see it',crit:true},
+{id:'MG-08',sec:'MG',sn:'Manager — Ticket Handling',sub:'Resolve',desc:'Set Status = "Resolved"',exp:'Ticket moves to resolved section; resolution time recorded',crit:true},
+{id:'MG-09',sec:'MG',sn:'Manager — Ticket Handling',sub:'Filters',desc:'Filter tickets: Status = Open, Priority = High',exp:'Only open high-priority tickets shown',crit:false},
+{id:'MG-10',sec:'MG',sn:'Manager — Ticket Handling',sub:'Filters',desc:'Filter by date range: last 7 days',exp:'Only tickets created in last 7 days shown',crit:false},
+{id:'MG-11',sec:'MG',sn:'Manager — Ticket Handling',sub:'Filters',desc:'Search tickets by keyword in title',exp:'Matching tickets returned in results',crit:false},
+{id:'MG-12',sec:'MG',sn:'Manager — Ticket Handling',sub:'Filters',desc:'Sort tickets by Created Date descending',exp:'Newest tickets appear at top',crit:false},
+{id:'MG-13',sec:'MG',sn:'Manager — Ticket Handling',sub:'Custom Fields',desc:'Open ticket detail → verify custom fields match tenant sector',exp:'Sector-specific ticket fields visible and editable',crit:true},
+{id:'AG-01',sec:'AG',sn:'Agent — Ticket Handling',sub:'Visibility',desc:'Log in as Agent 1 → Tickets list',exp:'Only tickets assigned to Agent 1 are visible',crit:true},
+{id:'AG-02',sec:'AG',sn:'Agent — Ticket Handling',sub:'Isolation',desc:'Confirm Agent 1 CANNOT see tickets assigned to Agent 2 or Manager 1',exp:'No cross-agent ticket data visible',crit:true},
+{id:'AG-03',sec:'AG',sn:'Agent — Ticket Handling',sub:'Status',desc:'Open assigned ticket → update Status to In Progress',exp:'Status changes; manager can also see the change',crit:true},
+{id:'AG-04',sec:'AG',sn:'Agent — Ticket Handling',sub:'Notes',desc:'Add an internal note to the ticket',exp:'Note saved; visible only to internal team',crit:false},
+{id:'AG-05',sec:'AG',sn:'Agent — Ticket Handling',sub:'Reply',desc:'Add a customer reply to the ticket',exp:'Reply saved in conversation thread',crit:false},
+{id:'AG-06',sec:'AG',sn:'Agent — Ticket Handling',sub:'Permissions',desc:'Try to reassign the ticket to another agent',exp:'Reassign option not shown OR permission denied',crit:true},
+{id:'AG-07',sec:'AG',sn:'Agent — Ticket Handling',sub:'Analytics',desc:'Check Ticket Analytics page as Agent',exp:'Stats show only Agent 1 tickets — no org-wide data',crit:true},
+{id:'CT-01',sec:'CT',sn:'Contacts',sub:'List',desc:'Open Contacts → verify list loads',exp:'Only contacts belonging to this tenant shown',crit:true},
+{id:'CT-02',sec:'CT',sn:'Contacts',sub:'Create',desc:'Click Add Contact → fill Name, Email, Phone, Company → Save',exp:'New contact saved; appears in list',crit:true},
+{id:'CT-03',sec:'CT',sn:'Contacts',sub:'Custom Fields',desc:'Fill sector custom fields on the contact → Save',exp:'Custom field values persisted; visible when reopening contact',crit:true},
+{id:'CT-04',sec:'CT',sn:'Contacts',sub:'Search',desc:'Search contacts by name',exp:'Matching contacts returned',crit:false},
+{id:'CT-05',sec:'CT',sn:'Contacts',sub:'Search',desc:'Search by email',exp:'Correct contact returned',crit:false},
+{id:'CT-06',sec:'CT',sn:'Contacts',sub:'Filters',desc:'Filter by company',exp:'Only contacts from that company shown',crit:false},
+{id:'CT-07',sec:'CT',sn:'Contacts',sub:'Linked Data',desc:'Open a contact → view linked tickets tab',exp:'All tickets raised by or linked to this contact are listed',crit:false},
+{id:'CT-08',sec:'CT',sn:'Contacts',sub:'Linked Data',desc:'Open a contact → view linked activities tab',exp:'Activities associated with this contact are shown',crit:false},
+{id:'CT-09',sec:'CT',sn:'Contacts',sub:'Edit',desc:'Edit a contact → change phone number → Save',exp:'Updated number shown immediately',crit:false},
+{id:'CT-10',sec:'CT',sn:'Contacts',sub:'Delete',desc:'Delete a contact → confirm deletion dialog',exp:'Contact removed from list; no longer searchable',crit:false},
+{id:'CT-11',sec:'CT',sn:'Contacts',sub:'Agent Access',desc:'Log in as Agent → check contacts list',exp:'Contacts visible only from this tenant',crit:true},
+{id:'CO-01',sec:'CO',sn:'Companies',sub:'List',desc:'Open Companies → list loads',exp:'Only companies in this tenant shown',crit:true},
+{id:'CO-02',sec:'CO',sn:'Companies',sub:'Create',desc:'Add Company: name, industry, size, website → Save',exp:'Company created; visible in list',crit:true},
+{id:'CO-03',sec:'CO',sn:'Companies',sub:'Link',desc:'Open company → link a contact to it',exp:'Contact appears under company contacts tab',crit:false},
+{id:'CO-04',sec:'CO',sn:'Companies',sub:'Filters',desc:'Filter companies by industry',exp:'Only companies with matching industry shown',crit:false},
+{id:'CO-05',sec:'CO',sn:'Companies',sub:'Delete',desc:'Delete a company',exp:'Company removed; linked contacts no longer show that company',crit:false},
+{id:'DL-01',sec:'DL',sn:'Deals / Pipeline',sub:'List',desc:'Open Deals → Pipelines list',exp:'Tenant pipelines shown (not from other tenants)',crit:true},
+{id:'DL-02',sec:'DL',sn:'Deals / Pipeline',sub:'Pipeline',desc:'Create pipeline: Lead → Qualified → Proposal → Won/Lost',exp:'Pipeline created with all stages',crit:true},
+{id:'DL-03',sec:'DL',sn:'Deals / Pipeline',sub:'Board View',desc:'Switch to Board (Kanban) view',exp:'Columns match the pipeline stages',crit:true},
+{id:'DL-04',sec:'DL',sn:'Deals / Pipeline',sub:'Create Deal',desc:'Add deal: title, value, linked contact, company, close date → Save',exp:'Deal card appears in first stage column',crit:true},
+{id:'DL-05',sec:'DL',sn:'Deals / Pipeline',sub:'Move Stage',desc:'Drag deal card to next stage on the board',exp:'Card moves to new column; stage updated in database',crit:true},
+{id:'DL-06',sec:'DL',sn:'Deals / Pipeline',sub:'List View',desc:'Switch to List view — verify same deals shown',exp:'List and board show the same data',crit:false},
+{id:'DL-07',sec:'DL',sn:'Deals / Pipeline',sub:'Filters',desc:'Filter deals by stage = Proposal',exp:'Only deals in Proposal stage shown',crit:false},
+{id:'DL-08',sec:'DL',sn:'Deals / Pipeline',sub:'Edit',desc:'Open a deal → edit value and close date → Save',exp:'Updated values shown on deal card and detail page',crit:false},
+{id:'DL-09',sec:'DL',sn:'Deals / Pipeline',sub:'Won/Lost',desc:'Mark a deal as Won',exp:'Deal moves to Won stage; flagged with win indicator',crit:false},
+{id:'DL-10',sec:'DL',sn:'Deals / Pipeline',sub:'Agent Scope',desc:'Log in as Agent → verify Deals shows only agent own deals',exp:'Agent data scoped correctly per role',crit:true},
+{id:'AC-01',sec:'AC',sn:'Activities',sub:'List',desc:'Open Activities → list loads',exp:'Only this tenant activities shown',crit:true},
+{id:'AC-02',sec:'AC',sn:'Activities',sub:'Create',desc:'Create activity: type = Call, linked contact, due = today → Save',exp:'Activity appears in list with correct type icon',crit:true},
+{id:'AC-03',sec:'AC',sn:'Activities',sub:'Create',desc:'Create activity: type = Meeting, due = tomorrow',exp:'Activity created; shows under upcoming section',crit:false},
+{id:'AC-04',sec:'AC',sn:'Activities',sub:'Complete',desc:'Mark an activity as Done',exp:'Activity moves to completed section; checkmark shown',crit:false},
+{id:'AC-05',sec:'AC',sn:'Activities',sub:'Filters',desc:'Filter: Overdue tab',exp:'Only activities past due date and not done shown',crit:false},
+{id:'AC-06',sec:'AC',sn:'Activities',sub:'Filters',desc:"Filter: Today tab",exp:"Only today's activities shown",crit:false},
+{id:'AC-07',sec:'AC',sn:'Activities',sub:'Filters',desc:'Filter: Mine tab (as agent)',exp:'Only activities assigned to the logged-in user shown',crit:true},
+{id:'AC-08',sec:'AC',sn:'Activities',sub:'Filters',desc:'Filter by activity type = Email',exp:'Only email-type activities returned',crit:false},
+{id:'EM-01',sec:'EM',sn:'Email Inbox',sub:'List',desc:'Open Email Inbox → list loads',exp:'Only this tenant emails shown',crit:true},
+{id:'EM-02',sec:'EM',sn:'Email Inbox',sub:'Filters',desc:'Filter: Unread emails',exp:'Only unread emails shown',crit:false},
+{id:'EM-03',sec:'EM',sn:'Email Inbox',sub:'Thread',desc:'Open an email thread',exp:'Full thread history displayed',crit:false},
+{id:'EM-04',sec:'EM',sn:'Email Inbox',sub:'Convert',desc:'Convert email to ticket using the action button',exp:'New ticket created; linked to the email; email shows Ticket Created status',crit:true},
+{id:'EM-05',sec:'EM',sn:'Email Inbox',sub:'Filters',desc:'Filter by date range: last 30 days',exp:'Only emails in that range shown',crit:false},
+{id:'EM-06',sec:'EM',sn:'Email Inbox',sub:'Search',desc:'Search emails by sender name/email',exp:'Matching threads returned',crit:false},
+{id:'EM-07',sec:'EM',sn:'Email Inbox',sub:'Stats',desc:'Check email stats (total, unread, linked to tickets)',exp:'Counts are correct and belong only to this tenant',crit:false},
+{id:'VC-01',sec:'VC',sn:'Voice & Voice-Bot',sub:'Calls List',desc:'Open Voice → Calls list',exp:'Only this tenant call records shown',crit:true},
+{id:'VC-02',sec:'VC',sn:'Voice & Voice-Bot',sub:'Filters',desc:'Filter calls by direction = Inbound',exp:'Only inbound calls listed',crit:false},
+{id:'VC-03',sec:'VC',sn:'Voice & Voice-Bot',sub:'Detail',desc:'Open a call record → check transcript/recording link',exp:'Detail view shows call metadata',crit:false},
+{id:'VC-04',sec:'VC',sn:'Voice & Voice-Bot',sub:'Analytics',desc:'Open Voice Analytics dashboard',exp:'Stats reflect only this tenant',crit:true},
+{id:'VC-05',sec:'VC',sn:'Voice & Voice-Bot',sub:'Bot List',desc:'Open Voice-Bot → Bot Calls list',exp:'Only this tenant bot call sessions shown',crit:true},
+{id:'VC-06',sec:'VC',sn:'Voice & Voice-Bot',sub:'Bot Filters',desc:'Filter bot calls by status = Completed',exp:'Only completed bot sessions listed',crit:false},
+{id:'VC-07',sec:'VC',sn:'Voice & Voice-Bot',sub:'Bot Stats',desc:'Check Voice-Bot Stats: total sessions, completion rate, handoff rate',exp:'Stats are tenant-scoped and numerically correct',crit:true},
+{id:'VC-08',sec:'VC',sn:'Voice & Voice-Bot',sub:'Bot Detail',desc:'Open a bot call session → check transcript and intent log',exp:'Session detail shows conversation steps; no data from other tenants',crit:false},
+{id:'AN-01',sec:'AN',sn:'Analytics & Reports',sub:'Dashboard',desc:'Open Analytics Dashboard',exp:'KPI cards: Total Tickets, Open, Resolved, SLA Breached — all tenant-scoped',crit:true},
+{id:'AN-02',sec:'AN',sn:'Analytics & Reports',sub:'Date Filter',desc:'Change date range filter to Last 7 days',exp:'All charts and KPI cards update to reflect the new range',crit:true},
+{id:'AN-03',sec:'AN',sn:'Analytics & Reports',sub:'Date Filter',desc:'Change date range to Last 90 days',exp:'Charts update; trend lines extend further back',crit:false},
+{id:'AN-04',sec:'AN',sn:'Analytics & Reports',sub:'Trends',desc:'Open Ticket Trends — change period to Week',exp:'Trend chart aggregates by week',crit:false},
+{id:'AN-05',sec:'AN',sn:'Analytics & Reports',sub:'Trends',desc:'Ticket Trends — filter by Priority = Urgent',exp:'Chart shows only urgent ticket volume',crit:false},
+{id:'AN-06',sec:'AN',sn:'Analytics & Reports',sub:'Trends',desc:'Ticket Trends — filter by Channel = Voice Bot',exp:'Chart shows only bot-originated tickets',crit:false},
+{id:'AN-07',sec:'AN',sn:'Analytics & Reports',sub:'Heatmap',desc:'Open Heatmap / Recurring Issues tab',exp:'Top tags, repeat reporters, by-type, by-channel shown — this tenant only',crit:false},
+{id:'AN-08',sec:'AN',sn:'Analytics & Reports',sub:'Resolution',desc:'Open Resolution Analytics',exp:'Avg resolution time, first-response time, SLA compliance % shown per period',crit:false},
+{id:'AN-09',sec:'AN',sn:'Analytics & Reports',sub:'Agent Scope',desc:'Log in as Agent → open Analytics',exp:'Agent sees only their own ticket stats — not team-wide data',crit:true},
+{id:'AN-10',sec:'AN',sn:'Analytics & Reports',sub:'CSAT',desc:'Open CSAT section',exp:'Average CSAT score + distribution chart shown; only this tenant scores',crit:false},
+{id:'AN-11',sec:'AN',sn:'Analytics & Reports',sub:'CSAT',desc:'Filter CSAT by agent',exp:'Score updates to show only that agent CSAT ratings',crit:false},
+{id:'IS-01',sec:'IS',sn:'Tenant Isolation',sub:'Cross-Tenant',desc:'Login as Telecom Demo (Window 1) AND Education Demo (Window 2) simultaneously',exp:'Each window shows only that tenant dashboard data',crit:true},
+{id:'IS-02',sec:'IS',sn:'Tenant Isolation',sub:'Cross-Tenant',desc:'Window 1 (Telecom): open Tickets — check for any Education data',exp:'Zero Education records visible in Telecom window',crit:true},
+{id:'IS-03',sec:'IS',sn:'Tenant Isolation',sub:'Cross-Tenant',desc:'Window 2 (Education): open Tickets — check for any Telecom / FNB data',exp:'Zero cross-tenant records visible',crit:true},
+{id:'IS-04',sec:'IS',sn:'Tenant Isolation',sub:'Direct URL',desc:'Copy Telecom ticket ID → try to access it via URL in Education window',exp:'Returns 404 or access denied — no cross-tenant data access',crit:true},
+{id:'IS-05',sec:'IS',sn:'Tenant Isolation',sub:'Contacts',desc:'Window 1 (Telecom): open Contacts — check no Education contacts present',exp:'Only Telecom contacts visible',crit:true},
+{id:'IS-06',sec:'IS',sn:'Tenant Isolation',sub:'Analytics',desc:'Window 1 (Telecom): open Analytics — verify stats are scoped to one tenant',exp:'Stats plausibly represent one tenant only',crit:true},
+{id:'IS-07',sec:'IS',sn:'Tenant Isolation',sub:'Team',desc:'Window 1 (Telecom): Settings → Team — check no Education team members appear',exp:'Only Telecom team members shown',crit:true},
+{id:'IS-08',sec:'IS',sn:'Tenant Isolation',sub:'Deals',desc:'Window 2 (Education): open Deals list',exp:'Only Education tenant deals shown; no Telecom or FNB deals',crit:true},
+{id:'IS-09',sec:'IS',sn:'Tenant Isolation',sub:'Assignee Dropdown',desc:'Window 1 (Telecom): assign a ticket — check assignee dropdown',exp:'Dropdown shows Telecom users only',crit:true},
+{id:'IS-10',sec:'IS',sn:'Tenant Isolation',sub:'Cross-Check',desc:'Repeat isolation check for Insurance Demo vs eCommerce Demo',exp:'Complete isolation confirmed across those two tenants',crit:true},
+{id:'ST-01',sec:'ST',sn:'Settings & API Keys',sub:'General',desc:'Settings → General → update workspace name → Save',exp:'Name updates in header and settings page immediately',crit:false},
+{id:'ST-02',sec:'ST',sn:'Settings & API Keys',sub:'General',desc:'Settings → change business timezone → Save',exp:'Timezone saved; SLA due times recalculate correctly',crit:false},
+{id:'ST-03',sec:'ST',sn:'Settings & API Keys',sub:'Business Hours',desc:'Settings → Business Hours → set working hours → Save',exp:'Hours saved; used by SLA calculations',crit:false},
+{id:'ST-04',sec:'ST',sn:'Settings & API Keys',sub:'Holidays',desc:'Settings → Holidays → add a public holiday date → Save',exp:'Holiday saved; excluded from SLA business-hour counts',crit:false},
+{id:'ST-05',sec:'ST',sn:'Settings & API Keys',sub:'API Keys',desc:'Settings → API Keys → click Generate New Key',exp:'New API key created; shown once in full then masked',crit:false},
+{id:'ST-06',sec:'ST',sn:'Settings & API Keys',sub:'API Keys',desc:'Reload the page → re-open API Keys',exp:'Key shown as masked; cannot retrieve full key again',crit:false},
+{id:'ST-07',sec:'ST',sn:'Settings & API Keys',sub:'API Keys',desc:'Revoke the API key',exp:'Key removed from list; API calls using it return 401',crit:false},
+{id:'ST-08',sec:'ST',sn:'Settings & API Keys',sub:'API Keys',desc:'Log in as Agent → navigate to Settings → API Keys',exp:'API Keys section not accessible to agents',crit:true},
+{id:'ST-09',sec:'ST',sn:'Settings & API Keys',sub:'Webhooks',desc:'Settings → Webhooks → Add webhook with test URL and event = ticket.created',exp:'Webhook saved and listed',crit:false},
+{id:'ST-10',sec:'ST',sn:'Settings & API Keys',sub:'Webhooks',desc:'Click Test on the webhook',exp:'Test delivery sent; delivery log entry created with status',crit:false},
+{id:'ST-11',sec:'ST',sn:'Settings & API Keys',sub:'Webhooks',desc:'Open webhook delivery logs',exp:'Log shows request/response for recent deliveries; only this tenant webhooks shown',crit:false},
+{id:'ST-12',sec:'ST',sn:'Settings & API Keys',sub:'Webhooks',desc:'Delete the webhook',exp:'Webhook removed; no further deliveries attempted',crit:false},
+{id:'ST-13',sec:'ST',sn:'Settings & API Keys',sub:'Notifications',desc:'Open Notifications bell icon',exp:'Dropdown shows notifications for this user only',crit:true},
+{id:'ST-14',sec:'ST',sn:'Settings & API Keys',sub:'Notifications',desc:'Assign ticket to Agent 1 → log in as Agent 1 → check notifications',exp:'Agent 1 receives a notification for the new assignment',crit:false},
+{id:'ST-15',sec:'ST',sn:'Settings & API Keys',sub:'Notifications',desc:'Mark all notifications as read',exp:'Notification count badge clears; notifications marked as read',crit:false},
+
+// ── NEW BATCH — added 2026-07-11: Messaging, Dashboard interactivity, Nav/Notifications, Contact channel benchmarking ──
+{id:'MS-01',sec:'MS',sn:'Messaging — Requests & Blocking',sub:'Directory',desc:'Open Messaging as an Agent → check Direct Messages list',exp:'Teammates grouped by Department, then by Designation (role title) within each department',crit:true,isNew:true},
+{id:'MS-02',sec:'MS',sn:'Messaging — Requests & Blocking',sub:'Directory',desc:'Compare grouping across Manager and Tenant Admin logins',exp:'Same grouping structure shown to every role — no role-specific directory differences',crit:false,isNew:true},
+{id:'MS-03',sec:'MS',sn:'Messaging — Requests & Blocking',sub:'First Contact',desc:'Agent A sends Agent B a DM for the first time ever between them',exp:'Message sends; sender sees "Message request sent — waiting for [name] to accept"',crit:true,isNew:true},
+{id:'MS-04',sec:'MS',sn:'Messaging — Requests & Blocking',sub:'First Contact',desc:'Agent B opens the thread from Agent A',exp:'Message shown with Accept / Delete / Block banner; compose box hidden until a choice is made',crit:true,isNew:true},
+{id:'MS-05',sec:'MS',sn:'Messaging — Requests & Blocking',sub:'Accept',desc:'Agent B clicks Accept',exp:'Banner disappears, compose box enabled, both sides can now message freely',crit:true,isNew:true},
+{id:'MS-06',sec:'MS',sn:'Messaging — Requests & Blocking',sub:'Delete',desc:'Repeat first-contact from a different pair → recipient clicks Delete',exp:'Thread and pending request are wiped; sender not notified; sender could message again later as a fresh request',crit:false,isNew:true},
+{id:'MS-07',sec:'MS',sn:'Messaging — Requests & Blocking',sub:'Block',desc:'Repeat first-contact from a third pair → recipient clicks Block',exp:'Thread cleared; "You\'ve blocked [name]" shown with inline Unblock; blocked sender shows "You can\'t message this user" with compose hidden',crit:true,isNew:true},
+{id:'MS-08',sec:'MS',sn:'Messaging — Requests & Blocking',sub:'Block List',desc:'Check sidebar "Blocked" section for the blocker',exp:'Blocked user listed with its own Unblock link, persists across page reloads',crit:false,isNew:true},
+{id:'MS-09',sec:'MS',sn:'Messaging — Requests & Blocking',sub:'Unblock',desc:'Click Unblock (from either the thread banner or the sidebar list)',exp:'Block removed immediately; "Blocked" section disappears if empty; blocked user can now send a fresh message request',crit:true,isNew:true},
+{id:'MS-10',sec:'MS',sn:'Messaging — Requests & Blocking',sub:'Reciprocal',desc:'After A is blocked by B, have A try to message B again',exp:'Request still rejected until B unblocks — block persists across multiple attempts',crit:false,isNew:true},
+{id:'MS-11',sec:'MS',sn:'Messaging — Requests & Blocking',sub:'Tenant Admin Access',desc:'Log in as Tenant Admin → check sidebar for Messaging link',exp:'Messaging link visible and fully functional — same directory/request/block behaviour as agents and managers',crit:true,isNew:true},
+{id:'MS-12',sec:'MS',sn:'Messaging — Requests & Blocking',sub:'Super Admin Access',desc:'Log in as Super Admin → check for a Messaging link or any tenant workspace access',exp:'No Messaging link and no tenant data access at all — platform admins are provisioning-only by design (flag if this should change to allow Super Admin ↔ Tenant Admin escalation messaging)',crit:false,isNew:true},
+{id:'MS-13',sec:'MS',sn:'Messaging — Requests & Blocking',sub:'Data Retention',desc:'Check how long channel/DM history is retained and where it is stored',exp:'Stored indefinitely in a single Postgres table (team_messages); UI caps each thread view at the most recent 100 messages — confirm this retention policy is intentional, or add an archival/expiry policy',crit:false,isNew:true},
+{id:'MS-14',sec:'MS',sn:'Messaging — Requests & Blocking',sub:'Benchmark',desc:'Compare against Zendesk / Front internal collaboration features (@mentions, message reactions, read receipts, file attachments)',exp:'Logical gap check — none of these exist yet in Messaging; raise as a backlog item if wanted, not a defect today',crit:false,isNew:true},
+
+{id:'RD-01',sec:'RD',sn:'Role Dashboards — Interactivity',sub:'Agent',desc:'Log in as Agent → click "Open" tile under My Tickets',exp:'Navigates to /tickets with the Open tab pre-selected and "My Tickets Only" filter applied',crit:true,isNew:true},
+{id:'RD-02',sec:'RD',sn:'Role Dashboards — Interactivity',sub:'Agent',desc:'Click "Assigned to Me" tile',exp:'Navigates to Tickets filtered to tickets assigned to the logged-in agent',crit:true,isNew:true},
+{id:'RD-03',sec:'RD',sn:'Role Dashboards — Interactivity',sub:'Agent',desc:'Click each of: In Progress, Resolved Today, Calls Received, Avg Talk Time, In Queue Now, Drop Rate',exp:'Every tile navigates somewhere relevant (Tickets or Voice Calls) — none are dead/non-clickable',crit:false,isNew:true},
+{id:'RD-04',sec:'RD',sn:'Role Dashboards — Interactivity',sub:'Agent',desc:'Click Created Today / Due Today / Overdue / Completed under My CRM Activities',exp:'Each navigates to /activities with the matching tab (All/Today/Overdue) pre-selected',crit:false,isNew:true},
+{id:'RD-05',sec:'RD',sn:'Role Dashboards — Interactivity',sub:'My Ticket Dashboard',desc:'Check the department label next to "My Ticket Dashboard"',exp:'Shows the agent\'s real department name (e.g. "Customer Support & Complaints") — not a raw internal code like "support"',crit:true,isNew:true},
+{id:'RD-06',sec:'RD',sn:'Role Dashboards — Interactivity',sub:'My Ticket Dashboard',desc:'Compare the Open/Resolved counts here against the My Tickets widget above it',exp:'Counts are consistent — both reflect assigned + created tickets, including unassigned tickets the agent created and closed (not just \'closed\') tickets',crit:true,isNew:true},
+{id:'RD-07',sec:'RD',sn:'Role Dashboards — Interactivity',sub:'Manager',desc:'Log in as Manager → click Active Tickets / Resolved Today / SLA Breached under My Activity',exp:'Each tile navigates to a filtered Tickets view',crit:true,isNew:true},
+{id:'RD-08',sec:'RD',sn:'Role Dashboards — Interactivity',sub:'Manager',desc:'Click CSAT Score, SLA Compliance, Avg Resolution Time, Avg First Response tiles',exp:'All four navigate to /ticket-reports',crit:false,isNew:true},
+{id:'RD-09',sec:'RD',sn:'Role Dashboards — Interactivity',sub:'Manager',desc:'Click Active Tickets / SLA Breached under the Human Agents section',exp:'Navigates to a tenant-wide filtered Tickets view (not agent-scoped)',crit:false,isNew:true},
+{id:'RD-10',sec:'RD',sn:'Role Dashboards — Interactivity',sub:'Manager',desc:'Click Total Bot Calls / Calls Today / Tickets Created / Untriaged / Avg Call Duration / Failed Calls under AI Voice Bot',exp:'Each navigates to Voice-Bot Calls or Voice-Bot Tickets as appropriate',crit:false,isNew:true},
+{id:'RD-11',sec:'RD',sn:'Role Dashboards — Interactivity',sub:'Tenant Admin',desc:'Click Total Users / Active Now / Inactive Users / New (30d) tiles',exp:'All four navigate to /admin/users',crit:false,isNew:true},
+{id:'RD-12',sec:'RD',sn:'Role Dashboards — Interactivity',sub:'Departments',desc:'Ask: are "Customer Support" and "Complaints" meant to be one merged department or two separate ones?',exp:'Currently seeded as a single department ("Customer Support & Complaints") tenant-wide — confirm this is intentional before relying on department-based routing/permissions',crit:false,isNew:true},
+{id:'RD-13',sec:'RD',sn:'Role Dashboards — Interactivity',sub:'Deals Visibility',desc:'Log in as a Manager/Agent in a non-sales department (e.g. Support) → check sidebar for Deals',exp:'Deals/sales-pipeline nav item hidden for support-type departments; still shown for sales/general departments',crit:true,isNew:true},
+
+{id:'NV-01',sec:'NV',sn:'Navigation & Notifications',sub:'Dashboard Link',desc:'Log in as Agent → navigate to any other page (e.g. Contacts) → look for a way back to the Dashboard',exp:'A top-level "Dashboard" link is present and highlighted when active — not only reachable via browser back button',crit:true,isNew:true},
+{id:'NV-02',sec:'NV',sn:'Navigation & Notifications',sub:'Dashboard Link',desc:'Repeat for Manager (should have both the new top-level Dashboard link and the existing Analytics → Ops Dashboard link)',exp:'Both links present and both go to the same page',crit:false,isNew:true},
+{id:'NV-03',sec:'NV',sn:'Navigation & Notifications',sub:'Notification Popup',desc:'Click the bell icon in the bottom-left user chip on a narrow sidebar',exp:'Popup opens extending to the right of the bell, fully inside the viewport — no text clipped on the left edge',crit:true,isNew:true},
+{id:'NV-04',sec:'NV',sn:'Navigation & Notifications',sub:'Notification Popup',desc:'Repeat the bell-icon check for Agent, Manager, and Tenant Admin logins',exp:'Popup opens correctly for every role — layout is shared, not role-specific',crit:false,isNew:true},
+
+{id:'CB-01',sec:'CB',sn:'Contacts — Omnichannel Benchmark',sub:'Create Contact',desc:'Click Add Contact → check available fields for reaching the customer',exp:'Email, Phone, Mobile/WhatsApp number fields present',crit:false,isNew:true},
+{id:'CB-02',sec:'CB',sn:'Contacts — Omnichannel Benchmark',sub:'Create Contact',desc:'After saving a contact, look for one-click "Email / SMS / WhatsApp this contact" actions on the contact detail page',exp:'No such quick-action buttons exist today — compare to Zendesk Sunshine/HubSpot, where a contact record has direct "Send Email" / "Send SMS" / "WhatsApp" buttons right on the profile. Logical question: should Contact Detail get one-click communication actions instead of only being reachable via the separate Messaging/Email Inbox modules?',crit:false,isNew:true},
+{id:'CB-03',sec:'CB',sn:'Contacts — Omnichannel Benchmark',sub:'Preferred Channel',desc:'Check whether a contact has a "Preferred Contact Channel" field (email vs SMS vs WhatsApp)',exp:'Tickets have a preferred_channel field, but Contacts themselves do not persist one — logical question: should preferred channel live on the Contact so all future outreach defaults to it, matching HubSpot\'s "preferred communication channel" property?',crit:false,isNew:true},
+{id:'CB-04',sec:'CB',sn:'Contacts — Omnichannel Benchmark',sub:'Consent',desc:'Check whether creating a contact captures channel consent (opt-in for SMS/WhatsApp marketing)',exp:'No consent/opt-in tracking exists per channel today — flag as a compliance gap if this tenant will send marketing SMS/WhatsApp (comparable to Salesforce\'s per-channel consent fields)',crit:false,isNew:true},
+{id:'CB-05',sec:'CB',sn:'Contacts — Omnichannel Benchmark',sub:'Activity Timeline',desc:'Open a contact → check the activity timeline for channel history',exp:'Linked tickets and activities tabs exist, but there is no unified cross-channel timeline (email + SMS + WhatsApp + calls in one feed) — Zendesk and Intercom both show a single merged timeline; raise as a backlog item, not a defect',crit:false,isNew:true},
+];
+
+const SECTIONS = [
+  {code:'SA',name:'Super Admin — Workspace Setup'},
+  {code:'TA',name:'Tenant Admin — Modules'},
+  {code:'TU',name:'Departments & Users'},
+  {code:'CF',name:'Custom Fields'},
+  {code:'SL',name:'SLA, Queues & Tags'},
+  {code:'MG',name:'Manager — Ticket Handling'},
+  {code:'AG',name:'Agent — Ticket Handling'},
+  {code:'CT',name:'Contacts'},
+  {code:'CO',name:'Companies'},
+  {code:'DL',name:'Deals / Pipeline'},
+  {code:'AC',name:'Activities'},
+  {code:'EM',name:'Email Inbox'},
+  {code:'VC',name:'Voice & Voice-Bot'},
+  {code:'AN',name:'Analytics & Reports'},
+  {code:'IS',name:'Tenant Isolation'},
+  {code:'ST',name:'Settings & API Keys'},
+  {code:'MS',name:'Messaging — Requests & Blocking'},
+  {code:'RD',name:'Role Dashboards — Interactivity'},
+  {code:'NV',name:'Navigation & Notifications'},
+  {code:'CB',name:'Contacts — Omnichannel Benchmark'},
+];
+const NEW_SECTION_CODES = ['MS','RD','NV','CB'];
+
+// ── State ────────────────────────────────────────────────────────────────────
+let activeSession = null;   // { id, session_date, session_name, tester_name }
+let results = {};           // { testId: { result, remarks, changes_required, tested_at } }
+let sessions = [];          // all sessions from DB
+let saveTimers = {};        // debounce per test
+
+function setSyncStatus(state, msg) {
+  const el = document.getElementById('sync-status');
+  el.textContent = msg;
+  el.className = 'sync-status ' + (state === 'ok' ? 'sync-ok' : state === 'err' ? 'sync-err' : 'sync-busy');
+}
+
+// ── Boot ─────────────────────────────────────────────────────────────────────
+async function boot() {
+  setSyncStatus('busy', 'Connecting…');
+  try {
+    await loadSessions();
+    setSyncStatus('ok', '● Connected');
+    populateSectionFilter();
+    renderDashboard();
+    renderHistory();
+  } catch(e) {
+    setSyncStatus('err', '✕ DB Error');
+    showToast('Cannot reach database: ' + e.message);
+  }
+}
+
+async function loadSessions() {
+  const { data, error } = await SB.from('test_sessions').select('*').order('session_date', { ascending: false }).order('created_at', { ascending: false });
+  if (error) throw error;
+  sessions = data || [];
+  // restore last active session from localStorage
+  const lastId = localStorage.getItem('amanahcx_active_session');
+  if (lastId) {
+    const found = sessions.find(s => s.id === lastId);
+    if (found) await activateSession(found, false);
+  }
+}
+
+async function loadResults(sessionId) {
+  const { data, error } = await SB.from('test_results').select('*').eq('session_id', sessionId);
+  if (error) throw error;
+  results = {};
+  (data || []).forEach(r => { results[r.test_id] = r; });
+}
+
+// ── Session management ───────────────────────────────────────────────────────
+function openNewSessionModal() {
+  document.getElementById('ns-name').value = '';
+  document.getElementById('ns-tester').value = '';
+  document.getElementById('ns-date').value = new Date().toISOString().slice(0, 10);
+  document.getElementById('ns-notes').value = '';
+  document.getElementById('modal-new-session').style.display = 'flex';
+}
+function closeModal() {
+  document.getElementById('modal-new-session').style.display = 'none';
+}
+
+async function createSession() {
+  const name = document.getElementById('ns-name').value.trim();
+  const tester = document.getElementById('ns-tester').value.trim();
+  const date = document.getElementById('ns-date').value;
+  const notes = document.getElementById('ns-notes').value.trim();
+  if (!name) { showToast('Session name is required'); return; }
+  if (!date) { showToast('Date is required'); return; }
+  setSyncStatus('busy', 'Saving…');
+  const { data, error } = await SB.from('test_sessions').insert({ session_name: name, tester_name: tester || null, session_date: date, notes: notes || null }).select().single();
+  if (error) { setSyncStatus('err', '✕ Save failed'); showToast('Error: ' + error.message); return; }
+  sessions.unshift(data);
+  closeModal();
+  await activateSession(data, true);
+  renderHistory();
+  showPage('tests');
+}
+
+async function activateSession(session, notify) {
+  activeSession = session;
+  localStorage.setItem('amanahcx_active_session', session.id);
+  setSyncStatus('busy', 'Loading results…');
+  try {
+    await loadResults(session.id);
+    setSyncStatus('ok', '● Connected');
+    document.getElementById('active-session-name').textContent = session.session_name + (session.tester_name ? ' — ' + session.tester_name : '');
+    document.getElementById('active-session-date').textContent = formatDate(session.session_date) + (session.notes ? ' · ' + session.notes : '');
+    renderDashboard();
+    renderTests();
+    renderHistory();
+    if (notify) showToast('Session activated: ' + session.session_name);
+  } catch(e) {
+    setSyncStatus('err', '✕ Load error');
+    showToast('Could not load results: ' + e.message);
+  }
+}
+
+// ── Save a single test result (debounced) ────────────────────────────────────
+function schedSave(testId) {
+  clearTimeout(saveTimers[testId]);
+  saveTimers[testId] = setTimeout(() => saveResult(testId), 600);
+}
+
+async function saveResult(testId) {
+  if (!activeSession) return;
+  const r = results[testId] || {};
+  const payload = {
+    session_id: activeSession.id,
+    test_id: testId,
+    result: r.result || 'pending',
+    remarks: r.remarks || null,
+    changes_required: r.changes_required || null,
+    tested_at: new Date().toISOString(),
+  };
+  const { error } = await SB.from('test_results').upsert(payload, { onConflict: 'session_id,test_id' });
+  if (error) { setSyncStatus('err', '✕ Save error'); return; }
+  setSyncStatus('ok', '● Saved');
+  renderDashboard();
+  // update tested_at display inline
+  const el = document.getElementById('ta-' + testId);
+  if (el) el.textContent = 'Tested: ' + new Date().toLocaleString();
+}
+
+function setResult(testId, val) {
+  if (!activeSession) { showToast('Select or create a session first'); return; }
+  if (!results[testId]) results[testId] = {};
+  if (results[testId].result === val) {
+    results[testId].result = 'pending';
+  } else {
+    results[testId].result = val;
+    results[testId].tested_at = new Date().toISOString();
+  }
+  // refresh buttons
+  ['pass','fail','skip'].forEach(v => {
+    const btn = document.getElementById('rb-' + v + '-' + testId);
+    if (btn) btn.className = 'rb rb-' + v + (results[testId].result === v ? ' on' : '');
+  });
+  schedSave(testId);
+}
+
+function setField(testId, field, val) {
+  if (!activeSession) return;
+  if (!results[testId]) results[testId] = {};
+  results[testId][field] = val;
+  schedSave(testId);
+}
+
+// ── Stats ─────────────────────────────────────────────────────────────────────
+function getStats(secCode) {
+  const tests = secCode ? TESTS.filter(t => t.sec === secCode) : TESTS;
+  const total = tests.length;
+  const passed = tests.filter(t => results[t.id]?.result === 'pass').length;
+  const failed = tests.filter(t => results[t.id]?.result === 'fail').length;
+  const skipped = tests.filter(t => results[t.id]?.result === 'skip').length;
+  const crit = tests.filter(t => t.crit).length;
+  const critFailed = tests.filter(t => t.crit && results[t.id]?.result === 'fail').length;
+  return { total, passed, failed, skipped, tested: passed + failed + skipped, crit, critFailed };
+}
+
+// ── Dashboard ─────────────────────────────────────────────────────────────────
+function renderDashboard() {
+  const g = getStats();
+  const pct = g.total ? Math.round(g.tested / g.total * 100) : 0;
+  const newTests = TESTS.filter(t => t.isNew);
+  const newTested = newTests.filter(t => results[t.id]?.result === 'pass' || results[t.id]?.result === 'fail' || results[t.id]?.result === 'skip').length;
+  document.getElementById('kpi-row').innerHTML = `
+    <div class="kpi k-total"><div class="val">${g.total}</div><div class="lbl">Total Tests</div></div>
+    <div class="kpi k-tested"><div class="val">${g.tested} <span style="font-size:14px">(${pct}%)</span></div><div class="lbl">Tested</div></div>
+    <div class="kpi k-pass"><div class="val">${g.passed}</div><div class="lbl">Passed</div></div>
+    <div class="kpi k-fail"><div class="val">${g.failed}</div><div class="lbl">Failed</div></div>
+    <div class="kpi k-skip"><div class="val">${g.skipped}</div><div class="lbl">Skipped</div></div>
+    <div class="kpi k-crit"><div class="val">${g.critFailed > 0 ? '⚠ ' + g.critFailed : '✓ 0'}</div><div class="lbl">Critical Failures</div></div>
+    <div class="kpi" style="border-color:#c4b5fd"><div class="val" style="color:#7c3aed">${newTested}/${newTests.length}</div><div class="lbl">New Tests (Jul 11)</div></div>
+  `;
+  document.getElementById('module-grid').innerHTML = SECTIONS.map(s => {
+    const st = getStats(s.code);
+    const pct = st.total ? Math.round(st.tested / st.total * 100) : 0;
+    const pp = st.total ? st.passed / st.total * 100 : 0;
+    const fp = st.total ? st.failed / st.total * 100 : 0;
+    const sp = st.total ? st.skipped / st.total * 100 : 0;
+    let cls = 's-none';
+    if (st.tested > 0 && st.tested < st.total) cls = 's-partial';
+    else if (st.tested === st.total && st.total > 0) cls = st.failed > 0 ? 's-done-fail' : 's-done-pass';
+    return `<div class="mc ${cls}">
+      <div class="mc-head">
+        <div class="mc-name">${s.name}${NEW_SECTION_CODES.includes(s.code) ? '<span class="mc-new-badge">NEW</span>' : ''}</div>
+        <div class="mc-pct${pct === 100 ? ' full' : ''}">${pct}%</div>
+      </div>
+      <div class="mc-stats">
+        <div class="mc-stat t"><div class="n">${st.total}</div><div class="l">Total</div></div>
+        <div class="mc-stat p"><div class="n">${st.passed}</div><div class="l">Pass</div></div>
+        <div class="mc-stat f"><div class="n">${st.failed}</div><div class="l">Fail</div></div>
+        <div class="mc-stat c"><div class="n">${st.crit}</div><div class="l">Critical</div></div>
+      </div>
+      <div class="prog">
+        <div class="prog-p" style="width:${pp}%"></div>
+        <div class="prog-f" style="width:${fp}%"></div>
+        <div class="prog-s" style="width:${sp}%"></div>
+      </div>
+      ${st.failed > 0 ? `<div class="mc-alert" style="color:#dc2626">${st.failed} failed — needs attention</div>` : ''}
+      ${st.critFailed > 0 ? `<div class="mc-alert" style="color:#d97706">⚠ ${st.critFailed} critical failure(s)</div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+// ── Test Cases ────────────────────────────────────────────────────────────────
+function populateSectionFilter() {
+  const sel = document.getElementById('filter-sec');
+  SECTIONS.forEach(s => {
+    const o = document.createElement('option');
+    o.value = s.code; o.textContent = s.name;
+    sel.appendChild(o);
+  });
+}
+
+function renderTests() {
+  if (!activeSession) {
+    document.getElementById('tests-body').innerHTML = '<tr><td colspan="6" class="loader">Create or select a session to start testing.</td></tr>';
+    return;
+  }
+  const secF = document.getElementById('filter-sec').value;
+  const resF = document.getElementById('filter-res').value;
+  const critF = document.getElementById('filter-crit').checked;
+  const newF = document.getElementById('filter-new').checked;
+  const q = document.getElementById('filter-q').value.toLowerCase();
+
+  const filtered = TESTS.filter(t => {
+    if (secF && t.sec !== secF) return false;
+    const cur = results[t.id]?.result || 'pending';
+    if (resF && cur !== resF) return false;
+    if (critF && !t.crit) return false;
+    if (newF && !t.isNew) return false;
+    if (q && !t.id.toLowerCase().includes(q) && !t.desc.toLowerCase().includes(q) && !t.exp.toLowerCase().includes(q)) return false;
+    return true;
+  });
+
+  document.getElementById('tc-count').textContent = filtered.length + ' tests';
+
+  let html = ''; let lastSec = '';
+  filtered.forEach(t => {
+    if (t.sec !== lastSec) {
+      const s = SECTIONS.find(x => x.code === t.sec);
+      html += `<tr class="sec-hdr"><td colspan="6">${s ? s.name : t.sec}</td></tr>`;
+      lastSec = t.sec;
+    }
+    const r = results[t.id] || {};
+    const cur = r.result || 'pending';
+    const testedAt = r.tested_at ? 'Tested: ' + new Date(r.tested_at).toLocaleString() : '';
+    html += `<tr>
+      <td><div class="tc-inner">
+        <div class="id-badge">${t.crit ? '<span class="crit-dot"></span>' : ''}${t.id}${t.isNew ? ' <span class="new-badge">NEW</span>' : ''}</div>
+        <div class="sub-lbl">${esc(t.sub)}</div>
+      </div></td>
+      <td><div class="tc-inner" style="font-size:11px;color:#555">${esc(t.sn)}</div></td>
+      <td><div class="tc-inner">${esc(t.desc)}</div></td>
+      <td><div class="tc-inner" style="font-size:11px;color:#555">${esc(t.exp)}</div></td>
+      <td><div class="tc-inner">
+        <div class="rb-wrap">
+          <button id="rb-pass-${t.id}" class="rb rb-pass${cur==='pass'?' on':''}" onclick="setResult('${t.id}','pass')">Pass</button>
+          <button id="rb-fail-${t.id}" class="rb rb-fail${cur==='fail'?' on':''}" onclick="setResult('${t.id}','fail')">Fail</button>
+          <button id="rb-skip-${t.id}" class="rb rb-skip${cur==='skip'?' on':''}" onclick="setResult('${t.id}','skip')">Skip</button>
+        </div>
+        <div class="field-lbl"><span class="dot dot-rem"></span>Remarks</div>
+        <textarea class="mini-textarea" rows="2" placeholder="What was observed…" onchange="setField('${t.id}','remarks',this.value)">${esc(r.remarks||'')}</textarea>
+        <div id="ta-${t.id}" class="tested-at">${testedAt}</div>
+      </div></td>
+      <td><div class="tc-inner">
+        <div class="field-lbl"><span class="dot dot-chg"></span>Changes Required</div>
+        <textarea class="mini-textarea" rows="3" placeholder="Describe fix / change needed…" onchange="setField('${t.id}','changes_required',this.value)">${esc(r.changes_required||'')}</textarea>
+      </div></td>
+    </tr>`;
+  });
+  if (!html) html = '<tr><td colspan="6" class="loader">No tests match the current filters.</td></tr>';
+  document.getElementById('tests-body').innerHTML = html;
+}
+
+// ── History ────────────────────────────────────────────────────────────────────
+function renderHistory() {
+  if (!sessions.length) {
+    document.getElementById('session-list').innerHTML = '<div class="loader">No sessions yet. Create one to start testing.</div>';
+    return;
+  }
+  document.getElementById('session-list').innerHTML = sessions.map(s => {
+    const isActive = activeSession && activeSession.id === s.id;
+    // compute stats from this session — only works for active session (we have results loaded)
+    let statsHtml = '';
+    if (isActive) {
+      const g = getStats();
+      statsHtml = `<div class="si-stats">
+        <div class="si-stat st"><div class="n">${g.tested}</div><div class="l">Tested</div></div>
+        <div class="si-stat sp"><div class="n">${g.passed}</div><div class="l">Passed</div></div>
+        <div class="si-stat sf"><div class="n">${g.failed}</div><div class="l">Failed</div></div>
+      </div>`;
+    }
+    return `<div class="session-item${isActive?' active-session':''}">
+      <div class="si-info">
+        <div class="si-name">${esc(s.session_name)}${isActive?' <span style="font-size:10px;background:#dbeafe;color:#1d4ed8;padding:2px 7px;border-radius:8px;font-weight:600;margin-left:6px">ACTIVE</span>':''}</div>
+        <div class="si-meta">${formatDate(s.session_date)}${s.tester_name?' · '+esc(s.tester_name):''}${s.notes?' · '+esc(s.notes):''}</div>
+      </div>
+      ${statsHtml}
+      <div style="display:flex;gap:8px">
+        ${isActive ? '<span style="font-size:11px;color:#3b82f6;font-weight:600">Current session</span>' : `<button class="btn btn-blue" onclick="switchSession('${s.id}')">Activate</button>`}
+        <button class="btn btn-green" onclick="exportSessionCSV('${s.id}','${esc(s.session_name)}')">Export CSV</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function switchSession(sessionId) {
+  const s = sessions.find(x => x.id === sessionId);
+  if (s) await activateSession(s, true);
+}
+
+// ── Export CSV ─────────────────────────────────────────────────────────────────
+function exportCSV() { exportSessionCSV(activeSession?.id, activeSession?.session_name || 'results'); }
+
+async function exportSessionCSV(sessionId, sessionName) {
+  if (!sessionId) { showToast('No session selected'); return; }
+  // load results for that session
+  const { data, error } = await SB.from('test_results').select('*').eq('session_id', sessionId);
+  if (error) { showToast('Export error: ' + error.message); return; }
+  const rmap = {};
+  (data || []).forEach(r => { rmap[r.test_id] = r; });
+  const rows = [['ID','Module','Sub-section','Test Step','Expected Result','Critical','New','Result','Remarks','Changes Required','Tested At']];
+  TESTS.forEach(t => {
+    const r = rmap[t.id] || {};
+    rows.push([t.id, t.sn, t.sub, '"'+t.desc.replace(/"/g,'""')+'"', '"'+t.exp.replace(/"/g,'""')+'"', t.crit?'Yes':'No', t.isNew?'Yes':'No', r.result||'Pending', '"'+(r.remarks||'').replace(/"/g,'""')+'"', '"'+(r.changes_required||'').replace(/"/g,'""')+'"', r.tested_at ? new Date(r.tested_at).toLocaleString() : '']);
+  });
+  const csv = rows.map(r => r.join(',')).join('\n');
+  const a = document.createElement('a');
+  a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
+  a.download = 'AmanahCX-Tests-' + sessionName.replace(/[^a-z0-9]/gi,'_') + '-' + new Date().toISOString().slice(0,10) + '.csv';
+  a.click();
+}
+
+// ── Utilities ──────────────────────────────────────────────────────────────────
+function esc(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function formatDate(d) { if (!d) return ''; const dt = new Date(d+'T00:00:00'); return dt.toLocaleDateString(undefined,{year:'numeric',month:'short',day:'numeric'}); }
+function showToast(msg) { const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'), 3000); }
+
+function showPage(id) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('page-' + id).classList.add('active');
+  document.querySelector(`.tab[data-page="${id}"]`).classList.add('active');
+  if (id === 'tests') renderTests();
+  if (id === 'history') renderHistory();
+}
+
+document.querySelectorAll('.tab').forEach(t => {
+  t.addEventListener('click', () => showPage(t.dataset.page));
+});
+
+boot();
+</script>
+</body>
+</html>
