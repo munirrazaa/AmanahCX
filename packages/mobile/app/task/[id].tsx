@@ -7,6 +7,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { confirmDialog, notify } from '@/lib/dialog';
 import { api, ApiError } from '@/lib/api';
 
 interface TaskDetail {
@@ -88,13 +89,12 @@ export default function TaskDetailScreen() {
   }
 
   function confirmComplete() {
-    Alert.alert(
+    confirmDialog(
       'Complete this job?',
       `"${task?.subject}" will be marked complete in the CRM${task?.contact_name ? ` and ${task.contact_name} will be informed by email` : ''}.\n\nIs this correct?`,
-      [
-        { text: 'Not yet', style: 'cancel' },
-        { text: 'Confirm & complete', onPress: markComplete },
-      ],
+      'Confirm & complete',
+      markComplete,
+      'Not yet',
     );
   }
 
@@ -108,12 +108,12 @@ export default function TaskDetailScreen() {
       });
       queryClient.invalidateQueries({ queryKey: ['my-tasks'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard'] });
-      Alert.alert(
+      notify(
         'Job completed',
         result.customerNotified
           ? 'The CRM is updated and the customer has been informed by email.'
           : 'The CRM is updated.',
-        [{ text: 'Done', onPress: () => router.back() }],
+        () => router.back(),
       );
     } catch (err) {
       Alert.alert('Could not complete', err instanceof ApiError ? err.message : 'Please try again.');

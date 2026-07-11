@@ -9,7 +9,7 @@ import { api } from '@/lib/api';
 
 interface Deal {
   id:         string;
-  title:      string;
+  name:       string;
   stage_id:   string;
   amount:     number;
   currency:   string;
@@ -21,7 +21,7 @@ interface Deal {
 
 const STATUS_COLOR: Record<string, string> = {
   open: '#3b82f6',
-  won:  '#22c55e',
+  won:  '#4C9A4C',
   lost: '#ef4444',
 };
 
@@ -43,14 +43,15 @@ export default function DealsScreen() {
 
   // Summary stats
   const openDeals = deals.filter((d) => d.status === 'open');
-  const pipelineValue = openDeals.reduce((s, d) => s + (d.amount ?? 0), 0);
+  // amount arrives as a string from the API (Postgres numeric) — force numeric math
+  const pipelineValue = openDeals.reduce((s, d) => s + (Number(d.amount) || 0), 0);
 
   return (
     <View style={styles.screen}>
       <View style={styles.header}>
         <Text style={styles.title}>Deals</Text>
         <TouchableOpacity onPress={() => router.push('/deal/new')}>
-          <Ionicons name="add-circle" size={28} color="#29ABE2" />
+          <Ionicons name="add-circle" size={28} color="#2BB8CC" />
         </TouchableOpacity>
       </View>
 
@@ -66,18 +67,18 @@ export default function DealsScreen() {
       </View>
 
       {isLoading ? (
-        <ActivityIndicator color="#29ABE2" style={{ marginTop: 40 }} />
+        <ActivityIndicator color="#2BB8CC" style={{ marginTop: 40 }} />
       ) : (
         <FlatList
           data={deals}
           keyExtractor={(d) => d.id}
-          refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor="#29ABE2" />}
+          refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor="#2BB8CC" />}
           contentContainerStyle={styles.list}
           renderItem={({ item: d }) => (
             <TouchableOpacity style={styles.card} onPress={() => router.push(`/deal/${d.id}`)}>
               <View style={styles.cardTop}>
-                <Text style={styles.dealTitle} numberOfLines={1}>{d.title}</Text>
-                <Text style={styles.amount}>{fmtMoney(d.amount ?? 0, d.currency)}</Text>
+                <Text style={styles.dealTitle} numberOfLines={1}>{d.name}</Text>
+                <Text style={styles.amount}>{fmtMoney(Number(d.amount) || 0, d.currency)}</Text>
               </View>
               {(d.contact_name || d.company_name) && (
                 <Text style={styles.meta}>{[d.contact_name, d.company_name].filter(Boolean).join(' · ')}</Text>
@@ -109,7 +110,7 @@ const styles = StyleSheet.create({
   card:         { backgroundColor: '#1e293b', borderRadius: 12, padding: 14, marginBottom: 10 },
   cardTop:      { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 },
   dealTitle:    { fontSize: 15, fontWeight: '600', color: '#f1f5f9', flex: 1, marginRight: 8 },
-  amount:       { fontSize: 15, fontWeight: '700', color: '#29ABE2' },
+  amount:       { fontSize: 15, fontWeight: '700', color: '#2BB8CC' },
   meta:         { fontSize: 12, color: '#64748b', marginBottom: 8 },
   cardBottom:   { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   badge:        { borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 },

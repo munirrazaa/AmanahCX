@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "CRM Platform",
+    "name": "AmanahCX",
     "slug": "crm-platform",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -11,13 +11,17 @@
       "resizeMode": "contain",
       "backgroundColor": "#0f172a"
     },
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.crm.platform",
       "infoPlist": {
-        "NSCameraUsageDescription": "Used for contact photo uploads.",
-        "NSMicrophoneUsageDescription": "Used for voice call recording."
+        "NSCameraUsageDescription": "Used to scan visiting cards and capture leads.",
+        "NSPhotoLibraryUsageDescription": "Used to pick a visiting card photo from your library.",
+        "NSMicrophoneUsageDescription": "Used to capture leads by voice.",
+        "NSSpeechRecognitionUsageDescription": "Used to turn your spoken lead notes into text."
       }
     },
     "android": {
@@ -26,23 +30,51 @@
         "backgroundColor": "#0f172a"
       },
       "package": "com.crm.platform",
-      "permissions": ["CAMERA", "RECORD_AUDIO", "VIBRATE"]
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.VIBRATE"
+      ]
     },
     "plugins": [
       "expo-router",
       "expo-secure-store",
       [
+        "expo-image-picker",
+        {
+          "cameraPermission": "Used to scan visiting cards and capture leads."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Used to record your arrival and completion at customer job sites."
+        }
+      ],
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "Used to capture leads by voice.",
+          "speechRecognitionPermission": "Used to turn your spoken lead notes into text."
+        }
+      ],
+      [
         "expo-notifications",
         {
           "icon": "./assets/notification-icon.png",
-          "color": "#29ABE2",
+          "color": "#2BB8CC",
           "defaultChannel": "default"
         }
       ]
     ],
     "scheme": "crm",
     "extra": {
-      "eas": { "projectId": "YOUR_EAS_PROJECT_ID" }
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "5fa8bc6c-59d7-45df-8e5c-066440381634"
+      }
     }
   }
 }

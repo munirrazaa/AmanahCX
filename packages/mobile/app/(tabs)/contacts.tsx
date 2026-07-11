@@ -22,7 +22,7 @@ function initials(c: Contact) {
 }
 
 function statusColor(s: string) {
-  return s === 'customer' ? '#22c55e' : s === 'lead' ? '#f59e0b' : '#64748b';
+  return s === 'customer' ? '#4C9A4C' : s === 'lead' ? '#f59e0b' : '#64748b';
 }
 
 export default function ContactsScreen() {
@@ -42,7 +42,7 @@ export default function ContactsScreen() {
       <View style={styles.header}>
         <Text style={styles.title}>Contacts</Text>
         <TouchableOpacity onPress={() => router.push('/contact/new')}>
-          <Ionicons name="add-circle" size={28} color="#29ABE2" />
+          <Ionicons name="add-circle" size={28} color="#2BB8CC" />
         </TouchableOpacity>
       </View>
 
@@ -59,12 +59,12 @@ export default function ContactsScreen() {
       </View>
 
       {isLoading ? (
-        <ActivityIndicator color="#29ABE2" style={{ marginTop: 40 }} />
+        <ActivityIndicator color="#2BB8CC" style={{ marginTop: 40 }} />
       ) : (
         <FlatList
           data={contacts}
           keyExtractor={(c) => c.id}
-          refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor="#29ABE2" />}
+          refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor="#2BB8CC" />}
           contentContainerStyle={styles.list}
           renderItem={({ item: c }) => (
             <TouchableOpacity style={styles.row} onPress={() => router.push(`/contact/${c.id}`)}>

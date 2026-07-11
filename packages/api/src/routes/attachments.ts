@@ -20,24 +20,34 @@ const UploadSchema = z.object({
 
 export function attachmentRoutes(db: DatabaseClient) {
   return async function (fastify: FastifyInstance) {
-    // Table is created lazily so no migration step is needed in dev.
-    await db.withSuperAdmin(async (client) => {
-      await client.query(`
-        CREATE TABLE IF NOT EXISTS attachments (
-          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          tenant_id UUID NOT NULL,
-          entity_type TEXT NOT NULL,
-          entity_id UUID NOT NULL,
-          filename TEXT NOT NULL,
-          mime_type TEXT NOT NULL,
-          size_bytes BIGINT NOT NULL,
-          storage_key TEXT NOT NULL,
-          uploaded_by UUID,
-          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-        );
-        CREATE INDEX IF NOT EXISTS idx_attachments_entity ON attachments (tenant_id, entity_type, entity_id);
-      `);
-    });
+    // Table is created lazily so no migration step is needed in dev. When the
+    // app's DB role lacks DDL rights (hardened setups), an existing table is
+    // fine — only fail if the table is genuinely missing.
+    try {
+      await db.withSuperAdmin(async (client) => {
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS attachments (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            tenant_id UUID NOT NULL,
+            entity_type TEXT NOT NULL,
+            entity_id UUID NOT NULL,
+            filename TEXT NOT NULL,
+            mime_type TEXT NOT NULL,
+            size_bytes BIGINT NOT NULL,
+            storage_key TEXT NOT NULL,
+            uploaded_by UUID,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+          );
+          CREATE INDEX IF NOT EXISTS idx_attachments_entity ON attachments (tenant_id, entity_type, entity_id);
+        `);
+      });
+    } catch (err) {
+      const exists = await db.withSuperAdmin(async (client) => {
+        const r = await client.query("SELECT to_regclass('public.attachments') IS NOT NULL AS ok");
+        return r.rows[0]?.ok;
+      });
+      if (!exists) throw err;
+    }
 
     // UPLOAD — POST /api/v1/attachments  (base64 JSON body, ≤ 15 MB decoded)
     fastify.post('/', {

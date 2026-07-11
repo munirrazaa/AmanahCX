@@ -15,3 +15,5 @@ Credetials /
 **/.claude/
 *Credentials*.docx
 *Credetials*
+.vercel
+.env*
