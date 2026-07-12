@@ -984,13 +984,16 @@ export function analyticsRoutes(db: DatabaseClient) {
     });
 
     // GET /api/v1/analytics/agent-load — active + breached ticket count per agent (wallboard)
+    // "Breached" = past its SLA due date and not yet resolved/closed. There is no stored
+    // is_overdue column — it must be computed from sla_due_at (this endpoint 500'd on every
+    // call before this fix, since that column never existed).
     fastify.get('/agent-load', { preHandler: requireRole('super_admin','tenant_admin','manager') }, async (req, reply) => {
       const rows = await db.withTenant(req.tenant.id, async (client) => {
         const r = await client.query(
           `SELECT
              t.assignee_id AS agent_id,
              COUNT(*) FILTER (WHERE t.status NOT IN ('resolved','closed')) AS active_tickets,
-             COUNT(*) FILTER (WHERE t.is_overdue = true AND t.status NOT IN ('resolved','closed')) AS breached_tickets
+             COUNT(*) FILTER (WHERE t.sla_due_at IS NOT NULL AND t.sla_due_at < NOW() AND t.status NOT IN ('resolved','closed')) AS breached_tickets
            FROM tickets t
            WHERE t.assignee_id IS NOT NULL
            GROUP BY t.assignee_id`,
@@ -1001,19 +1004,20 @@ export function analyticsRoutes(db: DatabaseClient) {
     });
 
     // GET /api/v1/analytics/queue-stats — open/assigned/pending/breached per queue (wallboard)
+    // ticket_queues has no department column (never modeled) — this endpoint 500'd on every
+    // call before this fix. Dropped the field rather than inventing a fake data source.
     fastify.get('/queue-stats', { preHandler: requireRole('super_admin','tenant_admin','manager') }, async (req, reply) => {
       const rows = await db.withTenant(req.tenant.id, async (client) => {
         const r = await client.query(
           `SELECT
              tq.name AS queue_name,
-             tq.department,
              COUNT(*) FILTER (WHERE t.status = 'open')        AS open,
              COUNT(*) FILTER (WHERE t.status = 'assigned')    AS assigned,
              COUNT(*) FILTER (WHERE t.status = 'pending')     AS pending,
-             COUNT(*) FILTER (WHERE t.is_overdue = true AND t.status NOT IN ('resolved','closed')) AS breached
+             COUNT(*) FILTER (WHERE t.sla_due_at IS NOT NULL AND t.sla_due_at < NOW() AND t.status NOT IN ('resolved','closed')) AS breached
            FROM ticket_queues tq
            LEFT JOIN tickets t ON t.queue_id = tq.id
-           GROUP BY tq.id, tq.name, tq.department
+           GROUP BY tq.id, tq.name
            ORDER BY tq.name ASC`,
         );
         return r.rows;
