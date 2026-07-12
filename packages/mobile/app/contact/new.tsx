@@ -69,7 +69,10 @@ export default function NewContactScreen() {
 
   async function toggleVoice() {
     if (listening) {
-      Speech.stop();
+      // Reset UI immediately — never leave the button stuck if the
+      // recognizer already ended (or never started) and no event arrives.
+      setListening(false);
+      try { Speech.stop(); } catch { /* recognizer wasn't running */ }
       return;
     }
     const perm = await Speech.requestPermissionsAsync();
@@ -79,13 +82,18 @@ export default function NewContactScreen() {
     }
     setTranscript('');
     setListening(true);
-    Speech.start({
+    try {
+      Speech.start({
       lang: voiceLang,
       interimResults: true,
       continuous: false,
       // Falls back to online recognition automatically when unavailable on-device
       requiresOnDeviceRecognition: false,
-    });
+      });
+    } catch {
+      setListening(false);
+      Alert.alert('Voice input unavailable', 'This phone has no speech recognition service available. Please type the details instead.');
+    }
   }
 
   async function useTranscript() {
@@ -136,8 +144,8 @@ export default function NewContactScreen() {
     }
 
     const result = fromCamera
-      ? await ImagePicker.launchCameraAsync({ quality: 0.6, base64: true })
-      : await ImagePicker.launchImageLibraryAsync({ quality: 0.6, base64: true, mediaTypes: ImagePicker.MediaTypeOptions.Images });
+      ? await ImagePicker.launchCameraAsync({ quality: 0.8, base64: true })
+      : await ImagePicker.launchImageLibraryAsync({ quality: 0.8, base64: true, mediaTypes: ImagePicker.MediaTypeOptions.Images });
 
     if (result.canceled || !result.assets?.[0]) return;
     const asset = result.assets[0];

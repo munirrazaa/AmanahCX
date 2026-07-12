@@ -80,7 +80,10 @@ export default function NewTaskScreen() {
 
   async function toggleVoice() {
     if (listening) {
-      Speech.stop();
+      // Reset UI immediately — never leave the button stuck if the
+      // recognizer already ended (or never started) and no event arrives.
+      setListening(false);
+      try { Speech.stop(); } catch { /* recognizer wasn't running */ }
       return;
     }
     const perm = await Speech.requestPermissionsAsync();
@@ -90,12 +93,17 @@ export default function NewTaskScreen() {
     }
     setTranscript('');
     setListening(true);
-    Speech.start({
+    try {
+      Speech.start({
       lang: voiceLang,
       interimResults: true,
       continuous: false,
       requiresOnDeviceRecognition: false,
-    });
+      });
+    } catch {
+      setListening(false);
+      Alert.alert('Voice input unavailable', 'This phone has no speech recognition service available. Please type the details instead.');
+    }
   }
 
   async function useTranscript() {

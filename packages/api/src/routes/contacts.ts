@@ -126,7 +126,11 @@ export function contactRoutes(db: DatabaseClient, eventBus: EventBus) {
       });
 
       const customFields = body.customFields ?? {};
-      const missingFields = req.user.role === 'super_admin' ? [] : requiredFields.filter(
+      // Field quick-capture (card scan, voice, mobile) is exempt from sector-required
+      // fields — a fresh walk-in lead has no account number yet. The requirement is
+      // enforced later when the lead is converted/edited into a full customer record.
+      const isQuickCapture = ['card_scan', 'voice', 'mobile', 'field'].includes(body.source ?? '');
+      const missingFields = (req.user.role === 'super_admin' || isQuickCapture) ? [] : requiredFields.filter(
         (name: string) => customFields[name] === undefined || customFields[name] === null || customFields[name] === '',
       );
 
@@ -199,7 +203,7 @@ export function contactRoutes(db: DatabaseClient, eventBus: EventBus) {
               { type: 'image', source: { type: 'base64', media_type: body.mediaType, data: body.image } },
               {
                 type: 'text',
-                text: 'This is a photo of a business/visiting card. Extract the contact details and reply with ONLY a JSON object (no markdown) with these keys, using null for anything not on the card: firstName, lastName, jobTitle, company, email, phone, mobile, website, address. Phone numbers should keep their country code if shown. If the card is not readable or is not a business card, reply with {"error": "reason"}.',
+                text: 'This is a photo of a business/visiting card. Extract the contact details and reply with ONLY a JSON object (no markdown) with these keys, using null for anything not on the card: firstName, lastName, jobTitle, company, email, phone, mobile, website, address. The person NAME is usually the most prominent text after the company logo — often stylised, in a larger or decorative font, sometimes vertical or diagonal; look carefully for it and split into firstName/lastName. Numbers labelled Cell/Mob/Mobile/WhatsApp or starting with a mobile prefix (e.g. 03xx in Pakistan, +92 3xx) go in \"mobile\"; landline/Tel/Office/UAN numbers go in \"phone\"; if only one unlabelled number exists and it looks like a mobile number, put it in \"mobile\". Phone numbers should keep their country code if shown. If the card is not readable or is not a business card, reply with {"error": "reason"}.',
               },
             ],
           }],
@@ -498,6 +502,66 @@ export function contactRoutes(db: DatabaseClient, eventBus: EventBus) {
       });
 
       return reply.send({ success: true, data: timeline });
+    });
+
+    // GET current per-channel consent state for a contact (whatsapp/sms/email).
+    // Returns the latest row per channel, not the full history — use for UI toggles.
+    fastify.get('/:id/consent', { preHandler: requireScope('contacts:read') }, async (req, reply) => {
+      const { id } = req.params as { id: string };
+      const rows = await db.withTenant(req.tenant.id, async (client) => {
+        const result = await client.query(
+          `SELECT DISTINCT ON (channel) channel, opted_in, source, consented_at, recorded_by, notes
+           FROM contact_channel_consent
+           WHERE contact_id = $1
+           ORDER BY channel, consented_at DESC`,
+          [id],
+        );
+        return result.rows;
+      });
+      return reply.send({ success: true, data: rows });
+    });
+
+    // GET full consent history for a contact (audit trail — every opt-in/opt-out event ever recorded)
+    fastify.get('/:id/consent/history', { preHandler: requireScope('contacts:read') }, async (req, reply) => {
+      const { id } = req.params as { id: string };
+      const rows = await db.withTenant(req.tenant.id, async (client) => {
+        const result = await client.query(
+          `SELECT cc.channel, cc.opted_in, cc.source, cc.consented_at, cc.notes, u.name AS recorded_by_name
+           FROM contact_channel_consent cc
+           LEFT JOIN users u ON u.id = cc.recorded_by
+           WHERE cc.contact_id = $1
+           ORDER BY cc.consented_at DESC
+           LIMIT 100`,
+          [id],
+        );
+        return result.rows;
+      });
+      return reply.send({ success: true, data: rows });
+    });
+
+    // POST record a new consent event for a contact+channel. Never overwrites — every
+    // change (opt-in, opt-out, re-consent) is a new row, preserving the audit trail
+    // Meta/WhatsApp compliance requires.
+    const RecordConsentSchema = z.object({
+      channel:  z.enum(['whatsapp', 'sms', 'email']),
+      optedIn:  z.boolean(),
+      source:   z.enum(['manual', 'reply', 'form', 'import', 'api']),
+      notes:    z.string().max(500).optional(),
+    });
+    fastify.post('/:id/consent', { preHandler: requireScope('contacts:write') }, async (req, reply) => {
+      const { id } = req.params as { id: string };
+      const body = RecordConsentSchema.parse(req.body);
+      const [row] = await db.withTenant(req.tenant.id, async (client) => {
+        const result = await client.query(
+          `INSERT INTO contact_channel_consent
+             (tenant_id, contact_id, channel, opted_in, source, recorded_by, notes)
+           VALUES ($1,$2,$3,$4,$5,$6,$7)
+           RETURNING id, channel, opted_in, source, consented_at, notes`,
+          [req.tenant.id, id, body.channel, body.optedIn, body.source, (req as any).user?.sub ?? null, body.notes ?? null],
+        );
+        return result.rows;
+      });
+      return reply.code(201).send({ success: true, data: row });
     });
 
     // GET contact CSAT summary — avg rating + recent responses across all tickets
