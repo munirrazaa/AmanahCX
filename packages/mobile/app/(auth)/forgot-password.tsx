@@ -16,7 +16,7 @@ export default function ForgotPasswordScreen() {
     if (!email.trim()) { Alert.alert('Enter your email address'); return; }
     setLoading(true);
     try {
-      await api.post('/api/v1/auth/forgot-password', { email: email.trim() });
+      await api.post('/auth/forgot-password', { email: email.trim() });
       setSent(true);
     } catch {
       // Always show success to avoid email enumeration
@@ -83,7 +83,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#0f172a', borderWidth: 1, borderColor: '#334155',
     borderRadius: 10, padding: 14, fontSize: 15, color: '#f1f5f9', marginBottom: 16,
   },
-  button:      { backgroundColor: '#29ABE2', borderRadius: 10, padding: 15, alignItems: 'center' },
+  button:      { backgroundColor: '#2BB8CC', borderRadius: 10, padding: 15, alignItems: 'center' },
   buttonText:  { color: '#fff', fontWeight: '700', fontSize: 16 },
   backLink:    { marginTop: 16, alignItems: 'center' },
   backText:    { color: '#64748b', fontSize: 14 },

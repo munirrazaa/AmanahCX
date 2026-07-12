@@ -139,28 +139,6 @@ to (or tickets with no queue at all), in addition to tickets already assigned to
 a manager could not see backlog/unclaimed work at all — only what had already been picked up.
 Matches standard supervisor team-queue visibility in Zendesk and Freshdesk.
 
-## 4.16 Per-Channel Communication Consent (2026-07-12)
-Contacts now carry per-channel (WhatsApp / SMS / Email) opt-in state in the append-only
-`contact_channel_consent` table — every opt-in/opt-out is a new timestamped row with source
-(`manual|reply|form|import|api`), recording user, and note; history is never overwritten. Surfaces:
-a Consent tab on Contact Detail (toggles + note + full history), and API endpoints
-`GET/POST /contacts/:id/consent` (+ `/history`). Enforcement is live: ticket creation (manual and
-voice-bot) auto-records an opt-in when the customer selects WhatsApp/SMS as preferred channel, and
-the ticket-reply dispatcher consults `getChannelConsent()` (`packages/api/src/lib/consent.ts`) —
-an explicit opt-out reroutes the reply to email. Rationale: Meta's WhatsApp Business API requires
-provable opt-in before business-initiated messages. Rule for future bulk/marketing sends: no
-consent record = no send (stricter than ticket replies, where choosing the channel is the opt-in).
-Matches Salesforce/HubSpot per-channel consent models.
-
-## 4.17 Sector Auto-Provisioning of Modules (2026-07-12)
-Extends 4.12's sector field seeding: each sector in `packages/shared/src/config/sectors.ts` now
-also declares `defaultModules` + `defaultFeatures`. `POST /super-admin/tenants` seeds the new
-tenant's `active_modules`/`entitled_features` from the chosen sector's defaults, unioned with any
-explicitly requested modules/features; `PATCH /tenants/:id/modules` still adjusts afterwards.
-Before this, sector had no effect on licensing — an "Education" tenant got only the bare default
-modules unless the super admin toggled each one manually (the root cause of the TA-04 "education
-sidebar" issue). Matches industry-template onboarding in Salesforce/HubSpot verticals.
-
 ### 4.4 Customer 360 — Callback Search & Cross-Team Context
 
 **Multi-field ticket search:** tickets searchable by ticket number, subject, reporter name, reporter

@@ -28,7 +28,7 @@ export default function LoginScreen() {
       setSession(data);
       // Register push token in background — non-blocking
       registerForPushNotifications().catch(() => {});
-      router.replace('/(tabs)/dashboard');
+      router.replace('/(tabs)/tasks');
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : 'Login failed. Please try again.';
       Alert.alert('Login failed', msg);
@@ -105,16 +105,16 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   container:      { flex: 1, backgroundColor: '#0f172a', justifyContent: 'center', padding: 24 },
   card:           { backgroundColor: '#1e293b', borderRadius: 16, padding: 28 },
-  logo:           { fontSize: 28, fontWeight: '800', color: '#29ABE2', textAlign: 'center', marginBottom: 4 },
+  logo:           { fontSize: 28, fontWeight: '800', color: '#2BB8CC', textAlign: 'center', marginBottom: 4 },
   title:          { fontSize: 15, color: '#94a3b8', textAlign: 'center', marginBottom: 28 },
   label:          { fontSize: 13, fontWeight: '600', color: '#cbd5e1', marginBottom: 6 },
   input:          {
     backgroundColor: '#0f172a', borderWidth: 1, borderColor: '#334155',
     borderRadius: 10, padding: 14, fontSize: 15, color: '#f1f5f9', marginBottom: 16,
   },
-  button:         { backgroundColor: '#29ABE2', borderRadius: 10, padding: 15, alignItems: 'center', marginTop: 4 },
+  button:         { backgroundColor: '#2BB8CC', borderRadius: 10, padding: 15, alignItems: 'center', marginTop: 4 },
   buttonDisabled: { opacity: 0.6 },
   buttonText:     { color: '#fff', fontWeight: '700', fontSize: 16 },
   forgotLink:     { marginTop: 16, alignItems: 'center' },
-  forgotText:     { color: '#29ABE2', fontSize: 14 },
+  forgotText:     { color: '#2BB8CC', fontSize: 14 },
 });

@@ -121,17 +121,6 @@ _All ideas, pending work, and deferred items. Prioritised against enterprise rea
 
 ---
 
-### 14b. Marketing/bulk WhatsApp sends — strict consent gate
-- **Verdict:** Do when WhatsApp marketing is built (blocker for that feature, not for current ops)
-- **Status:** Foundation done ✅ 2026-07-12 — consent tracking + ticket-reply gate live; the bulk-send feature itself doesn't exist yet
-- **Why:** Meta suspends WhatsApp Business API access for un-consented business-initiated messages. Per-channel consent tracking (`contact_channel_consent`) and the ticket-reply opt-out gate shipped 2026-07-12.
-- **Detail:** When bulk/marketing sends are built, they must call `getChannelConsent()` (`packages/api/src/lib/consent.ts`) and only send where it returns `true` — for marketing, "no record" = NO send (stricter than ticket replies, where the customer choosing the channel is itself the opt-in).
-
-### 14c. Dead super_admin references in route-level role checks
-- **Verdict:** Post-launch — cosmetic only
-- **Status:** Deprioritised by decision 2026-07-12
-- **Detail:** ~12+ unreachable `super_admin` mentions in `requireRole()`/inline role arrays across `tickets.ts`, `contacts.ts`, `analytics.ts`, `voice-bot.ts`, `connectors.ts`. The middleware wall (commit b854929) blocks super_admin before any of these are evaluated — zero functional/security impact. Clean up only as part of a broader tech-debt pass.
-
 ## 🔵 P4 — Low (Post-launch / on-request)
 
 ### 15. Pitch deck — embed Vivid Solutions logo image
@@ -146,11 +135,6 @@ _All ideas, pending work, and deferred items. Prioritised against enterprise rea
 
 ## ✅ Completed (moved from backlog)
 
-- Per-channel consent tracking (WhatsApp/SMS/Email) + Consent tab + reply-dispatch opt-out gate — DONE 2026-07-12
-- Sector auto-provisioning: sector choice now seeds default modules/features at tenant creation — DONE 2026-07-12
-- Webhook delivery pipeline RLS fix (Test button + background worker + dead-letter replay) — DONE 2026-07-12
-- Routing & SLA settings opened to managers (operational config, benchmarked) — DONE 2026-07-12
-- SMS-failure admin alert column mismatch (`message` → `body`) — DONE 2026-07-12
 - Email deliverability — sender changed to noreply@vividsns.com — DONE 2026-06-24 (DNS records pending owner action)
 - Holiday SLA engine — deadlines now skip holidays, weekends, non-working hours — DONE 2026-06-24
 - CSAT Survey — full end-to-end flow (public page, auto-send, ticket panel, API) — DONE 2026-06-24

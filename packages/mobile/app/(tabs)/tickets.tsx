@@ -23,7 +23,7 @@ const STATUS_COLOR: Record<string, string> = {
   open:        '#f59e0b',
   accepted:    '#3b82f6',
   in_progress: '#8b5cf6',
-  resolved:    '#22c55e',
+  resolved:    '#4C9A4C',
   closed:      '#64748b',
 };
 const PRIORITY_COLOR: Record<string, string> = {
@@ -67,7 +67,7 @@ export default function TicketsScreen() {
       <View style={styles.header}>
         <Text style={styles.title}>Tickets</Text>
         <TouchableOpacity onPress={() => router.push('/ticket/new')}>
-          <Ionicons name="add-circle" size={28} color="#29ABE2" />
+          <Ionicons name="add-circle" size={28} color="#2BB8CC" />
         </TouchableOpacity>
       </View>
 
@@ -84,12 +84,12 @@ export default function TicketsScreen() {
       </View>
 
       {isLoading ? (
-        <ActivityIndicator color="#29ABE2" style={{ marginTop: 40 }} />
+        <ActivityIndicator color="#2BB8CC" style={{ marginTop: 40 }} />
       ) : (
         <FlatList
           data={tickets}
           keyExtractor={(t) => t.id}
-          refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor="#29ABE2" />}
+          refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor="#2BB8CC" />}
           contentContainerStyle={styles.list}
           renderItem={({ item: t }) => (
             <TouchableOpacity style={styles.card} onPress={() => router.push(`/ticket/${t.id}`)}>
@@ -126,13 +126,13 @@ const styles = StyleSheet.create({
   title:        { fontSize: 26, fontWeight: '800', color: '#f1f5f9' },
   tabs:         { flexDirection: 'row', paddingHorizontal: 20, gap: 8, marginBottom: 14 },
   tab:          { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, backgroundColor: '#1e293b' },
-  tabActive:    { backgroundColor: '#29ABE2' },
+  tabActive:    { backgroundColor: '#2BB8CC' },
   tabText:      { fontSize: 12, fontWeight: '600', color: '#64748b' },
   tabTextActive:{ color: '#fff' },
   list:         { paddingHorizontal: 20, paddingBottom: 20 },
   card:         { backgroundColor: '#1e293b', borderRadius: 12, padding: 14, marginBottom: 10 },
   cardTop:      { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
-  ticketNum:    { fontSize: 12, fontWeight: '700', color: '#29ABE2', flex: 1 },
+  ticketNum:    { fontSize: 12, fontWeight: '700', color: '#2BB8CC', flex: 1 },
   breachBadge:  { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fee2e2', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2, marginRight: 8, gap: 3 },
   breachText:   { fontSize: 10, fontWeight: '700', color: '#ef4444' },
   priorityDot:  { width: 8, height: 8, borderRadius: 4 },

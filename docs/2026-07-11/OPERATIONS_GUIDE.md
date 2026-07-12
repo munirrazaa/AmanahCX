@@ -50,7 +50,6 @@ Last updated: 2026-07-11
 - [Ticket-Contact Linking — Every Ticket Needs a Customer](#ticket-contact-linking--every-ticket-needs-a-customer)
 - [Creating a Ticket Without an Existing Contact](#creating-a-ticket-without-an-existing-contact-auto-customer-creation)
 - [Managers Can Now See Unclaimed Tickets](#managers-can-now-see-unclaimed-tickets-waiting-to-be-picked-up)
-- [Communication Consent — WhatsApp, SMS & Email Opt-In](#communication-consent--whatsapp-sms--email-opt-in)
 
 ---
 
@@ -1174,28 +1173,3 @@ The self-service menu lets callers resolve common queries without speaking to an
 
 Disabled items are skipped by the voice bot but kept in the list so you can re-enable them later.
 
-
----
-
-## Communication Consent — WhatsApp, SMS & Email Opt-In
-
-**Who uses it:** Managers, line managers, and agents (Contact page → Consent tab). Compliance teams for the audit history.
-
-Before your business sends a customer a WhatsApp message, the customer must have said "yes, you may contact me there" — WhatsApp's owner (Meta) enforces this and can suspend a business's WhatsApp access for violations. The Consent tab is where that permission is recorded and proven.
-
-### What it does
-- Every contact now has a **Consent** tab on their profile with an on/off switch per channel: WhatsApp, SMS, and Email.
-- Flipping a switch records a permission event — who recorded it, when, how the permission was obtained (an optional note), and whether it was an opt-in or opt-out.
-- The record is permanent: opting out later doesn't erase the earlier opt-in — both stay in the history. Click **View consent history** to see every event ever recorded for that customer.
-
-### It also works automatically
-- When a customer picks WhatsApp or SMS as their preferred contact channel while raising a ticket (or tells the voice bot), the system files that choice as an opt-in on its own — no staff action needed.
-- When an agent replies to a ticket, the system checks the customer's consent first. If the customer has opted out of WhatsApp, the reply automatically goes by email instead — the customer is never contacted on a channel they said no to.
-
-### Example scenario
-> A customer raises a ticket and chooses WhatsApp as their preferred channel. Permission is recorded automatically. Weeks later they message "please stop WhatsApp" — an agent flips the WhatsApp switch off with a note. From that moment, all ticket replies to them go by email. If Meta ever audits the workspace, the full permission history is on file.
-
-### Rules & limits
-- Consent is per customer per channel — saying yes to email doesn't mean yes to WhatsApp.
-- One workspace's consent records are invisible to every other workspace on the platform.
-- Future marketing/bulk WhatsApp campaigns will be held to a stricter rule: no recorded opt-in means no message at all.

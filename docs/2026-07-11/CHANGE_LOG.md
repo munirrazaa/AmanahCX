@@ -3,47 +3,6 @@ _Most recent at top. Treated as the primary record for development tracking._
 
 ---
 
-## Change Log - 2026-07-12 — Consent Tracking, Sector Auto-Provisioning, Webhook Pipeline Fix, Routing to Managers
-
-### Added
-
-**Per-channel consent tracking + enforcement (CB-04 → CB-08) — WhatsApp compliance**
-- New `contact_channel_consent` table (migration `053_contact_channel_consent.sql`, applied to Supabase): per-contact, per-channel (whatsapp/sms/email) opt-in/opt-out events with timestamp, source, recording user, and note. Append-only — history is never overwritten, giving the provable audit trail Meta's WhatsApp Business API requires.
-- New API endpoints on contacts: `GET /:id/consent` (current state per channel), `GET /:id/consent/history` (full audit trail), `POST /:id/consent` (record an event).
-- New **Consent tab** on the Contact Detail page: per-channel toggles, optional "how consent was obtained" note, and expandable history view.
-- New shared helper `packages/api/src/lib/consent.ts` (`getChannelConsent`/`recordChannelConsent`) for any outbound-messaging feature to consult.
-- **Enforcement wired in now, not later:** ticket creation (manual + voice-bot paths) auto-records an opt-in when the customer picks WhatsApp/SMS as their preferred channel; the ticket-reply dispatcher checks the latest consent and falls back to email if the customer has explicitly opted out. Live-verified end to end: reply while opted-in dispatched via WhatsApp; after opt-out, further replies produced zero WhatsApp attempts.
-- Tenant isolation verified: another tenant's manager gets an empty result, not another workspace's consent data (RLS `tenant_isolation` policy on the new table).
-- Note for future work: bulk/marketing WhatsApp sends (when built) must be stricter — "no consent record" must mean NO send; for ticket replies, the customer choosing the channel on the ticket is itself the opt-in.
-
-**Sector auto-provisioning at tenant creation (TA-04 root cause + fix, SP-01 → SP-04)**
-- Root cause of the "Education sector sidebar" issue: the sector picked at tenant creation was never wired to module/feature licensing — the sidebar is driven purely by `active_modules`/`entitled_features`, which sector never touched. Not a crash; a missing feature.
-- Each sector in `packages/shared/src/config/sectors.ts` now declares `defaultModules` + `defaultFeatures` (all 8 sectors populated with benchmarked defaults, e.g. Education → CRM + Ticketing + Sales + Emails; eCommerce → + Integrations + Analytics).
-- `POST /super-admin/tenants` seeds the new tenant with the sector's defaults, unioned with anything explicitly requested; `PATCH /tenants/:id/modules` still adjusts afterwards. Matches the industry-template onboarding pattern in Salesforce/HubSpot verticals.
-- Live-verified: education tenant auto-provisioned correctly; default ("other") tenants unchanged (no regression); manual module picks union with sector defaults; post-creation module editing unaffected.
-
-### Fixed
-
-**Webhook delivery pipeline silently dead (ST-09 → ST-12)**
-- Root cause: the webhook worker (`packages/api/src/lib/webhook-worker.ts`) and dead-letter replay used raw `db.query()`, which sets neither `app.tenant_id` nor `app.bypass_rls` — since the DB role stopped being superuser, RLS silently rejected every insert/update. This broke BOTH the manual "Test" button AND all background webhook delivery in production.
-- All 5 occurrences fixed to `db.withSuperAdmin(...)`. Live-verified: full enqueue → deliver → retry → dead-letter cycle observed in server logs; Delivery Logs UI shows real attempts.
-
-**Routing & SLA settings save blocked for managers (RS-01 → RS-05)**
-- `PATCH /settings/routing` rejected any manager save containing `routing_method` (even unchanged), blocking the whole form. Per decision (benchmarked vs Zendesk/Salesforce/Freshdesk/Intercom/HubSpot): ticket-routing method is operational configuration → now open to managers alongside the other routing knobs. No regression for tenant admin/agents (route-level role list unchanged).
-
-**SMS-failure admin alert never delivered**
-- `SmsService.notifyAdminNoConnector` inserted into a `message` column that doesn't exist on `notifications` (real column: `body`) — so the "SMS gateway not configured" warning to admins silently failed on every failed send. Fixed in `packages/core/src/sms.service.ts` (+ stale `.js` build artifact). Live-verified: notification row now lands with correct title/body.
-
-### Verified (no change needed)
-
-**Super-admin wall confirmed shipped**
-- The super_admin operational-access wall (tenant.middleware 403 outside `/super-admin/*`; `requirePermission` bypass now tenant_admin-only) was found already committed and pushed (`b854929`) — earlier "pending approval" status was stale. Re-verified live: super_admin token gets 403 on `/api/v1/tickets`. Leftover unreachable `super_admin` mentions in route-level role checks across 5 route files are dead code — cleanup deprioritized by decision.
-
-### QA test plan
-- +14 new test cases this session (RS-01..05, TA-04 closure, SP-01..04, CB-04..08), all recorded as **pass** in the hosted QA test plan (Supabase-backed `qa-test-plan.html`).
-
----
-
 ## Change Log - 2026-07-11 (Field Mobile App — recovery, cloud re-test, field-visit flow)
 
 ### Recovered

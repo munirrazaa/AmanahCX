@@ -24,6 +24,7 @@ import { billingRoutes } from './routes/billing';
 import { analyticsRoutes } from './routes/analytics';
 import { webhookRoutes } from './routes/webhooks';
 import { apiKeyRoutes } from './routes/api-keys';
+import { attachmentRoutes } from './routes/attachments';
 import { superAdminRoutes } from './routes/super-admin';
 import { authRoutes } from './routes/auth';
 import { companyRoutes } from './routes/companies';
@@ -280,6 +281,7 @@ async function buildServer() {
       '/api/v1/opportunities',
       '/api/v1/sales',
       '/api/v1/governance',
+      '/api/v1/attachments',
       '/api/v1/super-admin',
     ];
     if (
@@ -341,6 +343,7 @@ async function buildServer() {
   await fastify.register(analyticsRoutes(db), { prefix: '/api/v1/analytics' });
   await fastify.register(webhookRoutes(db, eventBus), { prefix: '/api/v1/webhooks' });
   await fastify.register(apiKeyRoutes(db), { prefix: '/api/v1/api-keys' });
+  await fastify.register(attachmentRoutes(db), { prefix: '/api/v1/attachments' });
   await fastify.register(superAdminRoutes(db, tenantService), { prefix: '/super-admin' });
   await fastify.register(companyRoutes(db, eventBus), { prefix: '/api/v1/companies' });
   await fastify.register(settingsRoutes(db), { prefix: '/api/v1/settings' });

@@ -3,33 +3,6 @@ _Most recent at top. Tracks structural and security-relevant changes to the live
 
 ---
 
-## 2026-07-12 — New table: contact_channel_consent (migration 053)
-
-### What changed
-New append-only table `contact_channel_consent` for per-channel communication consent:
-`id, tenant_id (FK tenants), contact_id (FK contacts), channel (whatsapp|sms|email),
-opted_in (bool), source (manual|reply|form|import|api), consented_at, recorded_by (FK users,
-SET NULL on delete), notes`. Two indexes for latest-state and history lookups. RLS enabled
-with the standard `tenant_isolation` policy (`app.tenant_id` GUC or `app.bypass_rls`).
-
-### Why
-Meta's WhatsApp Business API requires provable customer opt-in before business-initiated
-messages (account-suspension risk). Rows are never updated or deleted by the application —
-every opt-in/opt-out is a new row, preserving the compliance audit trail.
-
-### Verification
-Applied via Supabase migration `053_contact_channel_consent` and live-tested the same day:
-insert/read through the API under a tenant-scoped connection works; a different tenant's
-manager receives an empty result for the same contact (RLS isolation confirmed); mirrored in
-repo at `packages/core/src/database/migrations/053_contact_channel_consent.sql`.
-
-Note: migration numbering — the repo also contains an unrelated, not-yet-committed
-`049_livekit_agent_config.sql` in the AmanahCX working tree (separate voice-agent work, not
-part of this change); crm-platform's local sequence runs 049–052 with different content.
-The Supabase migration history is the authoritative record of what is applied to the live DB.
-
----
-
 ## 2026-07-11 — Attachments table + field-officer test account (cloud DB)
 
 - **`attachments` table** (lazy-created by the API on boot if missing): id, tenant_id, entity_type, entity_id, filename, mime_type, size_bytes, storage_key, uploaded_by, created_at + index on (tenant_id, entity_type, entity_id). Stores photos/files attached to deals/contacts/tickets from the mobile app. Files themselves live in the file-storage backend (local dir in dev; S3-compatible in production).

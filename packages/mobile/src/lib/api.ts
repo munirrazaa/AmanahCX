@@ -4,7 +4,7 @@
  * Uses the same REST contract as the web frontend.
  */
 
-import * as SecureStore from 'expo-secure-store';
+import * as storage from './storage';
 
 const BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3000';
 const TOKEN_KEY = 'crm_access_token';
@@ -14,20 +14,20 @@ const TENANT_KEY = 'crm_tenant_slug';
 
 export async function saveCredentials(token: string, tenantSlug: string) {
   await Promise.all([
-    SecureStore.setItemAsync(TOKEN_KEY, token),
-    SecureStore.setItemAsync(TENANT_KEY, tenantSlug),
+    storage.setItem(TOKEN_KEY, token),
+    storage.setItem(TENANT_KEY, tenantSlug),
   ]);
 }
 
 export async function clearCredentials() {
   await Promise.all([
-    SecureStore.deleteItemAsync(TOKEN_KEY),
-    SecureStore.deleteItemAsync(TENANT_KEY),
+    storage.deleteItem(TOKEN_KEY),
+    storage.deleteItem(TENANT_KEY),
   ]);
 }
 
 export async function getToken(): Promise<string | null> {
-  return SecureStore.getItemAsync(TOKEN_KEY);
+  return storage.getItem(TOKEN_KEY);
 }
 
 // ── Core fetch wrapper ───────────────────────────────────────────────────────
@@ -48,7 +48,7 @@ async function request<T>(
   options: RequestInit = {},
 ): Promise<T> {
   const token      = await getToken();
-  const tenantSlug = await SecureStore.getItemAsync(TENANT_KEY);
+  const tenantSlug = await storage.getItem(TENANT_KEY);
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -105,14 +105,11 @@ export interface LoginResponse {
 }
 
 export async function login(email: string, password: string, tenantSlug: string): Promise<LoginResponse> {
-  // Set tenant slug header manually for the login request
-  const res = await fetch(`${BASE_URL}/api/v1/auth/login`, {
+  // Auth routes live at /auth (no /api/v1 prefix); the workspace goes in the body.
+  const res = await fetch(`${BASE_URL}/auth/login`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Tenant-Slug': tenantSlug,
-    },
-    body: JSON.stringify({ email, password }),
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password, tenantSlug }),
   });
 
   if (!res.ok) {
@@ -127,5 +124,12 @@ export async function login(email: string, password: string, tenantSlug: string)
   const json = await res.json();
   const data = json.data ?? json;
   await saveCredentials(data.token, tenantSlug);
+  // Cache the session so app restarts can restore it without a /me endpoint.
+  await storage.setItem('crm_session', JSON.stringify({ user: data.user, tenant: data.tenant }));
   return data as LoginResponse;
+}
+
+export async function getCachedSession(): Promise<{ user: LoginResponse['user']; tenant: LoginResponse['tenant'] } | null> {
+  const raw = await storage.getItem('crm_session');
+  return raw ? JSON.parse(raw) : null;
 }
