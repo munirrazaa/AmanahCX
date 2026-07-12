@@ -289,14 +289,23 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
     fastify.post('/tenants', async (req, reply) => {
       const body = CreateTenantSchema.parse(req.body);
 
+      // Auto-provisioning: the sector picked for this tenant carries a recommended
+      // module/feature set (packages/shared/src/config/sectors.ts). We seed the
+      // tenant with those defaults so it's usable immediately, and simply union in
+      // anything explicitly requested on top — the super admin can still adjust via
+      // PATCH /tenants/:id/modules afterwards, this is just a sensible starting point.
+      const sectorDefaults = getSector(body.sector);
+      const requestedFeatures = Array.from(new Set([...sectorDefaults.defaultFeatures, ...body.entitledFeatures]));
+      const requestedModules = Array.from(new Set([...sectorDefaults.defaultModules, ...body.modules]));
+
       // Validate & normalise the entitled features against the catalog, then derive
       // which top-level modules are licensed (a module is licensed if ≥1 of its
       // features was selected). 'crm' is always included.
-      const entitledFeatures = body.entitledFeatures.filter((f) => ALL_FEATURE_KEYS.includes(f));
+      const entitledFeatures = requestedFeatures.filter((f) => ALL_FEATURE_KEYS.includes(f));
       const modulesFromFeatures = MODULE_CATALOG
         .filter((m) => m.features.some((f) => entitledFeatures.includes(f.key)))
         .map((m) => m.key as string);
-      const licensedModules = Array.from(new Set(['crm', ...body.modules, ...modulesFromFeatures]));
+      const licensedModules = Array.from(new Set(['crm', ...requestedModules, ...modulesFromFeatures]));
 
       const tenant = await tenantService.create({
         name: body.name,

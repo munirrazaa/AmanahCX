@@ -59,7 +59,7 @@ export function contactRoutes(db: DatabaseClient, eventBus: EventBus) {
       const [{ count }] = await db.withTenant(tenantId, async (client) => {
         const result = await client.query(
           buildCountQuery(query, scopeClauseNoAlias),
-          buildQueryParams(query),
+          buildQueryParams(query, tenantId),
         );
         return result.rows;
       });
@@ -67,7 +67,7 @@ export function contactRoutes(db: DatabaseClient, eventBus: EventBus) {
       const contacts = await db.withTenant(tenantId, async (client) => {
         const result = await client.query(
           buildListQuery(query, offset, scopeClause),
-          buildQueryParams(query, query.pageSize, offset),
+          buildQueryParams(query, tenantId, query.pageSize, offset),
         );
         return result.rows;
       });
@@ -89,10 +89,16 @@ export function contactRoutes(db: DatabaseClient, eventBus: EventBus) {
       const { id } = req.params as { id: string };
       const [contact] = await db.withTenant(req.tenant.id, async (client) => {
         const result = await client.query(
-          `SELECT c.*, comp.name as company_name, u.name as owner_name
+          `SELECT c.*, comp.name as company_name, u.name as owner_name,
+                  lt.channel AS last_channel, lt.created_at AS last_channel_at
            FROM contacts c
            LEFT JOIN companies comp ON c.company_id = comp.id
            LEFT JOIN users u ON c.owner_id = u.id
+           LEFT JOIN LATERAL (
+             SELECT channel, created_at FROM tickets
+             WHERE contact_id = c.id
+             ORDER BY created_at DESC LIMIT 1
+           ) lt ON true
            WHERE c.id = $1`,
           [id],
         );
@@ -153,6 +159,146 @@ export function contactRoutes(db: DatabaseClient, eventBus: EventBus) {
 
       await eventBus.publish(req.tenant.id, CRM_EVENTS.CONTACT_CREATED, { contact });
       return reply.code(201).send({ success: true, data: contact });
+    });
+
+    // SCAN visiting card → extracted contact fields (mobile lead capture)
+    // POST /api/v1/contacts/scan-card
+    // Body: { image: string (base64, no data-uri prefix), mediaType: 'image/jpeg' | 'image/png' }
+    // Returns extracted fields for the user to verify BEFORE creating the contact.
+    fastify.post('/scan-card', {
+      preHandler: requireScope('contacts:write'),
+      bodyLimit: 10 * 1024 * 1024,
+    }, async (req, reply) => {
+      const ScanSchema = z.object({
+        image: z.string().min(100),
+        mediaType: z.enum(['image/jpeg', 'image/png', 'image/webp']).default('image/jpeg'),
+      });
+      const body = ScanSchema.parse(req.body);
+
+      const apiKey = process.env.ANTHROPIC_API_KEY;
+      if (!apiKey) {
+        return reply.code(503).send({
+          success: false,
+          error: { code: 'SCANNER_NOT_CONFIGURED', message: 'Card scanning is not configured on this server (missing ANTHROPIC_API_KEY).' },
+        });
+      }
+
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'claude-haiku-4-5-20251001',
+          max_tokens: 1024,
+          messages: [{
+            role: 'user',
+            content: [
+              { type: 'image', source: { type: 'base64', media_type: body.mediaType, data: body.image } },
+              {
+                type: 'text',
+                text: 'This is a photo of a business/visiting card. Extract the contact details and reply with ONLY a JSON object (no markdown) with these keys, using null for anything not on the card: firstName, lastName, jobTitle, company, email, phone, mobile, website, address. Phone numbers should keep their country code if shown. If the card is not readable or is not a business card, reply with {"error": "reason"}.',
+              },
+            ],
+          }],
+        }),
+      });
+
+      if (!res.ok) {
+        const detail = await res.text().catch(() => '');
+        req.log.error({ status: res.status, detail }, 'card scan: Anthropic API error');
+        return reply.code(502).send({
+          success: false,
+          error: { code: 'SCAN_FAILED', message: 'Could not read the card. Please retake the photo.' },
+        });
+      }
+
+      const ai = await res.json() as { content: Array<{ type: string; text?: string }> };
+      const text = ai.content?.find((c) => c.type === 'text')?.text ?? '';
+      let extracted: Record<string, string | null>;
+      try {
+        extracted = JSON.parse(text.replace(/^```(json)?|```$/g, '').trim());
+      } catch {
+        return reply.code(422).send({
+          success: false,
+          error: { code: 'SCAN_UNREADABLE', message: 'Could not read the card. Please retake the photo with better lighting.' },
+        });
+      }
+      if (extracted.error) {
+        return reply.code(422).send({
+          success: false,
+          error: { code: 'SCAN_UNREADABLE', message: String(extracted.error) },
+        });
+      }
+
+      return reply.send({ success: true, data: extracted });
+    });
+
+    // PARSE spoken/dictated lead description → extracted contact fields (mobile voice capture)
+    // POST /api/v1/contacts/parse-lead-text
+    // Body: { text: string } — e.g. "Met Ahmed Khan, purchasing manager at Al Noor Trading, 0501234567"
+    // Returns extracted fields for the user to verify BEFORE creating the contact.
+    fastify.post('/parse-lead-text', {
+      preHandler: requireScope('contacts:write'),
+    }, async (req, reply) => {
+      const ParseSchema = z.object({ text: z.string().min(3).max(4000) });
+      const body = ParseSchema.parse(req.body);
+
+      const apiKey = process.env.ANTHROPIC_API_KEY;
+      if (!apiKey) {
+        return reply.code(503).send({
+          success: false,
+          error: { code: 'PARSER_NOT_CONFIGURED', message: 'Voice lead capture is not configured on this server (missing ANTHROPIC_API_KEY).' },
+        });
+      }
+
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'claude-haiku-4-5-20251001',
+          max_tokens: 1024,
+          messages: [{
+            role: 'user',
+            content: `A field sales officer dictated a note about a lead they just met. The note may be in English, Urdu, Punjabi, or a mix. Extract contact details and reply with ONLY a JSON object (no markdown) with these keys, using null for anything not mentioned: firstName, lastName, jobTitle, company, email, phone, mobile, notes. Write ALL values in English/Latin script — transliterate names and companies (e.g. احمد خان → Ahmed Khan) and translate job titles and notes to English. Put anything that is context rather than a contact field (follow-up requests, interests, meeting details) into "notes" as a short plain sentence. Keep phone numbers exactly as spoken, digits only apart from a leading +, converting any spoken-out or non-Latin digits to Western digits. If the text contains no lead information at all, reply with {"error": "reason"}.\n\nDictated note: ${JSON.stringify(body.text)}`,
+          }],
+        }),
+      });
+
+      if (!res.ok) {
+        const detail = await res.text().catch(() => '');
+        req.log.error({ status: res.status, detail }, 'voice lead parse: Anthropic API error');
+        return reply.code(502).send({
+          success: false,
+          error: { code: 'PARSE_FAILED', message: 'Could not understand the note. Please try again.' },
+        });
+      }
+
+      const ai = await res.json() as { content: Array<{ type: string; text?: string }> };
+      const text = ai.content?.find((c) => c.type === 'text')?.text ?? '';
+      let extracted: Record<string, string | null>;
+      try {
+        extracted = JSON.parse(text.replace(/^```(json)?|```$/g, '').trim());
+      } catch {
+        return reply.code(422).send({
+          success: false,
+          error: { code: 'PARSE_UNREADABLE', message: 'Could not understand the note. Please try rephrasing.' },
+        });
+      }
+      if (extracted.error) {
+        return reply.code(422).send({
+          success: false,
+          error: { code: 'PARSE_UNREADABLE', message: String(extracted.error) },
+        });
+      }
+
+      return reply.send({ success: true, data: extracted });
     });
 
     // BULK IMPORT contacts from CSV
@@ -354,6 +500,66 @@ export function contactRoutes(db: DatabaseClient, eventBus: EventBus) {
       return reply.send({ success: true, data: timeline });
     });
 
+    // GET current per-channel consent state for a contact (whatsapp/sms/email).
+    // Returns the latest row per channel, not the full history — use for UI toggles.
+    fastify.get('/:id/consent', { preHandler: requireScope('contacts:read') }, async (req, reply) => {
+      const { id } = req.params as { id: string };
+      const rows = await db.withTenant(req.tenant.id, async (client) => {
+        const result = await client.query(
+          `SELECT DISTINCT ON (channel) channel, opted_in, source, consented_at, recorded_by, notes
+           FROM contact_channel_consent
+           WHERE contact_id = $1
+           ORDER BY channel, consented_at DESC`,
+          [id],
+        );
+        return result.rows;
+      });
+      return reply.send({ success: true, data: rows });
+    });
+
+    // GET full consent history for a contact (audit trail — every opt-in/opt-out event ever recorded)
+    fastify.get('/:id/consent/history', { preHandler: requireScope('contacts:read') }, async (req, reply) => {
+      const { id } = req.params as { id: string };
+      const rows = await db.withTenant(req.tenant.id, async (client) => {
+        const result = await client.query(
+          `SELECT cc.channel, cc.opted_in, cc.source, cc.consented_at, cc.notes, u.name AS recorded_by_name
+           FROM contact_channel_consent cc
+           LEFT JOIN users u ON u.id = cc.recorded_by
+           WHERE cc.contact_id = $1
+           ORDER BY cc.consented_at DESC
+           LIMIT 100`,
+          [id],
+        );
+        return result.rows;
+      });
+      return reply.send({ success: true, data: rows });
+    });
+
+    // POST record a new consent event for a contact+channel. Never overwrites — every
+    // change (opt-in, opt-out, re-consent) is a new row, preserving the audit trail
+    // Meta/WhatsApp compliance requires.
+    const RecordConsentSchema = z.object({
+      channel:  z.enum(['whatsapp', 'sms', 'email']),
+      optedIn:  z.boolean(),
+      source:   z.enum(['manual', 'reply', 'form', 'import', 'api']),
+      notes:    z.string().max(500).optional(),
+    });
+    fastify.post('/:id/consent', { preHandler: requireScope('contacts:write') }, async (req, reply) => {
+      const { id } = req.params as { id: string };
+      const body = RecordConsentSchema.parse(req.body);
+      const [row] = await db.withTenant(req.tenant.id, async (client) => {
+        const result = await client.query(
+          `INSERT INTO contact_channel_consent
+             (tenant_id, contact_id, channel, opted_in, source, recorded_by, notes)
+           VALUES ($1,$2,$3,$4,$5,$6,$7)
+           RETURNING id, channel, opted_in, source, consented_at, notes`,
+          [req.tenant.id, id, body.channel, body.optedIn, body.source, (req as any).user?.sub ?? null, body.notes ?? null],
+        );
+        return result.rows;
+      });
+      return reply.code(201).send({ success: true, data: row });
+    });
+
     // GET contact CSAT summary — avg rating + recent responses across all tickets
     fastify.get('/:id/csat', { preHandler: requireScope('contacts:read') }, async (req, reply) => {
       const { id } = req.params as { id: string };
@@ -450,7 +656,7 @@ export function contactRoutes(db: DatabaseClient, eventBus: EventBus) {
 }
 
 function buildListQuery(query: any, offset: number, scopeClause = ''): string {
-  let idx = 1;
+  let idx = 2; // $1 = tenantId
   const searchClause  = query.search  ? `AND (c.first_name || ' ' || COALESCE(c.last_name,'') || ' ' || COALESCE(c.email,'') || ' ' || COALESCE(c.phone,'') || ' ' || COALESCE(c.mobile,'') || ' ' || COALESCE(c.nic_number,'')) ILIKE $${idx++}` : '';
   const statusClause  = query.status  ? `AND c.status = $${idx++}` : '';
   const ownerClause   = query.ownerId ? `AND c.owner_id = $${idx++}` : '';
@@ -460,7 +666,7 @@ function buildListQuery(query: any, offset: number, scopeClause = ''): string {
     FROM contacts c
     LEFT JOIN companies comp ON c.company_id = comp.id
     LEFT JOIN users u ON c.owner_id = u.id
-    WHERE 1=1
+    WHERE c.tenant_id = $1
     ${scopeClause}
     ${searchClause}
     ${statusClause}
@@ -471,15 +677,15 @@ function buildListQuery(query: any, offset: number, scopeClause = ''): string {
 }
 
 function buildCountQuery(query: any, scopeClause = ''): string {
-  let idx = 1;
-  const searchClause  = query.search  ? `AND (first_name || ' ' || COALESCE(last_name,'') || ' ' || COALESCE(email,'') || ' ' || COALESCE(phone,'') || ' ' || COALESCE(mobile,'') || ' ' || COALESCE(nic_number,'')) ILIKE $${idx++}` : '';
+  let idx = 2; // $1 = tenantId
+  const searchClause  = query.search  ? `AND (first_name || ' ' || COALESCE(last_name,'') || ' ' || COALESCE(email,'') || ' ' || COALESCE(phone,'') || ' ' || COALESCE(nic_number,'')) ILIKE $${idx++}` : '';
   const statusClause  = query.status  ? `AND status = $${idx++}` : '';
   const ownerClause   = query.ownerId ? `AND owner_id = $${idx++}` : '';
-  return `SELECT COUNT(*) FROM contacts WHERE 1=1 ${scopeClause} ${searchClause} ${statusClause} ${ownerClause}`;
+  return `SELECT COUNT(*) FROM contacts WHERE tenant_id = $1 ${scopeClause} ${searchClause} ${statusClause} ${ownerClause}`;
 }
 
-function buildQueryParams(query: any, ...extra: unknown[]): unknown[] {
-  const params: unknown[] = [];
+function buildQueryParams(query: any, tenantId: string, ...extra: unknown[]): unknown[] {
+  const params: unknown[] = [tenantId];
   if (query.search)  params.push(`%${query.search}%`);
   if (query.status)  params.push(query.status);
   if (query.ownerId) params.push(query.ownerId);

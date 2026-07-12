@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   CheckSquare, Clock, Plus, AlertTriangle, Calendar,
@@ -35,7 +36,13 @@ function toLocalDt(isoStr?: string): string {
 export function Activities() {
   const qc = useQueryClient();
   const can = useCan();
-  const [tab, setTab] = useState<'today' | 'overdue' | 'all'>('today');
+  // Dashboard stat cards deep-link here as /activities?tab=overdue etc. —
+  // honor that on first load instead of always defaulting to "today".
+  const [searchParams] = useSearchParams();
+  const initialTab = searchParams.get('tab');
+  const [tab, setTab] = useState<'today' | 'overdue' | 'all'>(
+    (['today', 'overdue', 'all'].includes(initialTab ?? '') ? initialTab : 'today') as 'today' | 'overdue' | 'all'
+  );
   const [showCreate, setShowCreate] = useState(false);
   const [form, setForm] = useState({ type: 'task', subject: '', dueAt: '', priority: 'normal', body: '' });
 

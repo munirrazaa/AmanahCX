@@ -1708,7 +1708,14 @@ export function Tickets() {
   const deptLabel = user?.department ? `${user.department} Tickets` : 'Tickets';
 
   const [searchParams] = useSearchParams();
-  const [tab, setTab]           = useState<Tab>('all');
+  // Dashboard stat cards deep-link here as /tickets?status=open or
+  // /tickets?mine=1 — honor those on first load so the click actually
+  // lands on the filtered view instead of always showing "All Tickets".
+  const initialStatus = searchParams.get('status');
+  const [tab, setTab]           = useState<Tab>(
+    (TABS.some(t => t.id === initialStatus) ? initialStatus : 'all') as Tab
+  );
+  const [mineOnly, setMineOnly] = useState(searchParams.get('mine') === '1');
   const [search, setSearch]     = useState('');
   const [priority, setPriority] = useState('');
   const [showCreate, setCreate] = useState(false);
@@ -1744,8 +1751,9 @@ export function Tickets() {
     if (tab !== 'all') p.status = tab;
     if (search)   p.search   = search;
     if (priority) p.priority = priority;
+    if (mineOnly) p.mine     = 'true';
     return p;
-  }, [tab, search, priority]);
+  }, [tab, search, priority, mineOnly]);
 
   const { data: statsData } = useQuery<Stats>({
     queryKey: ['ticket-stats'],
@@ -1868,6 +1876,12 @@ export function Tickets() {
               </button>
             );
           })}
+          {mineOnly && (
+            <button onClick={() => setMineOnly(false)}
+              className="ml-1 px-3 py-1.5 rounded-lg text-xs font-medium bg-purple-50 text-purple-600 flex items-center gap-1.5 border border-purple-200">
+              My Tickets Only <span className="text-purple-400">✕</span>
+            </button>
+          )}
         </div>
 
         {/* Search + filter */}

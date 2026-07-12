@@ -36,6 +36,22 @@ const NAV_FEATURE_MAP: Record<string, string> = {
   '/sales/settings':       'sales.settings',
 };
 
+// Nav paths that only make sense for certain department types — e.g. the Deals
+// (sales pipeline) view has no purpose for a pure support/complaints manager,
+// regardless of their role permissions. Users with no department assigned
+// (department_type null) are never restricted here, so legacy/undepartmentalized
+// tenants keep today's behavior.
+const DEPARTMENT_RESTRICTED_NAV: Record<string, string[]> = {
+  '/deals': ['sales', 'general'],
+};
+
+function departmentAllows(path: string, deptType: string | null): boolean {
+  const allowed = DEPARTMENT_RESTRICTED_NAV[path];
+  if (!allowed) return true;
+  if (!deptType) return true;
+  return allowed.includes(deptType);
+}
+
 // Remove nav items whose licensed feature the tenant doesn't have, then drop any
 // module left with no nav items. Legacy tenants (no recorded entitlement) see all.
 function filterByEntitlement<T extends { navItems: any[] }>(modules: T[], entitled: string[]): T[] {
@@ -93,6 +109,7 @@ export function modulesRoute(moduleRegistry: ModuleRegistry) {
       //   New: { 'contacts:read': true }   — from defaultPermissions()
       //   Old: { contacts: 'full'|'view'|'none' } — from legacy custom roles
       const perms: Record<string, unknown> = user?.permissions ?? {};
+      const deptType: string | null = user?.department_type ?? null;
 
       function hasPermission(permKey: string): boolean {
         // New format check
@@ -107,7 +124,8 @@ export function modulesRoute(moduleRegistry: ModuleRegistry) {
         .map((mod) => ({
           ...mod,
           navItems: mod.navItems.filter((item: any) =>
-            !item.permissionKey || hasPermission(item.permissionKey),
+            (!item.permissionKey || hasPermission(item.permissionKey)) &&
+            departmentAllows(item.path, deptType),
           ),
         }))
         .filter((mod) => mod.navItems.length > 0);

@@ -65,12 +65,14 @@ function fmtSecs(s: number | null | undefined): string {
 function pct(a: number, b: number) { return !b ? 0 : Math.min(100, Math.round((a / b) * 100)); }
 
 // ── Shared UI ─────────────────────────────────────────────────────────────
-function StatCard({ label, value, sub, icon: Icon, accent, trend }: {
+function StatCard({ label, value, sub, icon: Icon, accent, trend, to }: {
   label: string; value: string | number; sub?: string;
-  icon: React.ElementType; accent: string; trend?: 'up'|'warn';
+  icon: React.ElementType; accent: string; trend?: 'up'|'warn'; to?: string;
 }) {
+  const Wrapper = to ? Link : 'div';
+  const wrapperProps = to ? { to } : {};
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm hover:shadow-md transition-shadow">
+    <Wrapper {...(wrapperProps as any)} className={`bg-white rounded-2xl border border-gray-100 p-5 shadow-sm transition-shadow block ${to ? 'hover:shadow-md hover:border-gray-200 cursor-pointer' : 'hover:shadow-md'}`}>
       <div className="flex items-start justify-between mb-3">
         <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: `${accent}18` }}>
           <Icon className="w-5 h-5" style={{ color: accent }} />
@@ -81,7 +83,7 @@ function StatCard({ label, value, sub, icon: Icon, accent, trend }: {
       <p className="text-2xl font-bold text-gray-900">{value}</p>
       <p className="text-sm text-gray-500 mt-0.5">{label}</p>
       {sub && <p className={`text-xs mt-1 font-medium ${trend === 'warn' ? 'text-orange-500' : trend === 'up' ? 'text-emerald-600' : 'text-gray-400'}`}>{sub}</p>}
-    </div>
+    </Wrapper>
   );
 }
 
@@ -138,7 +140,7 @@ const ACT_CFG: Record<string, { icon: React.ElementType; color: string; label: s
 // ══════════════════════════════════════════════════════════════════════════
 // AGENT VIEW
 // ══════════════════════════════════════════════════════════════════════════
-function AgentDashboard({ d, department, deptType }: { d: any; department: string | null; deptType: string | null }) {
+function AgentDashboard({ d, department, deptType, departmentName }: { d: any; department: string | null; deptType: string | null; departmentName?: string | null }) {
   const calls      = d.callStats        ?? {};
   const tickets    = d.myTickets        ?? {};
   const sentiment  = d.sentiment        ?? {};
@@ -177,10 +179,10 @@ function AgentDashboard({ d, department, deptType }: { d: any; department: strin
       {/* My Calls */}
       <SectionHeader icon={Phone} label="My Calls — Today (Calls I Received)" />
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <StatCard label="Calls Received"  value={callsToday}       sub={`${completedToday} answered`}           icon={PhoneCall}   accent={C.cyan}  trend="up" />
-        <StatCard label="Avg Talk Time"   value={fmtSecs(calls.avg_duration_today)} sub="per answered call"     icon={Timer}       accent={C.green} />
-        <StatCard label="In Queue Now"    value={inQueue}          sub={inQueue > 0 ? 'Waiting' : 'Queue clear'} icon={Headphones}  accent={inQueue > 0 ? C.orange : C.green} trend={inQueue > 0 ? 'warn' : undefined} />
-        <StatCard label="Drop Rate"       value={`${dropRate}%`}   sub={`${droppedToday} unanswered`}           icon={PhoneMissed} accent={dropRate > 20 ? C.red : C.gold}   trend={dropRate > 20 ? 'warn' : undefined} />
+        <StatCard label="Calls Received"  value={callsToday}       sub={`${completedToday} answered`}           icon={PhoneCall}   accent={C.cyan}  trend="up" to="/voice" />
+        <StatCard label="Avg Talk Time"   value={fmtSecs(calls.avg_duration_today)} sub="per answered call"     icon={Timer}       accent={C.green} to="/voice" />
+        <StatCard label="In Queue Now"    value={inQueue}          sub={inQueue > 0 ? 'Waiting' : 'Queue clear'} icon={Headphones}  accent={inQueue > 0 ? C.orange : C.green} trend={inQueue > 0 ? 'warn' : undefined} to="/voice" />
+        <StatCard label="Drop Rate"       value={`${dropRate}%`}   sub={`${droppedToday} unanswered`}           icon={PhoneMissed} accent={dropRate > 20 ? C.red : C.gold}   trend={dropRate > 20 ? 'warn' : undefined} to="/voice" />
       </div>
 
       {/* My Tickets */}
@@ -190,22 +192,22 @@ function AgentDashboard({ d, department, deptType }: { d: any; department: strin
         accent={deptCfg?.color}
       />
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <StatCard label="Assigned to Me"  value={assignedToMe}              sub={`${createdByMe} I created`}  icon={UserCheck}    accent={C.cyan}   />
-        <StatCard label="Open"            value={tickets.open        ?? 0}  sub="Need attention"              icon={Inbox}        accent="#3b82f6"  trend={Number(tickets.open) > 5 ? 'warn' : undefined} />
-        <StatCard label="In Progress"     value={tickets.in_progress ?? 0}  sub="Actively working"            icon={Activity}     accent={C.gold}   trend="up" />
-        <StatCard label="Resolved Today"  value={tickets.resolved_today ?? 0} sub="Closed this shift"        icon={CheckCircle2} accent={C.green}  trend="up" />
+        <StatCard label="Assigned to Me"  value={assignedToMe}              sub={`${createdByMe} I created`}  icon={UserCheck}    accent={C.cyan}   to="/tickets?mine=1" />
+        <StatCard label="Open"            value={tickets.open        ?? 0}  sub="Need attention"              icon={Inbox}        accent="#3b82f6"  trend={Number(tickets.open) > 5 ? 'warn' : undefined} to="/tickets?status=open&mine=1" />
+        <StatCard label="In Progress"     value={tickets.in_progress ?? 0}  sub="Actively working"            icon={Activity}     accent={C.gold}   trend="up" to="/tickets?status=in_progress&mine=1" />
+        <StatCard label="Resolved Today"  value={tickets.resolved_today ?? 0} sub="Closed this shift"        icon={CheckCircle2} accent={C.green}  trend="up" to="/tickets?status=resolved&mine=1" />
       </div>
 
       {/* Department TAT Dashboard */}
-      {tatData && <TATPanel tat={tatData} deptType={deptType} />}
+      {tatData && <TATPanel tat={tatData} deptType={deptType} departmentName={departmentName} />}
 
       {/* My CRM Activities */}
       <SectionHeader icon={CalendarCheck} label="My CRM Activities (Created by Me)" accent={C.green} />
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <StatCard label="Created Today"  value={actStats.created_today ?? 0} sub={`${actStats.total ?? 0} total`}     icon={UserPlus}      accent={C.purple} trend="up" />
-        <StatCard label="Due Today"      value={actStats.due_today     ?? 0} sub="Need action"                        icon={Clock}         accent={C.gold}   trend={Number(actStats.due_today) > 0 ? 'warn' : undefined} />
-        <StatCard label="Overdue"        value={actStats.overdue       ?? 0} sub="Past due date"                      icon={AlertTriangle} accent={C.red}    trend={Number(actStats.overdue) > 0 ? 'warn' : undefined} />
-        <StatCard label="Completed"      value={actStats.completed     ?? 0} sub={`${actStats.pending ?? 0} pending`} icon={CheckCircle2}  accent={C.green}  trend="up" />
+        <StatCard label="Created Today"  value={actStats.created_today ?? 0} sub={`${actStats.total ?? 0} total`}     icon={UserPlus}      accent={C.purple} trend="up" to="/activities?tab=all" />
+        <StatCard label="Due Today"      value={actStats.due_today     ?? 0} sub="Need action"                        icon={Clock}         accent={C.gold}   trend={Number(actStats.due_today) > 0 ? 'warn' : undefined} to="/activities?tab=today" />
+        <StatCard label="Overdue"        value={actStats.overdue       ?? 0} sub="Past due date"                      icon={AlertTriangle} accent={C.red}    trend={Number(actStats.overdue) > 0 ? 'warn' : undefined} to="/activities?tab=overdue" />
+        <StatCard label="Completed"      value={actStats.completed     ?? 0} sub={`${actStats.pending ?? 0} pending`} icon={CheckCircle2}  accent={C.green}  trend="up" to="/activities?tab=all" />
       </div>
 
       {/* Main 3-col */}
@@ -223,14 +225,14 @@ function AgentDashboard({ d, department, deptType }: { d: any; department: strin
             )}
           </div>
           <div className="flex gap-3 mb-4">
-            <div className="flex-1 bg-cyan-50 rounded-xl p-3 text-center">
+            <Link to="/tickets?mine=1" className="flex-1 block bg-cyan-50 rounded-xl p-3 text-center hover:bg-cyan-100 transition-colors cursor-pointer">
               <p className="text-lg font-bold text-cyan-700">{assignedToMe}</p>
               <p className="text-xs text-cyan-500 font-medium">Assigned to me</p>
-            </div>
-            <div className="flex-1 bg-purple-50 rounded-xl p-3 text-center">
+            </Link>
+            <Link to="/tickets" className="flex-1 block bg-purple-50 rounded-xl p-3 text-center hover:bg-purple-100 transition-colors cursor-pointer">
               <p className="text-lg font-bold text-purple-700">{createdByMe}</p>
               <p className="text-xs text-purple-500 font-medium">Created by me</p>
-            </div>
+            </Link>
           </div>
           {breakdown.length === 0
             ? <p className="text-sm text-gray-400 text-center py-6">No tickets yet</p>
@@ -397,10 +399,11 @@ function AgentDashboard({ d, department, deptType }: { d: any; department: strin
 // ══════════════════════════════════════════════════════════════════════════
 // DEPARTMENT TAT PANEL — used inside both AgentDashboard and ManagerDashboard
 // ══════════════════════════════════════════════════════════════════════════
-function TATPanel({ tat, deptType, isManager = false }: {
-  tat: any; deptType: string | null; isManager?: boolean;
+function TATPanel({ tat, deptType, departmentName, isManager = false }: {
+  tat: any; deptType: string | null; departmentName?: string | null; isManager?: boolean;
 }) {
   if (!tat) return null;
+  const open           = Number(tat.open            ?? 0);
   const assigned       = Number(tat.assigned       ?? 0);
   const accepted       = Number(tat.accepted        ?? 0);
   const pending        = Number(tat.pending         ?? 0);
@@ -411,6 +414,14 @@ function TATPanel({ tat, deptType, isManager = false }: {
 
   const isSupport = !deptType || deptType === 'support';
   const accent    = isSupport ? '#29ABE2' : '#4D8B3C';
+  // Prefer the tenant's actual department name (e.g. "Customer Support &
+  // Complaints") over the raw department_type category code (e.g. "support"),
+  // which is a classification, not a display name.
+  const scopeLabel = departmentName ?? (deptType ? deptType.replace('_', ' ') : null);
+  // Agents drill into their own tickets; managers drill into the tenant-wide
+  // list for that status (there's no "my team" filter on /tickets yet).
+  const mineQS = isManager ? '' : '&mine=1';
+  const linkFor = (status?: string) => `/tickets?${status ? `status=${status}` : ''}${mineQS}`;
 
   return (
     <div className="space-y-3">
@@ -420,44 +431,48 @@ function TATPanel({ tat, deptType, isManager = false }: {
         </div>
         <h2 className="font-bold text-gray-900">
           {isManager ? 'Team Ticket Dashboard' : 'My Ticket Dashboard'}
-          {deptType && <span className="ml-2 text-xs font-normal text-gray-400 capitalize">({deptType.replace('_', ' ')})</span>}
+          {scopeLabel && <span className="ml-2 text-xs font-normal text-gray-400">({scopeLabel})</span>}
         </h2>
       </div>
-      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
-        <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
+        <Link to={linkFor('open')} className="block bg-white rounded-xl border border-gray-100 p-4 shadow-sm hover:shadow-md hover:border-gray-200 cursor-pointer transition-shadow">
+          <p className="text-2xl font-bold text-blue-600">{open}</p>
+          <p className="text-xs text-gray-500 mt-1">Open</p>
+        </Link>
+        <Link to={linkFor('assigned')} className="block bg-white rounded-xl border border-gray-100 p-4 shadow-sm hover:shadow-md hover:border-gray-200 cursor-pointer transition-shadow">
           <p className="text-2xl font-bold text-gray-900">{assigned}</p>
           <p className="text-xs text-gray-500 mt-1">Assigned</p>
-        </div>
-        <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
+        </Link>
+        <Link to={linkFor()} className="block bg-white rounded-xl border border-gray-100 p-4 shadow-sm hover:shadow-md hover:border-gray-200 cursor-pointer transition-shadow">
           <p className="text-2xl font-bold text-blue-600">{accepted}</p>
           <p className="text-xs text-gray-500 mt-1">Accepted</p>
-        </div>
-        <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
+        </Link>
+        <Link to={linkFor('pending')} className="block bg-white rounded-xl border border-gray-100 p-4 shadow-sm hover:shadow-md hover:border-gray-200 cursor-pointer transition-shadow">
           <p className="text-2xl font-bold text-amber-600">{pending}</p>
           <p className="text-xs text-gray-500 mt-1">Pending</p>
-        </div>
-        <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
+        </Link>
+        <Link to={linkFor('resolved')} className="block bg-white rounded-xl border border-gray-100 p-4 shadow-sm hover:shadow-md hover:border-gray-200 cursor-pointer transition-shadow">
           <p className="text-2xl font-bold text-emerald-600">{resolved}</p>
           <p className="text-xs text-gray-500 mt-1">Resolved</p>
-        </div>
-        <div className="bg-emerald-50 rounded-xl border border-emerald-100 p-4 shadow-sm">
+        </Link>
+        <Link to={linkFor()} className="block bg-emerald-50 rounded-xl border border-emerald-100 p-4 shadow-sm hover:shadow-md cursor-pointer transition-shadow">
           <p className="text-2xl font-bold text-emerald-700">{withinTat}</p>
           <p className="text-xs text-emerald-600 mt-1">Within TAT</p>
-        </div>
-        <div className={`rounded-xl border p-4 shadow-sm ${approachingTat > 0 ? 'bg-amber-50 border-amber-200' : 'bg-white border-gray-100'}`}>
+        </Link>
+        <Link to={linkFor()} className={`block rounded-xl border p-4 shadow-sm hover:shadow-md cursor-pointer transition-shadow ${approachingTat > 0 ? 'bg-amber-50 border-amber-200' : 'bg-white border-gray-100'}`}>
           <div className="flex items-center gap-1">
             <p className={`text-2xl font-bold ${approachingTat > 0 ? 'text-amber-700' : 'text-gray-900'}`}>{approachingTat}</p>
             {approachingTat > 0 && <Zap className="w-4 h-4 text-amber-500" />}
           </div>
           <p className={`text-xs mt-1 ${approachingTat > 0 ? 'text-amber-600 font-medium' : 'text-gray-500'}`}>Approaching TAT</p>
-        </div>
-        <div className={`rounded-xl border p-4 shadow-sm ${breachedTat > 0 ? 'bg-red-50 border-red-200' : 'bg-white border-gray-100'}`}>
+        </Link>
+        <Link to="/tickets?filter=breached" className={`block rounded-xl border p-4 shadow-sm hover:shadow-md cursor-pointer transition-shadow ${breachedTat > 0 ? 'bg-red-50 border-red-200' : 'bg-white border-gray-100'}`}>
           <div className="flex items-center gap-1">
             <p className={`text-2xl font-bold ${breachedTat > 0 ? 'text-red-700' : 'text-gray-900'}`}>{breachedTat}</p>
             {breachedTat > 0 && <AlertOctagon className="w-4 h-4 text-red-500" />}
           </div>
           <p className={`text-xs mt-1 ${breachedTat > 0 ? 'text-red-600 font-medium' : 'text-gray-500'}`}>Breached TAT</p>
-        </div>
+        </Link>
       </div>
       {breachedTat > 0 && (
         <div className="flex items-center gap-2 px-3 py-2 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700">
@@ -544,7 +559,7 @@ function TeamBreakdownTable({ agents }: { agents: any[] }) {
 // ══════════════════════════════════════════════════════════════════════════
 // MANAGER VIEW  — 3 sections: My Activity | Team Activity | Voice Bot
 // ══════════════════════════════════════════════════════════════════════════
-function ManagerDashboard({ d, department, deptType }: { d: any; department: string | null; deptType: string | null }) {
+function ManagerDashboard({ d, department, deptType, departmentName }: { d: any; department: string | null; deptType: string | null; departmentName?: string | null }) {
   const bot   = d.botStats   ?? {};
   const human = d.humanStats ?? {};
   const myTickets = d.myTickets ?? {};
@@ -626,28 +641,28 @@ function ManagerDashboard({ d, department, deptType }: { d: any; department: str
           <span className="text-xs text-gray-400 font-normal">— your own tickets and calls</span>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
+          <Link to="/tickets?mine=1" className="block bg-white rounded-xl border border-gray-100 p-4 shadow-sm hover:shadow-md hover:border-gray-200 cursor-pointer transition-shadow">
             <p className="text-xs text-gray-400 mb-1">Active Tickets</p>
             <p className="text-2xl font-bold text-gray-900">{myTickets.active ?? '—'}</p>
             <p className="text-xs text-gray-400 mt-0.5">assigned to me</p>
-          </div>
-          <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
+          </Link>
+          <Link to="/tickets?status=resolved&mine=1" className="block bg-white rounded-xl border border-gray-100 p-4 shadow-sm hover:shadow-md hover:border-gray-200 cursor-pointer transition-shadow">
             <p className="text-xs text-gray-400 mb-1">Resolved Today</p>
             <p className="text-2xl font-bold" style={{ color: C.green }}>{myTickets.resolved_today ?? '—'}</p>
             <p className="text-xs text-gray-400 mt-0.5">by me today</p>
-          </div>
-          <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
+          </Link>
+          <Link to="/tickets?filter=breached&mine=1" className="block bg-white rounded-xl border border-gray-100 p-4 shadow-sm hover:shadow-md hover:border-gray-200 cursor-pointer transition-shadow">
             <p className="text-xs text-gray-400 mb-1">SLA Breached</p>
             <p className="text-2xl font-bold" style={{ color: Number(myTickets.sla_breached ?? 0) > 0 ? C.red : C.green }}>
               {myTickets.sla_breached ?? '—'}
             </p>
             <p className="text-xs text-gray-400 mt-0.5">on my tickets</p>
-          </div>
-          <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
+          </Link>
+          <Link to="/reports" className="block bg-white rounded-xl border border-gray-100 p-4 shadow-sm hover:shadow-md hover:border-gray-200 cursor-pointer transition-shadow">
             <p className="text-xs text-gray-400 mb-1">Calls Today</p>
             <p className="text-2xl font-bold text-gray-900">{myCalls.calls_today ?? '—'}</p>
             <p className="text-xs text-gray-400 mt-0.5">{myCalls.completed_today ?? 0} completed</p>
-          </div>
+          </Link>
         </div>
       </div>
 
@@ -664,7 +679,7 @@ function ManagerDashboard({ d, department, deptType }: { d: any; department: str
       {/* ── Live Ops KPI strip (Zendesk/Freshdesk-grade) ──── */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         {/* CSAT */}
-        <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
+        <Link to="/ticket-reports" className="block bg-white rounded-2xl border border-gray-100 p-5 shadow-sm hover:shadow-md hover:border-gray-200 cursor-pointer transition-shadow">
           <div className="flex items-start justify-between mb-3">
             <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: `${C.gold}18` }}>
               <Star className="w-5 h-5" style={{ color: C.gold }} />
@@ -678,10 +693,10 @@ function ManagerDashboard({ d, department, deptType }: { d: any; department: str
           <p className="text-xs mt-1 font-medium text-gray-400">
             {csatData?.total_responses ? `${csatData.total_responses} responses · ${csatData.response_rate ?? 0}% response rate` : 'No responses yet'}
           </p>
-        </div>
+        </Link>
 
         {/* SLA compliance (30d) */}
-        <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
+        <Link to="/ticket-reports" className="block bg-white rounded-2xl border border-gray-100 p-5 shadow-sm hover:shadow-md hover:border-gray-200 cursor-pointer transition-shadow">
           <div className="flex items-start justify-between mb-3">
             <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: `${slaColor(perfData?.avgSla)}18` }}>
               <ShieldAlert className="w-5 h-5" style={{ color: slaColor(perfData?.avgSla) }} />
@@ -690,11 +705,11 @@ function ManagerDashboard({ d, department, deptType }: { d: any; department: str
           </div>
           <p className="text-2xl font-bold text-gray-900">{perfData?.avgSla ? `${perfData.avgSla}%` : '—'}</p>
           <p className="text-sm text-gray-500 mt-0.5">SLA Compliance</p>
-          <p className="text-xs mt-1 font-medium text-gray-400">30-day average · <Link to="/ticket-reports" style={{ color: C.cyan }}>Full report →</Link></p>
-        </div>
+          <p className="text-xs mt-1 font-medium text-gray-400">30-day average · <span style={{ color: C.cyan }}>Full report →</span></p>
+        </Link>
 
         {/* Avg Resolution Time */}
-        <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
+        <Link to="/ticket-reports" className="block bg-white rounded-2xl border border-gray-100 p-5 shadow-sm hover:shadow-md hover:border-gray-200 cursor-pointer transition-shadow">
           <div className="flex items-start justify-between mb-3">
             <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: `${C.cyan}18` }}>
               <Timer className="w-5 h-5" style={{ color: C.cyan }} />
@@ -703,10 +718,10 @@ function ManagerDashboard({ d, department, deptType }: { d: any; department: str
           <p className="text-2xl font-bold text-gray-900">{perfData?.avgRes ? `${perfData.avgRes}h` : '—'}</p>
           <p className="text-sm text-gray-500 mt-0.5">Avg Resolution Time</p>
           <p className="text-xs mt-1 font-medium text-gray-400">30-day rolling average</p>
-        </div>
+        </Link>
 
         {/* Avg First Response */}
-        <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
+        <Link to="/ticket-reports" className="block bg-white rounded-2xl border border-gray-100 p-5 shadow-sm hover:shadow-md hover:border-gray-200 cursor-pointer transition-shadow">
           <div className="flex items-start justify-between mb-3">
             <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: `${C.green}18` }}>
               <MessageSquare className="w-5 h-5" style={{ color: C.green }} />
@@ -721,13 +736,13 @@ function ManagerDashboard({ d, department, deptType }: { d: any; department: str
           </p>
           <p className="text-sm text-gray-500 mt-0.5">Avg First Response</p>
           <p className="text-xs mt-1 font-medium text-gray-400">30-day rolling average</p>
-        </div>
+        </Link>
       </div>
 
       {/* ── Team TAT Rollup ────────────────────────────────── */}
       {teamData && (
         <>
-          <TATPanel tat={teamData.totals} deptType={deptType} isManager />
+          <TATPanel tat={teamData.totals} deptType={deptType} departmentName={departmentName} isManager />
           <TeamBreakdownTable agents={teamData.agents ?? []} />
         </>
       )}
@@ -765,12 +780,12 @@ function ManagerDashboard({ d, department, deptType }: { d: any; department: str
 
           {/* Bot KPIs */}
           <div className="grid grid-cols-2 gap-3">
-            <StatCard label="Total Bot Calls"   value={bot.calls_30d      ?? 0}  sub="Last 30 days"             icon={Bot}         accent={C.purple} />
-            <StatCard label="Calls Today"        value={bot.calls_today    ?? 0}  sub={`${bot.completed ?? 0} completed`} icon={PhoneCall}   accent={C.cyan}   trend="up" />
-            <StatCard label="Tickets Created"    value={bot.tickets_created ?? 0} sub="Auto-generated"           icon={Ticket}      accent={C.green}  trend="up" />
-            <StatCard label="Untriaged"          value={bot.untriaged      ?? 0}  sub="No ticket linked"         icon={AlertTriangle} accent={bot.untriaged > 0 ? C.orange : C.green} trend={Number(bot.untriaged) > 0 ? 'warn' : undefined} />
-            <StatCard label="Avg Call Duration"  value={fmtSecs(bot.avg_duration_secs)} sub="Bot handled"        icon={Timer}       accent={C.gold}   />
-            <StatCard label="Failed Calls"       value={bot.failed         ?? 0}  sub="Error / no answer"        icon={PhoneMissed} accent={Number(bot.failed) > 0 ? C.red : C.green} trend={Number(bot.failed) > 0 ? 'warn' : undefined} />
+            <StatCard label="Total Bot Calls"   value={bot.calls_30d      ?? 0}  sub="Last 30 days"             icon={Bot}         accent={C.purple} to="/voice-bot/calls" />
+            <StatCard label="Calls Today"        value={bot.calls_today    ?? 0}  sub={`${bot.completed ?? 0} completed`} icon={PhoneCall}   accent={C.cyan}   trend="up" to="/voice-bot/calls" />
+            <StatCard label="Tickets Created"    value={bot.tickets_created ?? 0} sub="Auto-generated"           icon={Ticket}      accent={C.green}  trend="up" to="/voice-bot/tickets" />
+            <StatCard label="Untriaged"          value={bot.untriaged      ?? 0}  sub="No ticket linked"         icon={AlertTriangle} accent={bot.untriaged > 0 ? C.orange : C.green} trend={Number(bot.untriaged) > 0 ? 'warn' : undefined} to="/voice-bot/calls" />
+            <StatCard label="Avg Call Duration"  value={fmtSecs(bot.avg_duration_secs)} sub="Bot handled"        icon={Timer}       accent={C.gold}   to="/voice-bot/calls" />
+            <StatCard label="Failed Calls"       value={bot.failed         ?? 0}  sub="Error / no answer"        icon={PhoneMissed} accent={Number(bot.failed) > 0 ? C.red : C.green} trend={Number(bot.failed) > 0 ? 'warn' : undefined} to="/voice-bot/calls" />
           </div>
 
           {/* Bot sentiment pie */}
@@ -823,12 +838,12 @@ function ManagerDashboard({ d, department, deptType }: { d: any; department: str
 
           {/* Human call KPIs */}
           <div className="grid grid-cols-2 gap-3">
-            <StatCard label="Calls Handled"    value={hCalls.completed_calls   ?? 0} sub={`${hCalls.calls_today ?? 0} today`}         icon={PhoneCall}   accent={C.cyan}   trend="up" />
-            <StatCard label="Avg Talk Time"    value={fmtSecs(hCalls.avg_duration_secs)} sub="per completed call"                     icon={Timer}       accent={C.green}  />
-            <StatCard label="Queue Now"        value={hCalls.calls_in_queue    ?? 0} sub={Number(hCalls.calls_in_queue) > 0 ? 'Waiting' : 'Clear'} icon={Headphones} accent={Number(hCalls.calls_in_queue) > 0 ? C.orange : C.green} trend={Number(hCalls.calls_in_queue) > 0 ? 'warn' : undefined} />
-            <StatCard label="Drop Rate"        value={`${hDropRate}%`}               sub={`${hCalls.dropped_calls ?? 0} missed`}      icon={PhoneMissed} accent={hDropRate > 15 ? C.red : C.gold} trend={hDropRate > 15 ? 'warn' : undefined} />
-            <StatCard label="Active Tickets"   value={hTickets.active          ?? 0} sub={`${hTickets.open ?? 0} open`}               icon={Inbox}       accent={C.cyan}   />
-            <StatCard label="SLA Breached"     value={hTickets.sla_breached    ?? 0} sub="Needs action"                               icon={ShieldAlert} accent={Number(hTickets.sla_breached) > 0 ? C.red : C.green} trend={Number(hTickets.sla_breached) > 0 ? 'warn' : undefined} />
+            <StatCard label="Calls Handled"    value={hCalls.completed_calls   ?? 0} sub={`${hCalls.calls_today ?? 0} today`}         icon={PhoneCall}   accent={C.cyan}   trend="up" to="/voice" />
+            <StatCard label="Avg Talk Time"    value={fmtSecs(hCalls.avg_duration_secs)} sub="per completed call"                     icon={Timer}       accent={C.green}  to="/voice" />
+            <StatCard label="Queue Now"        value={hCalls.calls_in_queue    ?? 0} sub={Number(hCalls.calls_in_queue) > 0 ? 'Waiting' : 'Clear'} icon={Headphones} accent={Number(hCalls.calls_in_queue) > 0 ? C.orange : C.green} trend={Number(hCalls.calls_in_queue) > 0 ? 'warn' : undefined} to="/voice" />
+            <StatCard label="Drop Rate"        value={`${hDropRate}%`}               sub={`${hCalls.dropped_calls ?? 0} missed`}      icon={PhoneMissed} accent={hDropRate > 15 ? C.red : C.gold} trend={hDropRate > 15 ? 'warn' : undefined} to="/voice" />
+            <StatCard label="Active Tickets"   value={hTickets.active          ?? 0} sub={`${hTickets.open ?? 0} open`}               icon={Inbox}       accent={C.cyan}   to="/tickets?status=open" />
+            <StatCard label="SLA Breached"     value={hTickets.sla_breached    ?? 0} sub="Needs action"                               icon={ShieldAlert} accent={Number(hTickets.sla_breached) > 0 ? C.red : C.green} trend={Number(hTickets.sla_breached) > 0 ? 'warn' : undefined} to="/tickets?filter=breached" />
           </div>
 
           {/* Ticket type pie + activities */}
@@ -1026,10 +1041,10 @@ function TenantAdminDashboard({ d }: { d: any }) {
       {/* ── User Stats ─────────────────────────────────────── */}
       <SectionHeader icon={Users} label="Users & Roles" />
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <StatCard label="Total Users"    value={users.total    ?? 0} sub={`${users.active ?? 0} active`}           icon={Users}      accent={C.cyan}   trend="up" />
-        <StatCard label="Active Now"     value={users.active_today ?? 0} sub="Logged in last 24h"                  icon={UserCheck}  accent={C.green}  trend="up" />
-        <StatCard label="Inactive Users" value={users.inactive ?? 0} sub="Disabled accounts"                       icon={UserX}      accent={users.inactive > 0 ? C.orange : C.green} trend={Number(users.inactive) > 0 ? 'warn' : undefined} />
-        <StatCard label="New (30d)"      value={users.new_30d  ?? 0} sub="Recently joined"                         icon={UserPlus}   accent={C.purple} trend="up" />
+        <StatCard label="Total Users"    value={users.total    ?? 0} sub={`${users.active ?? 0} active`}           icon={Users}      accent={C.cyan}   trend="up" to="/admin/users" />
+        <StatCard label="Active Now"     value={users.active_today ?? 0} sub="Logged in last 24h"                  icon={UserCheck}  accent={C.green}  trend="up" to="/admin/users" />
+        <StatCard label="Inactive Users" value={users.inactive ?? 0} sub="Disabled accounts"                       icon={UserX}      accent={users.inactive > 0 ? C.orange : C.green} trend={Number(users.inactive) > 0 ? 'warn' : undefined} to="/admin/users" />
+        <StatCard label="New (30d)"      value={users.new_30d  ?? 0} sub="Recently joined"                         icon={UserPlus}   accent={C.purple} trend="up" to="/admin/users" />
       </div>
 
       {/* Role + Department breakdown + user list */}
@@ -1411,8 +1426,8 @@ export function Dashboard() {
           : isTenantAdmin
           ? <TenantAdminDashboard d={data} />
           : isManager
-          ? <ManagerDashboard d={data} department={department} deptType={deptType} />
-          : <AgentDashboard d={data} department={department} deptType={deptType} />
+          ? <ManagerDashboard d={data} department={department} deptType={deptType} departmentName={user?.department ?? null} />
+          : <AgentDashboard d={data} department={department} deptType={deptType} departmentName={user?.department ?? null} />
         }
 
         <div className="h-4" />

@@ -238,18 +238,12 @@ export function settingsRoutes(db: DatabaseClient, redis: RedisClient) {
     });
 
     fastify.patch('/routing', { preHandler: requireRole('super_admin', 'tenant_admin', 'manager') }, async (req, reply) => {
-      const patcherRole = req.user.role;
       const body = z.object({
-        per_agent_ticket_limit: z.number().int().min(0).max(500).optional(), // 0 = unlimited — criteria (manager+)
-        routing_method:         z.enum(['random_capacity','round_robin','manual']).optional(), // algorithm — admin only
+        per_agent_ticket_limit: z.number().int().min(0).max(500).optional(), // 0 = unlimited
+        routing_method:         z.enum(['random_capacity','round_robin','manual']).optional(), // operational — managers included
         csat_expiry_days:       z.number().int().min(1).max(90).optional(),
-        bot_default_priority:   z.enum(['urgent','high','medium','low']).optional(), // criteria (manager+)
+        bot_default_priority:   z.enum(['urgent','high','medium','low']).optional(),
       }).parse(req.body);
-
-      // routing_method (the algorithm) is admin-only — managers can configure criteria but not change the algorithm
-      if (body.routing_method !== undefined && patcherRole === 'manager') {
-        return reply.code(403).send({ success: false, error: { code: 'FORBIDDEN', message: 'Only tenant admins can change the routing algorithm. Managers can adjust routing criteria (ticket limit, bot priority).' } });
-      }
 
       await db.withSuperAdmin(async (client) => {
         if (body.per_agent_ticket_limit !== undefined || body.routing_method !== undefined || body.bot_default_priority !== undefined) {

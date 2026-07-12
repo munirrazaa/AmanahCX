@@ -27,10 +27,29 @@ interface Message {
 
 interface TeamMember {
   id: string;
-  first_name: string;
-  last_name?: string;
+  name: string;
   email: string;
   role: string;
+  department: string | null;
+  designation: string;
+}
+
+interface DmRequest {
+  requested_by: string;
+  status: 'pending' | 'accepted';
+}
+
+interface DmThread {
+  messages: Message[];
+  request: DmRequest | null;
+  iBlockedThem: boolean;
+  theyBlockedMe: boolean;
+}
+
+interface BlockedUser {
+  id: string;
+  name: string;
+  email: string;
 }
 
 interface Channel {
@@ -185,17 +204,38 @@ export function TeamMessaging() {
     queryFn: () => api.get('/api/v1/messages/team-members').then((r) => r.data.data),
   });
 
+  const { data: blockedUsers } = useQuery<BlockedUser[]>({
+    queryKey: ['blocked-users'],
+    queryFn: () => api.get('/api/v1/messages/blocked').then((r) => r.data.data),
+  });
+
   const messagesKey = view.type === 'channel'
     ? ['channel-messages', view.name]
     : ['dm-messages', view.userId];
 
-  const { data: messages, isLoading: msgsLoading } = useQuery<Message[]>({
+  const { data: channelMessages, isLoading: channelLoading } = useQuery<Message[]>({
     queryKey: messagesKey,
-    queryFn: () => view.type === 'channel'
-      ? api.get(`/api/v1/messages/channel/${view.name}`).then((r) => r.data.data)
-      : api.get(`/api/v1/messages/dm/${view.userId}`).then((r) => r.data.data),
+    enabled: view.type === 'channel',
+    queryFn: () => api.get(`/api/v1/messages/channel/${(view as any).name}`).then((r) => r.data.data),
     refetchInterval: 5_000,
   });
+
+  const { data: dmThread, isLoading: dmLoading } = useQuery<DmThread>({
+    queryKey: messagesKey,
+    enabled: view.type === 'dm',
+    queryFn: () => api.get(`/api/v1/messages/dm/${(view as any).userId}`).then((r) => r.data.data),
+    refetchInterval: 5_000,
+  });
+
+  const messages = view.type === 'channel' ? channelMessages : dmThread?.messages;
+  const msgsLoading = view.type === 'channel' ? channelLoading : dmLoading;
+
+  // Pending request I need to act on: exists, status pending, and I'm not the one who sent it
+  const incomingRequest = view.type === 'dm' && dmThread?.request?.status === 'pending' && dmThread.request.requested_by !== myId;
+  const outgoingPending = view.type === 'dm' && dmThread?.request?.status === 'pending' && dmThread.request.requested_by === myId;
+  const iBlockedThem = view.type === 'dm' && !!dmThread?.iBlockedThem;
+  const theyBlockedMe = view.type === 'dm' && !!dmThread?.theyBlockedMe;
+  const canCompose = view.type === 'channel' || (!incomingRequest && !iBlockedThem && !theyBlockedMe);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -206,6 +246,25 @@ export function TeamMessaging() {
       ? api.post(`/api/v1/messages/channel/${view.name}`, { content })
       : api.post(`/api/v1/messages/dm/${view.userId}`, { content }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: messagesKey }); setDraft(''); },
+  });
+
+  const respondMutation = useMutation({
+    mutationFn: (action: 'accept' | 'delete' | 'block') => {
+      if (view.type !== 'dm') throw new Error('not a dm');
+      return api.post(`/api/v1/messages/dm/${view.userId}/respond`, { action });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: messagesKey });
+      qc.invalidateQueries({ queryKey: ['blocked-users'] });
+    },
+  });
+
+  const unblockMutation = useMutation({
+    mutationFn: (userId: string) => api.post(`/api/v1/messages/dm/${userId}/unblock`, {}),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['blocked-users'] });
+      qc.invalidateQueries({ queryKey: messagesKey });
+    },
   });
 
   const handleSend = () => {
@@ -219,8 +278,19 @@ export function TeamMessaging() {
 
   const filteredMembers = (members ?? []).filter((m) =>
     m.id !== myId &&
-    (`${m.first_name} ${m.last_name ?? ''} ${m.email}`).toLowerCase().includes(memberSearch.toLowerCase())
+    (`${m.name} ${m.email} ${m.department ?? ''} ${m.designation}`).toLowerCase().includes(memberSearch.toLowerCase())
   );
+
+  // Group by department, then by designation within each department, for the
+  // directory list — matches the "names appear department/designation-wide" spec.
+  const groupedMembers = filteredMembers.reduce<Record<string, Record<string, TeamMember[]>>>((acc, m) => {
+    const dept = m.department ?? 'No Department';
+    const desig = m.designation;
+    acc[dept] = acc[dept] ?? {};
+    acc[dept][desig] = acc[dept][desig] ?? [];
+    acc[dept][desig].push(m);
+    return acc;
+  }, {});
 
   const currentTitle = view.type === 'channel' ? `#${view.name}` : view.userName;
 
@@ -273,26 +343,56 @@ export function TeamMessaging() {
               placeholder="Search teammates..."
               className="w-full px-2 py-1.5 text-xs bg-slate-700 text-white rounded-lg outline-none placeholder-slate-500 border border-slate-600 focus:border-brand-400" />
           </div>
-          <div className="space-y-0.5">
-            {filteredMembers.map((m) => (
-              <button key={m.id}
-                onClick={() => setView({ type: 'dm', userId: m.id, userName: `${m.first_name} ${m.last_name ?? ''}`.trim() })}
-                className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs transition-colors text-left ${
-                  view.type === 'dm' && view.userId === m.id
-                    ? 'bg-brand-600/30 text-white font-medium'
-                    : 'text-slate-400 hover:text-white hover:bg-slate-700'
-                }`}>
-                <div className="w-5 h-5 rounded-full bg-slate-600 flex items-center justify-center shrink-0 text-[10px] font-bold text-white">
-                  {m.first_name.charAt(0)}
-                </div>
-                <span className="truncate">{m.first_name} {m.last_name ?? ''}</span>
-              </button>
+          <div className="space-y-2">
+            {Object.entries(groupedMembers).map(([dept, byDesignation]) => (
+              <div key={dept}>
+                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider px-2 pt-2 pb-0.5">{dept}</p>
+                {Object.entries(byDesignation).map(([desig, ms]) => (
+                  <div key={desig}>
+                    <p className="text-[10px] text-slate-500 px-2 pt-1 italic">{desig}</p>
+                    <div className="space-y-0.5">
+                      {ms.map((m) => (
+                        <button key={m.id}
+                          onClick={() => setView({ type: 'dm', userId: m.id, userName: m.name })}
+                          className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs transition-colors text-left ${
+                            view.type === 'dm' && view.userId === m.id
+                              ? 'bg-brand-600/30 text-white font-medium'
+                              : 'text-slate-400 hover:text-white hover:bg-slate-700'
+                          }`}>
+                          <div className="w-5 h-5 rounded-full bg-slate-600 flex items-center justify-center shrink-0 text-[10px] font-bold text-white">
+                            {m.name.charAt(0)}
+                          </div>
+                          <span className="truncate">{m.name}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
             ))}
             {filteredMembers.length === 0 && memberSearch && (
               <p className="text-xs text-slate-500 px-2 py-2">No teammates found</p>
             )}
           </div>
         </div>
+
+        {/* Blocked users */}
+        {(blockedUsers ?? []).length > 0 && (
+          <div className="px-3 py-3 border-t border-slate-700">
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1 px-1">Blocked</p>
+            <div className="space-y-0.5">
+              {(blockedUsers ?? []).map((b) => (
+                <div key={b.id} className="flex items-center justify-between px-2 py-1 text-xs text-slate-400">
+                  <span className="truncate">{b.name}</span>
+                  <button onClick={() => unblockMutation.mutate(b.id)}
+                    className="text-[10px] text-brand-400 hover:text-brand-300 font-medium shrink-0 ml-2">
+                    Unblock
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ── Main Chat Area ── */}
@@ -339,25 +439,72 @@ export function TeamMessaging() {
           <div ref={bottomRef} />
         </div>
 
-        {/* Compose bar */}
-        <div className="bg-white border-t border-gray-100 px-4 py-3 shrink-0">
-          <div className="flex items-end gap-2 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 focus-within:border-brand-400 transition-colors">
-            <textarea
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              onKeyDown={handleKeyDown}
-              rows={1}
-              placeholder={`Message ${currentTitle}`}
-              className="flex-1 bg-transparent text-sm text-gray-800 outline-none resize-none placeholder-gray-400 leading-relaxed max-h-32"
-              style={{ fieldSizing: 'content' } as any}
-            />
-            <button onClick={handleSend} disabled={!draft.trim() || sendMutation.isPending}
-              className="shrink-0 w-8 h-8 bg-brand-600 hover:bg-brand-700 disabled:opacity-40 text-white rounded-lg flex items-center justify-center transition-colors">
-              {sendMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+        {/* Incoming message request banner — must accept/delete/block before replying */}
+        {incomingRequest && (
+          <div className="bg-amber-50 border-t border-amber-200 px-4 py-3 shrink-0">
+            <p className="text-sm text-amber-800 mb-2">
+              <strong>{view.type === 'dm' ? view.userName : ''}</strong> wants to send you a message. Accept to start messaging, or delete/block the request.
+            </p>
+            <div className="flex gap-2">
+              <button onClick={() => respondMutation.mutate('accept')} disabled={respondMutation.isPending}
+                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-medium rounded-lg disabled:opacity-50">
+                Accept
+              </button>
+              <button onClick={() => respondMutation.mutate('delete')} disabled={respondMutation.isPending}
+                className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-700 text-xs font-medium rounded-lg disabled:opacity-50">
+                Delete
+              </button>
+              <button onClick={() => respondMutation.mutate('block')} disabled={respondMutation.isPending}
+                className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-medium rounded-lg disabled:opacity-50">
+                Block
+              </button>
+            </div>
+          </div>
+        )}
+
+        {outgoingPending && (
+          <div className="bg-gray-50 border-t border-gray-200 px-4 py-2 shrink-0">
+            <p className="text-xs text-gray-500">Message request sent — waiting for {view.type === 'dm' ? view.userName : 'them'} to accept.</p>
+          </div>
+        )}
+
+        {theyBlockedMe && (
+          <div className="bg-gray-50 border-t border-gray-200 px-4 py-3 shrink-0">
+            <p className="text-xs text-gray-500">You can't message this user.</p>
+          </div>
+        )}
+
+        {iBlockedThem && (
+          <div className="bg-gray-50 border-t border-gray-200 px-4 py-3 shrink-0 flex items-center justify-between">
+            <p className="text-xs text-gray-500">You've blocked {view.type === 'dm' ? view.userName : 'this user'}.</p>
+            <button onClick={() => view.type === 'dm' && unblockMutation.mutate(view.userId)} disabled={unblockMutation.isPending}
+              className="text-xs font-medium text-brand-600 hover:text-brand-700">
+              Unblock
             </button>
           </div>
-          <p className="text-[10px] text-gray-400 mt-1.5 px-1">Press Enter to send · Shift+Enter for new line</p>
-        </div>
+        )}
+
+        {/* Compose bar */}
+        {canCompose && (
+          <div className="bg-white border-t border-gray-100 px-4 py-3 shrink-0">
+            <div className="flex items-end gap-2 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 focus-within:border-brand-400 transition-colors">
+              <textarea
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                onKeyDown={handleKeyDown}
+                rows={1}
+                placeholder={`Message ${currentTitle}`}
+                className="flex-1 bg-transparent text-sm text-gray-800 outline-none resize-none placeholder-gray-400 leading-relaxed max-h-32"
+                style={{ fieldSizing: 'content' } as any}
+              />
+              <button onClick={handleSend} disabled={!draft.trim() || sendMutation.isPending}
+                className="shrink-0 w-8 h-8 bg-brand-600 hover:bg-brand-700 disabled:opacity-40 text-white rounded-lg flex items-center justify-center transition-colors">
+                {sendMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+              </button>
+            </div>
+            <p className="text-[10px] text-gray-400 mt-1.5 px-1">Press Enter to send · Shift+Enter for new line</p>
+          </div>
+        )}
       </div>
 
       {showCompose && <ExternalComposeModal onClose={() => setShowCompose(false)} />}

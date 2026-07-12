@@ -33,6 +33,7 @@ import type { DatabaseClient, EventBus } from '@crm/core';
 import { CRM_EVENTS } from '@crm/core';
 import { requireScope, requireRole, requireEntitlement } from '../middlewares/auth.middleware';
 import { getVisibleUserIds } from '../lib/visibility';
+import { getChannelConsent, recordChannelConsent } from '../lib/consent';
 import { EmailService } from '../services/email.service';
 import { SmsService } from '@crm/core/sms.service';
 import { getSector } from '@crm/shared';
@@ -499,18 +500,20 @@ async function assignByPushRouting(
   const queueId = ticket.queue_id;
   let candidateIds: string[] = [];
 
+  const currentAssignee: string | null = ticket.assignee_id || null;
+
   if (queueId) {
     const qm = await db.withSuperAdmin(async (client) => {
       const r = await client.query(
         `SELECT qm.user_id
          FROM queue_members qm
          JOIN users u ON u.id = qm.user_id
-         WHERE qm.queue_id = $1
+         WHERE qm.queue_id = $1::uuid
            AND u.is_active = true
            AND u.agent_status NOT IN ('offline','away')
            AND u.role IN ('agent','manager')
-           AND u.id != $2`,
-        [queueId, ticket.assignee_id ?? '00000000-0000-0000-0000-000000000000'],
+           AND ($2::uuid IS NULL OR u.id != $2::uuid)`,
+        [queueId, currentAssignee],
       );
       return r.rows.map((u: any) => u.user_id as string);
     });
@@ -522,12 +525,12 @@ async function assignByPushRouting(
     const all = await db.withSuperAdmin(async (client) => {
       const r = await client.query(
         `SELECT id FROM users
-         WHERE tenant_id = $1
+         WHERE tenant_id = $1::uuid
            AND is_active = true
            AND agent_status NOT IN ('offline','away')
            AND role IN ('agent','manager')
-           AND id != $2`,
-        [tenantId, ticket.assignee_id ?? '00000000-0000-0000-0000-000000000000'],
+           AND ($2::uuid IS NULL OR id != $2::uuid)`,
+        [tenantId, currentAssignee],
       );
       return r.rows.map((u: any) => u.id as string);
     });
@@ -1132,6 +1135,22 @@ export function ticketRoutes(db: DatabaseClient, eventBus: EventBus) {
         return r.rows;
       });
 
+      // Customer chose their preferred contact channel on this ticket — that is
+      // an explicit opt-in for WhatsApp/SMS. Record it so the consent audit
+      // trail exists (Meta requires provable opt-in before business-initiated
+      // WhatsApp messages). Email is the default fallback channel, not recorded.
+      const prefChannel = body.preferredChannel ?? 'email';
+      if (contactId && (prefChannel === 'whatsapp' || prefChannel === 'sms')) {
+        await recordChannelConsent(db, {
+          tenantId, contactId,
+          channel:    prefChannel,
+          optedIn:    true,
+          source:     'form',
+          recordedBy: req.user.sub,
+          notes:      `Customer selected ${prefChannel} as preferred channel on ticket ${ticketNum}`,
+        }).catch(() => {});
+      }
+
       // Notify assignee if set
       if (ticket.assignee_id) {
         await notify(db, tenantId, [ticket.assignee_id], 'ticket_assigned',
@@ -1290,6 +1309,19 @@ export function ticketRoutes(db: DatabaseClient, eventBus: EventBus) {
         );
         return r.rows;
       });
+
+      // Caller stated a WhatsApp/SMS preference during the voice call — record
+      // the opt-in so later outbound sends have a provable consent record.
+      if (contactId && (body.preferredChannel === 'whatsapp' || body.preferredChannel === 'sms')) {
+        await recordChannelConsent(db, {
+          tenantId, contactId,
+          channel:    body.preferredChannel,
+          optedIn:    true,
+          source:     'form',
+          recordedBy: req.user.sub,
+          notes:      `Caller selected ${body.preferredChannel} as preferred channel on voice-bot ticket ${ticketNum}`,
+        }).catch(() => {});
+      }
 
       await eventBus.publish(tenantId, CRM_EVENTS.TICKET_CREATED, { ticket, source: 'voice_bot' });
       return reply.code(201).send({ success: true, data: ticket });
@@ -2641,7 +2673,7 @@ ${note ? `<p><strong>Reason:</strong> ${note}</p>` : ''}
       if (!body.isInternal) {
         const [ticket] = await db.withTenant(tenantId, async (client) => {
           const r = await client.query(
-            `SELECT ticket_number, subject, reporter_email, reporter_name,
+            `SELECT ticket_number, subject, contact_id, reporter_email, reporter_name,
                     reporter_phone, reporter_whatsapp, preferred_channel
              FROM tickets WHERE id = $1`,
             [id],
@@ -2653,7 +2685,18 @@ ${note ? `<p><strong>Reason:</strong> ${note}</p>` : ''}
           return r.rows;
         });
         const agentName = agent?.name ?? 'Support Team';
-        const channel   = ticket?.preferred_channel ?? 'email';
+        let channel     = ticket?.preferred_channel ?? 'email';
+
+        // Consent gate: an explicit opt-out (contact_channel_consent latest row
+        // opted_in=false) overrides the ticket's preferred channel — fall back
+        // to email instead of messaging a channel the customer withdrew from.
+        // No record at all is allowed here: choosing the channel on the ticket
+        // was itself the customer's opt-in (also recorded at creation time).
+        if ((channel === 'whatsapp' || channel === 'sms') && ticket?.contact_id) {
+          const consent = await getChannelConsent(db, tenantId, ticket.contact_id, channel)
+            .catch(() => null);
+          if (consent === false) channel = 'email';
+        }
 
         if (channel === 'sms' && ticket?.reporter_phone) {
           smsSvc.send(tenantId, {
@@ -2740,24 +2783,29 @@ ${note ? `<p><strong>Reason:</strong> ${note}</p>` : ''}
       const tenantId = req.tenant.id;
       const userId = (req.query as any).user_id ?? req.user.sub;
 
+      // Scope matches the "My Tickets" widget above it on the dashboard:
+      // tickets assigned to me OR created by me — not assigned-only, so a
+      // ticket an agent creates for themselves (which may sit unassigned
+      // until it's routed) still shows up here instead of vanishing.
       const { rows } = await db.withTenant(tenantId, (client) =>
         client.query(
           `SELECT
-             COUNT(*) FILTER (WHERE status = 'assigned')                                              AS assigned,
-             COUNT(*) FILTER (WHERE status = 'accepted' OR accepted_at IS NOT NULL
-                               AND status NOT IN ('resolved','closed'))                               AS accepted,
-             COUNT(*) FILTER (WHERE status IN ('pending','in_progress'))                              AS pending,
-             COUNT(*) FILTER (WHERE status = 'resolved')                                              AS resolved,
+             COUNT(*) FILTER (WHERE status = 'open')                                                   AS open,
+             COUNT(*) FILTER (WHERE status = 'assigned')                                                AS assigned,
+             COUNT(*) FILTER (WHERE status = 'accepted' OR (accepted_at IS NOT NULL
+                               AND status NOT IN ('resolved','closed')))                                 AS accepted,
+             COUNT(*) FILTER (WHERE status IN ('pending','in_progress'))                                 AS pending,
+             COUNT(*) FILTER (WHERE status IN ('resolved','closed'))                                     AS resolved,
              COUNT(*) FILTER (WHERE sla_due_at IS NOT NULL AND sla_due_at > NOW()
-                               AND status NOT IN ('resolved','closed'))                               AS within_tat,
+                               AND status NOT IN ('resolved','closed'))                                  AS within_tat,
              COUNT(*) FILTER (WHERE sla_due_at IS NOT NULL
                                AND sla_due_at > NOW()
                                AND sla_due_at <= NOW() + INTERVAL '2 hours'
-                               AND status NOT IN ('resolved','closed'))                               AS approaching_tat,
+                               AND status NOT IN ('resolved','closed'))                                  AS approaching_tat,
              COUNT(*) FILTER (WHERE sla_due_at IS NOT NULL AND sla_due_at < NOW()
-                               AND status NOT IN ('resolved','closed'))                               AS breached_tat
+                               AND status NOT IN ('resolved','closed'))                                  AS breached_tat
            FROM tickets
-           WHERE tenant_id = $1 AND assignee_id = $2`,
+           WHERE tenant_id = $1 AND (assignee_id = $2 OR created_by = $2)`,
           [tenantId, userId]
         )
       );
@@ -2783,11 +2831,12 @@ ${note ? `<p><strong>Reason:</strong> ${note}</p>` : ''}
              WHERE u.tenant_id = $1
            )
            SELECT
+             COUNT(*) FILTER (WHERE t.status = 'open')                                                AS open,
              COUNT(*) FILTER (WHERE t.status = 'assigned')                                           AS assigned,
-             COUNT(*) FILTER (WHERE t.status = 'accepted' OR t.accepted_at IS NOT NULL
-                               AND t.status NOT IN ('resolved','closed'))                             AS accepted,
+             COUNT(*) FILTER (WHERE t.status = 'accepted' OR (t.accepted_at IS NOT NULL
+                               AND t.status NOT IN ('resolved','closed')))                             AS accepted,
              COUNT(*) FILTER (WHERE t.status IN ('pending','in_progress'))                           AS pending,
-             COUNT(*) FILTER (WHERE t.status = 'resolved')                                           AS resolved,
+             COUNT(*) FILTER (WHERE t.status IN ('resolved','closed'))                                AS resolved,
              COUNT(*) FILTER (WHERE t.sla_due_at IS NOT NULL AND t.sla_due_at > NOW()
                                AND t.status NOT IN ('resolved','closed'))                             AS within_tat,
              COUNT(*) FILTER (WHERE t.sla_due_at IS NOT NULL
@@ -2807,11 +2856,12 @@ ${note ? `<p><strong>Reason:</strong> ${note}</p>` : ''}
         client.query(
           `SELECT
              u.id, u.name, u.email, u.department, u.department_type,
+             COUNT(t.id) FILTER (WHERE t.status = 'open')                                             AS open,
              COUNT(t.id) FILTER (WHERE t.status = 'assigned')                                        AS assigned,
-             COUNT(t.id) FILTER (WHERE t.status = 'accepted' OR t.accepted_at IS NOT NULL
-                                  AND t.status NOT IN ('resolved','closed'))                          AS accepted,
+             COUNT(t.id) FILTER (WHERE t.status = 'accepted' OR (t.accepted_at IS NOT NULL
+                                  AND t.status NOT IN ('resolved','closed')))                          AS accepted,
              COUNT(t.id) FILTER (WHERE t.status IN ('pending','in_progress'))                        AS pending,
-             COUNT(t.id) FILTER (WHERE t.status = 'resolved')                                        AS resolved,
+             COUNT(t.id) FILTER (WHERE t.status IN ('resolved','closed'))                             AS resolved,
              COUNT(t.id) FILTER (WHERE t.sla_due_at IS NOT NULL AND t.sla_due_at > NOW()
                                   AND t.status NOT IN ('resolved','closed'))                          AS within_tat,
              COUNT(t.id) FILTER (WHERE t.sla_due_at IS NOT NULL
