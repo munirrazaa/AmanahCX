@@ -221,6 +221,3 @@ _All ideas, pending work, and deferred items. Prioritised against enterprise rea
 - [P1] Manager field-team day view: today's agenda per officer, leads assigned/approached/locked
 - [P2] Last-sync indicator on mobile dashboard + desktop CRM (per field device)
 - [P2] Mirror field completion remarks to linked ticket timeline + Contact 360
-- Mobile live phone test round 1 (2026-07-12): check-in/complete w/ real GPS PASS; fixed sector-required-fields blocking quick capture, stuck voice button, card-scan name/mobile accuracy; New Lead/Task buttons on My Tasks
-- [P2] Render sector-required fields dynamically on mobile lead form (full capture instead of exemption)
-- [P3] Investigate per-device speech recognition availability matrix (Google app dependency)

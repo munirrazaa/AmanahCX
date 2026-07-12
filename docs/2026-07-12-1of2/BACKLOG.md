@@ -11,12 +11,6 @@ _All ideas, pending work, and deferred items. Prioritised against enterprise rea
 
 ## 🔴 P1 — Critical (Do Now — blocks enterprise readiness)
 
-### 0c. Daily Vercel login "spinner that never stops" — partially investigated, root cause NOT confirmed
-- **Verdict:** Do Now — needs live reproduction with the user to pin down
-- **Status:** Open — 2026-07-12. Full architecture (Vercel → Railway → Supabase) tested end-to-end and confirmed working; a real login was completed live while streaming Railway logs with no errors.
-- **What WAS found and fixed in the same session:** Live Wallboard's `agent-load`/`queue-stats` endpoints were 500ing on every call (referenced two columns — `tickets.is_overdue`, `ticket_queues.department` — that never existed in the schema). Fixed and verified. Not yet confirmed whether this was the actual cause of the reported spinner, since it's a Wallboard-specific bug, not something on the login path itself.
-- **Next step:** reproduce the spinner live with Railway logs streaming at the exact moment it happens, to see what the server does (or doesn't do) during the actual failing attempt — a fresh test with a throwaway account did not reproduce it.
-
 ### 0a. Agent dashboard access blocked — fixed; deeper entitlement drift found
 - **Verdict:** Done ✅ — 2026-07-10
 - **Why it happened:** The dashboard route required an `analytics:read` scope, which reads the `permissions.analytics` value — the same value tenant module-licensing correctly forces to `"none"` for any tenant that hasn't purchased the Analytics module (Haier's real situation: licensed for Core CRM + Ticketing only). The route's own code comment says the home dashboard shouldn't be gated this way, but the scope check silently reintroduced that exact gate.
@@ -216,11 +210,3 @@ _All ideas, pending work, and deferred items. Prioritised against enterprise rea
 - Manager visibility of unclaimed/unassigned tickets in their team's queue — DONE 2026-07-10
 - Dashboard quick-action buttons filtered by tenant's licensed modules — DONE 2026-07-10
 - Vercel reconnected to the correct repo + auto-deploy enabled (previously required manual deploy) — DONE 2026-07-10
-- Mobile: field-visit flow (My Tasks, GPS check-in, complete w/ remarks + GPS, customer auto-email) — BUILT & TESTED 2026-07-11 (email release pending SendGrid DNS)
-- Mobile work recovered from parallel-session git stash; re-tested vs Supabase cloud backend, 8/8 tests pass — 2026-07-11
-- [P1] Manager field-team day view: today's agenda per officer, leads assigned/approached/locked
-- [P2] Last-sync indicator on mobile dashboard + desktop CRM (per field device)
-- [P2] Mirror field completion remarks to linked ticket timeline + Contact 360
-- Mobile live phone test round 1 (2026-07-12): check-in/complete w/ real GPS PASS; fixed sector-required-fields blocking quick capture, stuck voice button, card-scan name/mobile accuracy; New Lead/Task buttons on My Tasks
-- [P2] Render sector-required fields dynamically on mobile lead form (full capture instead of exemption)
-- [P3] Investigate per-device speech recognition availability matrix (Google app dependency)

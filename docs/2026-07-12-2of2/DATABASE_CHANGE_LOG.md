@@ -3,9 +3,6 @@ _Most recent at top. Tracks structural and security-relevant changes to the live
 
 ---
 
-## 2026-07-12 — No structural database changes
-
-- Application-code-only push (quick-capture validation, mobile UX fixes). Password reset on non-protected test user field.officer@demo.com (rotated by a parallel session, reset to documented test value).
 ## 2026-07-12 — New table: contact_channel_consent (migration 053)
 
 ### What changed

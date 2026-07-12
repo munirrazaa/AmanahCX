@@ -3,9 +3,6 @@ _Most recent at top. Tracks structural and security-relevant changes to the live
 
 ---
 
-## 2026-07-12 — No structural database changes
-
-- Application-code-only push (quick-capture validation, mobile UX fixes). Password reset on non-protected test user field.officer@demo.com (rotated by a parallel session, reset to documented test value).
 ## 2026-07-12 — New table: contact_channel_consent (migration 053)
 
 ### What changed
@@ -30,14 +27,6 @@ Note: migration numbering — the repo also contains an unrelated, not-yet-commi
 `049_livekit_agent_config.sql` in the AmanahCX working tree (separate voice-agent work, not
 part of this change); crm-platform's local sequence runs 049–052 with different content.
 The Supabase migration history is the authoritative record of what is applied to the live DB.
-
----
-
-## 2026-07-11 — Attachments table + field-officer test account (cloud DB)
-
-- **`attachments` table** (lazy-created by the API on boot if missing): id, tenant_id, entity_type, entity_id, filename, mime_type, size_bytes, storage_key, uploaded_by, created_at + index on (tenant_id, entity_type, entity_id). Stores photos/files attached to deals/contacts/tickets from the mobile app. Files themselves live in the file-storage backend (local dir in dev; S3-compatible in production).
-- **Test user `field.officer@demo.com`** (role agent, dept Sales, reports to sales line manager) inserted directly into the Supabase cloud DB for mobile field testing — not one of the locked demo accounts. Password documented in session notes only.
-- **Seeded test data:** contact "Kamran Siddiqui" + 3 field activities assigned to the field officer (demo tenant). Activity `metadata` now carries `checkins[]` (GPS arrivals) and `completedLocation` (GPS at completion) written by the new check-in/complete endpoints.
 
 ---
 

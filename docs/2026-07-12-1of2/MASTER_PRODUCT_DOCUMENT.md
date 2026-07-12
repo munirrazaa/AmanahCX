@@ -2,7 +2,7 @@
 **AI Operations Platform — Multi-Tenant CRM, Contact-Centre & Sales Suite**
 _Single source of truth for system requirements & behaviour. Update only affected sections on each change._
 
-Last updated: 2026-07-12 (live phone-test fixes: quick-capture exemption from sector-required contact fields; voice-capture stop reliability; card-scan name/mobile accuracy; My Tasks quick-action buttons). Previous: 2026-07-11 (Field Mobile App: recovered from stash, re-tested against Supabase cloud backend; field-visit flow — assigned tasks, GPS check-in/complete, remarks, customer email; AI card scan + voice capture EN/UR/PA; offline queue; deal photo attachments). Previous: 2026-07-10 push 3 of 3 (agent dashboard 403 fixed at root cause; see AmanahCX-Roles-and-Flow.html v6.0). Push 2 of 3: reference document restructure + live Dashboard/Reports audit. Push 1 of 3: critical data-isolation fix, auto-contact-creation on ticket create, manager queue visibility, deployment pipeline sync.
+Last updated: 2026-07-10 push 3 of 3 (agent dashboard 403 fixed at root cause; see AmanahCX-Roles-and-Flow.html v6.0). Push 2 of 3: reference document restructure + live Dashboard/Reports audit. Push 1 of 3: critical data-isolation fix, auto-contact-creation on ticket create, manager queue visibility, deployment pipeline sync.
 
 ## 2.6 Dashboard Route — Not Gated by Module Licensing (fixed 2026-07-10)
 The home dashboard (`GET /api/v1/analytics/ops-dashboard`) is intentionally available to every role regardless of which modules a tenant has licensed — it's the universal home screen, not a paid Analytics feature. A live audit found this had regressed: the route required an `analytics:read` scope that reads the same permission value tenant module-licensing forces to `"none"` for unlicensed tenants, silently reintroducing exactly the gate the route's own code comment says shouldn't exist. Fixed by removing the scope requirement entirely. See `BACKLOG.md` item 0a.
@@ -160,14 +160,6 @@ explicitly requested modules/features; `PATCH /tenants/:id/modules` still adjust
 Before this, sector had no effect on licensing — an "Education" tenant got only the bare default
 modules unless the super admin toggled each one manually (the root cause of the TA-04 "education
 sidebar" issue). Matches industry-template onboarding in Salesforce/HubSpot verticals.
-
-## 4.18 Live Wallboard 500 Errors Fixed (2026-07-12)
-`GET /api/v1/analytics/agent-load` and `GET /api/v1/analytics/queue-stats` (both manager+ only)
-referenced `tickets.is_overdue` and `ticket_queues.department` — neither column ever existed in
-the schema, so both endpoints 500'd on every call since they were built. Fixed: "breached" is now
-computed as `sla_due_at IS NOT NULL AND sla_due_at < NOW()`; the non-existent `department` field
-was dropped (queues never had a department concept) rather than inventing a fake data source.
-Found while investigating a separate reported login issue via live Railway log streaming.
 
 ### 4.4 Customer 360 — Callback Search & Cross-Team Context
 

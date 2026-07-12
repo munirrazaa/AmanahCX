@@ -65,16 +65,24 @@ export async function enqueueWebhookDelivery(
 ): Promise<string> {
   const { webhookId, tenantId, event, payload, maxRetries, backoffMs } = opts;
 
-  const rows = await db.query<{ id: string }>(
-    `INSERT INTO webhook_deliveries
-       (webhook_id, tenant_id, event, payload, attempts, succeeded,
-        max_retries, backoff_ms, next_attempt_at, dead_lettered)
-     VALUES ($1,$2,$3,$4::jsonb,0,false,$5,$6,NOW(),false)
-     RETURNING id`,
-    [webhookId, tenantId, event, JSON.stringify(payload), maxRetries, backoffMs],
-  );
+  // This runs from the ticket/webhook routes on behalf of one tenant, but the
+  // pooled connection has no tenant context set — use withSuperAdmin so the
+  // insert isn't silently blocked by RLS (the plain db.query() path sets
+  // neither app.tenant_id nor app.bypass_rls, and the DB role is no longer
+  // superuser, so RLS was rejecting every one of these inserts).
+  const [row] = await db.withSuperAdmin(async (client) => {
+    const result = await client.query<{ id: string }>(
+      `INSERT INTO webhook_deliveries
+         (webhook_id, tenant_id, event, payload, attempts, succeeded,
+          max_retries, backoff_ms, next_attempt_at, dead_lettered)
+       VALUES ($1,$2,$3,$4::jsonb,0,false,$5,$6,NOW(),false)
+       RETURNING id`,
+      [webhookId, tenantId, event, JSON.stringify(payload), maxRetries, backoffMs],
+    );
+    return result.rows;
+  });
 
-  return rows[0].id as string;
+  return row.id as string;
 }
 
 // ── Internal ──────────────────────────────────────────────────────────────────
@@ -82,23 +90,27 @@ export async function enqueueWebhookDelivery(
 async function processBatch(db: DatabaseClient): Promise<void> {
   // Claim up to BATCH_SIZE rows that are due for delivery using a CTE with
   // FOR UPDATE SKIP LOCKED — safe for concurrent workers (future horizontal scaling).
-  const pending = await db.query<any>(
-    `WITH claimed AS (
-       SELECT wd.id, wd.webhook_id, wd.tenant_id, wd.event, wd.payload,
-              wd.attempts, wd.max_retries, wd.backoff_ms,
-              w.url, w.secret, w.headers
-       FROM webhook_deliveries wd
-       JOIN webhooks w ON w.id = wd.webhook_id
-       WHERE wd.succeeded = false
-         AND wd.dead_lettered = false
-         AND wd.next_attempt_at <= NOW()
-       ORDER BY wd.next_attempt_at
-       LIMIT $1
-       FOR UPDATE OF wd SKIP LOCKED
-     )
-     SELECT * FROM claimed`,
-    [BATCH_SIZE],
-  );
+  // Cross-tenant polling job — needs bypass_rls since it's not scoped to one tenant.
+  const pending = await db.withSuperAdmin(async (client) => {
+    const result = await client.query<any>(
+      `WITH claimed AS (
+         SELECT wd.id, wd.webhook_id, wd.tenant_id, wd.event, wd.payload,
+                wd.attempts, wd.max_retries, wd.backoff_ms,
+                w.url, w.secret, w.headers
+         FROM webhook_deliveries wd
+         JOIN webhooks w ON w.id = wd.webhook_id
+         WHERE wd.succeeded = false
+           AND wd.dead_lettered = false
+           AND wd.next_attempt_at <= NOW()
+         ORDER BY wd.next_attempt_at
+         LIMIT $1
+         FOR UPDATE OF wd SKIP LOCKED
+       )
+       SELECT * FROM claimed`,
+      [BATCH_SIZE],
+    );
+    return result.rows;
+  });
 
   if (pending.length === 0) return;
 
@@ -141,13 +153,13 @@ async function deliverRow(db: DatabaseClient, row: any): Promise<void> {
   }
 
   if (succeeded) {
-    await db.query(
+    await db.withSuperAdmin((client) => client.query(
       `UPDATE webhook_deliveries
        SET attempts=$1, status_code=$2, response=$3, succeeded=true,
            last_error=NULL, updated_at=NOW()
        WHERE id=$4`,
       [newAttempts, statusCode, responseText, id],
-    );
+    ));
     logger.info('Webhook delivered', { deliveryId: id, webhookId: webhook_id, event, attempt: newAttempts });
     return;
   }
@@ -157,13 +169,13 @@ async function deliverRow(db: DatabaseClient, row: any): Promise<void> {
   const delayMs    = backoff_ms * Math.pow(2, newAttempts - 1);
   const nextAt     = deadLetter ? null : new Date(Date.now() + delayMs).toISOString();
 
-  await db.query(
+  await db.withSuperAdmin((client) => client.query(
     `UPDATE webhook_deliveries
      SET attempts=$1, status_code=$2, response=$3, succeeded=false,
          last_error=$4, dead_lettered=$5, next_attempt_at=$6, updated_at=NOW()
      WHERE id=$7`,
     [newAttempts, statusCode ?? null, responseText, responseText, deadLetter, nextAt, id],
-  );
+  ));
 
   if (deadLetter) {
     logger.warn('Webhook dead-lettered', {

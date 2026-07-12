@@ -144,7 +144,7 @@ export class SmsService {
       await this.db.withSuperAdmin(async (client) => {
         for (const admin of admins) {
           await client.query(
-            `INSERT INTO notifications (tenant_id, user_id, type, title, message, is_read, created_at)
+            `INSERT INTO notifications (tenant_id, user_id, type, title, body, is_read, created_at)
              VALUES ($1, $2, 'sms_gateway_missing', $3, $4, false, NOW())`,
             [tenantId, admin.id, title, message],
           );

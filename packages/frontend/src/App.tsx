@@ -290,6 +290,15 @@ function Sidebar() {
           </>
         )}
 
+        {/* Dashboard — home page for agents/managers; there is no other way
+            back to it once you navigate elsewhere in the sidebar. */}
+        {!isTenantAdmin && !isSuperAdmin && (
+          <NavLink to="/dashboard" end
+            className={({ isActive }) => `flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm transition-all ${isActive ? 'text-white font-semibold' : 'text-white/60 hover:text-white hover:bg-white/10'}`}
+            style={({ isActive }) => isActive ? { background: 'linear-gradient(135deg, rgba(41,171,226,0.25) 0%, rgba(77,139,60,0.15) 100%)', borderLeft: '2px solid #29ABE2' } : {}}
+          ><LayoutDashboard className="w-4 h-4 shrink-0" />Dashboard</NavLink>
+        )}
+
         {/* ── Operational staff module nav ─────────────────────────── */}
         {!isTenantAdmin && modules.map((mod) => (
           <div key={mod.id}>
@@ -326,8 +335,9 @@ function Sidebar() {
           </div>
         ))}
 
-        {/* Team Messaging — operational staff only (not the administrative tenant admin) */}
-        {!isSuperAdmin && !isTenantAdmin && (
+        {/* Team Messaging — available to tenant admins and operational staff;
+            platform super admins have no tenant/workspace access at all. */}
+        {!isSuperAdmin && (
           <NavLink to="/messages"
             className={({ isActive }) =>
               `flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm transition-all ${

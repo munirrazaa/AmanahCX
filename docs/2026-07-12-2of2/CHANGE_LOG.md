@@ -3,26 +3,6 @@ _Most recent at top. Treated as the primary record for development tracking._
 
 ---
 
-## Change Log - 2026-07-12 (Live phone-test fixes — field capture round 1)
-
-### Context
-First live test of the production APK on a real Android phone (field.officer@demo.com). Check-in → remarks → complete verified working with real GPS. Three issues found and fixed:
-
-### Fixed
-**1. Lead save rejected in sector workspaces (found: "save failed" on phone)**
-- The demo (Banking) workspace requires Customer Type / Account Number / Account Type on every contact — impossible for a walk-in field lead. Quick-capture sources (`card_scan`, `voice`, `mobile`, `field`) are now exempt from sector-required fields; the requirement still applies when the lead is later converted/edited to a full customer. Matches Salesforce/Zoho quick-create behaviour.
-
-**2. Voice capture could get stuck on "listening" with no data**
-- The mic button turned red before the phone's recognizer confirmed it started; if the recognizer failed/ended silently, Stop did nothing. Stop now always resets immediately, and a failed start shows a clear "voice unavailable" message instead of hanging.
-
-**3. Card scan missed the person's name and mobile number**
-- Scan photo quality raised (0.6 → 0.8) and the AI instructions now explicitly hunt for the stylised name text and classify Pakistani mobile prefixes (03xx / +92 3xx, Cell/Mob/WhatsApp labels) into mobile vs landline.
-
-### Added
-- **New Lead + Task buttons on the My Tasks screen** (field officer's landing screen) — previously only reachable via the Dashboard tab.
-
-### Also
-- Password for field.officer@demo.com was rotated by a parallel session and reset back; test jobs re-seeded for live phone testing.
 ## Change Log - 2026-07-12 (Push 2 of 2) — Login Investigation + Live Wallboard 500 Errors Fixed
 
 ### Investigated

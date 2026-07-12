@@ -6,6 +6,7 @@ import {
   TrendingUp, CheckSquare, LifeBuoy,
   Edit2, Save, X, Loader2,
   Clock, Calendar, PhoneCall, CreditCard, ExternalLink, Plus, Star, Trash2, ShieldAlert,
+  ShieldCheck, MessageCircle,
 } from 'lucide-react';
 import { api } from '../services/api';
 import { formatCurrency } from '../utils/format';
@@ -28,6 +29,8 @@ interface Contact {
   company_id: string;
   company_name: string;
   owner_name: string;
+  last_channel: string | null;
+  last_channel_at: string | null;
   created_at: string;
   updated_at: string;
   custom_fields: Record<string, string>;
@@ -455,6 +458,112 @@ function TicketsTab({ contactId }: { contactId: string }) {
   );
 }
 
+// ── Consent tab ───────────────────────────────────────────────────────────────
+
+const CONSENT_CHANNELS = [
+  { key: 'whatsapp', label: 'WhatsApp', icon: MessageCircle },
+  { key: 'sms',      label: 'SMS',      icon: Phone },
+  { key: 'email',    label: 'Email',    icon: Mail },
+] as const;
+
+function ConsentTab({ contactId }: { contactId: string }) {
+  const qc = useQueryClient();
+  const [showHistory, setShowHistory] = useState(false);
+  const [noteDraft, setNoteDraft] = useState<Record<string, string>>({});
+
+  const { data } = useQuery({
+    queryKey: ['contact-consent', contactId],
+    queryFn: () => api.get(`/api/v1/contacts/${contactId}/consent`).then((r) => r.data.data ?? []),
+  });
+  const consent: any[] = data ?? [];
+  const stateByChannel = Object.fromEntries(consent.map((c) => [c.channel, c]));
+
+  const { data: historyData } = useQuery({
+    queryKey: ['contact-consent-history', contactId],
+    queryFn: () => api.get(`/api/v1/contacts/${contactId}/consent/history`).then((r) => r.data.data ?? []),
+    enabled: showHistory,
+  });
+
+  const mutation = useMutation({
+    mutationFn: (vars: { channel: string; optedIn: boolean; notes?: string }) =>
+      api.post(`/api/v1/contacts/${contactId}/consent`, { ...vars, source: 'manual' }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['contact-consent', contactId] });
+      qc.invalidateQueries({ queryKey: ['contact-consent-history', contactId] });
+    },
+  });
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-800 flex gap-2">
+        <ShieldAlert className="w-4 h-4 shrink-0 mt-0.5" />
+        <span>WhatsApp requires explicit customer opt-in before any business-initiated message. Toggling a channel here records a new, timestamped consent event — it never overwrites history.</span>
+      </div>
+
+      {CONSENT_CHANNELS.map(({ key, label, icon: Icon }) => {
+        const state = stateByChannel[key];
+        const optedIn = state?.opted_in ?? false;
+        return (
+          <div key={key} className="bg-white border border-gray-100 rounded-xl p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <Icon className="w-4 h-4 text-gray-500" />
+                <div>
+                  <p className="text-sm font-medium text-gray-900">{label}</p>
+                  <p className="text-xs text-gray-400">
+                    {state
+                      ? `${optedIn ? 'Opted in' : 'Opted out'} · ${fmtRelative(state.consented_at)} · source: ${state.source}`
+                      : 'No consent recorded yet'}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => mutation.mutate({ channel: key, optedIn: !optedIn, notes: noteDraft[key] })}
+                disabled={mutation.isPending}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 disabled:opacity-50 ${optedIn ? 'bg-emerald-500' : 'bg-gray-200'}`}
+              >
+                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${optedIn ? 'translate-x-6' : 'translate-x-1'}`} />
+              </button>
+            </div>
+            <input
+              value={noteDraft[key] ?? ''}
+              onChange={(e) => setNoteDraft((prev) => ({ ...prev, [key]: e.target.value }))}
+              placeholder="Optional note (e.g. how consent was obtained)"
+              className="mt-2 w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-brand-300"
+            />
+          </div>
+        );
+      })}
+
+      <button
+        onClick={() => setShowHistory((v) => !v)}
+        className="text-xs text-brand-600 hover:text-brand-700 font-medium flex items-center gap-1"
+      >
+        <ShieldCheck className="w-3.5 h-3.5" />
+        {showHistory ? 'Hide' : 'View'} consent history
+      </button>
+
+      {showHistory && (
+        <div className="space-y-2">
+          {(historyData ?? []).length === 0 && (
+            <p className="text-xs text-gray-400 py-2">No consent events recorded yet.</p>
+          )}
+          {(historyData ?? []).map((h: any, i: number) => (
+            <div key={i} className="bg-gray-50 border border-gray-100 rounded-lg px-3 py-2 text-xs text-gray-600">
+              <span className={`font-medium ${h.opted_in ? 'text-emerald-700' : 'text-red-700'}`}>
+                {h.opted_in ? 'Opted in' : 'Opted out'}
+              </span>
+              {' — '}{h.channel} · {fmtRelative(h.consented_at)} · via {h.source}
+              {h.recorded_by_name && <> · by {h.recorded_by_name}</>}
+              {h.notes && <div className="text-gray-500 mt-0.5">"{h.notes}"</div>}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 const TABS = [
@@ -462,6 +571,7 @@ const TABS = [
   { key: 'deals',    label: 'Deals',      icon: TrendingUp   },
   { key: 'emails',   label: 'Emails',     icon: Mail         },
   { key: 'tickets',  label: 'Tickets',    icon: LifeBuoy     },
+  { key: 'consent',  label: 'Consent',    icon: ShieldCheck  },
 ] as const;
 
 export function ContactDetail() {
@@ -542,6 +652,12 @@ export function ContactDetail() {
           <span className={`inline-block mt-2 text-xs px-2 py-0.5 rounded-full font-medium capitalize ${STATUS_COLORS[contact.status] ?? 'bg-gray-100 text-gray-600'}`}>
             {contact.status}
           </span>
+          {contact.last_channel && (
+            <p className="text-xs text-gray-400 mt-2 flex items-center justify-center gap-1">
+              <PhoneCall className="w-3 h-3" />
+              Last reached via <span className="font-medium text-gray-600 capitalize">{contact.last_channel.replace('_', ' ')}</span>
+            </p>
+          )}
         </div>
 
         {/* Contact info */}
@@ -699,6 +815,7 @@ export function ContactDetail() {
           {tab === 'deals'    && <DealsTab    contactId={id!} />}
           {tab === 'emails'   && <EmailsTab   contactId={id!} />}
           {tab === 'tickets'  && <TicketsTab  contactId={id!} />}
+          {tab === 'consent'  && <ConsentTab  contactId={id!} />}
         </div>
       </div>
 

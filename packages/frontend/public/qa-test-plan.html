@@ -151,7 +151,7 @@ tbody tr:hover{background:#fafbff}
 <header>
   <div>
     <h1>AmanahCX — Manual Test Plan</h1>
-    <div class="sub">Platform: amanahcx.vercel.app &nbsp;·&nbsp; All demo passwords: Demo1234! &nbsp;·&nbsp; Results stored in Supabase &nbsp;·&nbsp; v2 (2026-07-11): +36 new tests — Messaging, Role Dashboards, Nav/Notifications, Contact channel benchmarking</div>
+    <div class="sub">Platform: amanahcx.vercel.app &nbsp;·&nbsp; All demo passwords: Demo1234! &nbsp;·&nbsp; Results stored in Supabase &nbsp;·&nbsp; v2 (2026-07-11): +41 new tests — Messaging, Role Dashboards, Nav/Notifications, Contact channel benchmarking, Routing manager-access fix</div>
   </div>
   <span class="sync-status sync-busy" id="sync-status">Connecting…</span>
 </header>
@@ -474,6 +474,23 @@ const TESTS = [
 {id:'CB-03',sec:'CB',sn:'Contacts — Omnichannel Benchmark',sub:'Preferred Channel',desc:'Check whether a contact has a "Preferred Contact Channel" field (email vs SMS vs WhatsApp)',exp:'Tickets have a preferred_channel field, but Contacts themselves do not persist one — logical question: should preferred channel live on the Contact so all future outreach defaults to it, matching HubSpot\'s "preferred communication channel" property?',crit:false,isNew:true},
 {id:'CB-04',sec:'CB',sn:'Contacts — Omnichannel Benchmark',sub:'Consent',desc:'Check whether creating a contact captures channel consent (opt-in for SMS/WhatsApp marketing)',exp:'No consent/opt-in tracking exists per channel today — flag as a compliance gap if this tenant will send marketing SMS/WhatsApp (comparable to Salesforce\'s per-channel consent fields)',crit:false,isNew:true},
 {id:'CB-05',sec:'CB',sn:'Contacts — Omnichannel Benchmark',sub:'Activity Timeline',desc:'Open a contact → check the activity timeline for channel history',exp:'Linked tickets and activities tabs exist, but there is no unified cross-channel timeline (email + SMS + WhatsApp + calls in one feed) — Zendesk and Intercom both show a single merged timeline; raise as a backlog item, not a defect',crit:false,isNew:true},
+
+// ── NEW BATCH — added 2026-07-11 (part 2): Routing & SLA manager-access fix ──
+{id:'RS-01',sec:'RS',sn:'Routing Settings — Manager Access',sub:'Access',desc:'Log in as Manager → open Routing & SLA settings page',exp:'Page loads; routing method radios are fully enabled (not greyed out)',crit:true,isNew:true},
+{id:'RS-02',sec:'RS',sn:'Routing Settings — Manager Access',sub:'Save — Routing Method',desc:'Manager selects "Manual Only" + sets Per-Agent Ticket Limit to 5 → Save Settings',exp:'PATCH /api/v1/settings/routing returns 200 (previously 403 for any save containing routing_method)',crit:true,isNew:true},
+{id:'RS-03',sec:'RS',sn:'Routing Settings — Manager Access',sub:'Persistence',desc:'Verify saved values directly in the tenant settings (routing_method, per_agent_ticket_limit) after the manager save',exp:'Both values persisted correctly — confirmed via direct DB check, not just optimistic UI state',crit:true,isNew:true},
+{id:'RS-04',sec:'RS',sn:'Routing Settings — Manager Access',sub:'No Regression — Admin',desc:'Log in as Tenant Admin → view the manager-saved values, then change routing method back to Smart Capacity Routing → Save',exp:'Admin sees the manager’s changes correctly, and admin’s own save still succeeds (200)',crit:true,isNew:true},
+{id:'RS-05',sec:'RS',sn:'Routing Settings — Manager Access',sub:'No Regression — Agent',desc:'Log in as Agent → check sidebar for a Routing & SLA link',exp:'No link shown — agents were never in the route’s allowed-role list and still are not (only super_admin/tenant_admin/manager)',crit:true,isNew:true},
+{id:'TA-04',sec:'TA',sn:'Tenant Admin — Modules',sub:'Education Sector Sidebar (root-caused)',desc:'Investigate why picking "Education" as sector did not produce an education-specific sidebar/module set',exp:'Root cause found: sector was never wired to module/feature provisioning — sidebar is driven purely by active_modules/entitled_features, which sector never touched. Confirmed not a crash, a missing feature.',crit:false,isNew:false},
+{id:'SP-01',sec:'SP',sn:'Sector Auto-Provisioning',sub:'Education tenant creation',desc:'POST /super-admin/tenants with sector:"education", no explicit modules/entitledFeatures',exp:'active_modules = [crm, ticketing, sales, emails], entitled_features = the 12 matching feature keys — auto-populated with zero manual toggling',crit:true,isNew:true},
+{id:'SP-02',sec:'SP',sn:'Sector Auto-Provisioning',sub:'Default sector ("other") unaffected',desc:'POST /super-admin/tenants with no sector specified (defaults to "other")',exp:'active_modules = [crm, ticketing] — matches prior default behavior, no regression for tenants without a specific sector',crit:true,isNew:true},
+{id:'SP-03',sec:'SP',sn:'Sector Auto-Provisioning',sub:'Manual override unions with sector defaults',desc:'POST /super-admin/tenants with sector:"banking" AND modules:["voice_bot"] explicitly requested',exp:'active_modules = [crm, ticketing, sales, analytics, voice_bot] — sector defaults + manual pick both present, nothing dropped',crit:true,isNew:true},
+{id:'SP-04',sec:'SP',sn:'Sector Auto-Provisioning',sub:'Post-creation adjustability',desc:'Confirm PATCH /tenants/:id/modules still works normally after auto-provisioning (Super Admin can add/remove modules afterward)',exp:'Existing PATCH endpoint untouched — auto-provisioning only affects the initial default at creation time',crit:false,isNew:true},
+{id:'CB-04',sec:'CB',sn:'Contacts — Omnichannel Benchmark',sub:'Per-channel consent tracking (WhatsApp compliance)',desc:'New contact_channel_consent table + Consent tab on Contact Detail: toggle WhatsApp/SMS/Email opt-in, add a note, save',exp:'POST /api/v1/contacts/:id/consent returns 201, new event recorded (never overwrites — full audit trail), UI toggle flips and shows "Opted in · just now · source: manual"',crit:true,isNew:true},
+{id:'CB-05',sec:'CB',sn:'Contacts — Omnichannel Benchmark',sub:'Consent — opt-out re-recording',desc:'Toggle a previously opted-in channel back off',exp:'New row inserted with opted_in:false — GET /consent shows the latest (opted-out) state, GET /consent/history still shows both events in order',crit:true,isNew:true},
+{id:'CB-06',sec:'CB',sn:'Contacts — Omnichannel Benchmark',sub:'Consent — tenant isolation',desc:'A manager from Tenant B requests GET /contacts/:id/consent for a contact belonging to Tenant A',exp:'Empty array returned (RLS silently scopes to own tenant) — no cross-tenant consent data leak',crit:true,isNew:true},
+{id:'CB-07',sec:'CB',sn:'Contacts — Omnichannel Benchmark',sub:'Consent — auto opt-in on ticket creation',desc:'Create a ticket with preferredChannel:whatsapp linked to a contact',exp:'A consent event is auto-recorded (opted_in:true, source:form, note referencing the ticket number) — customer choosing the channel IS the opt-in',crit:true,isNew:true},
+{id:'CB-08',sec:'CB',sn:'Contacts — Omnichannel Benchmark',sub:'Consent gate — outbound reply respects opt-out',desc:'Reply to a WhatsApp-preferred ticket while opted in, then opt the contact out and reply again',exp:'First reply dispatches via WhatsApp; after opt-out, replies produce NO WhatsApp attempt (falls back to email if reporter_email exists, else skips)',crit:true,isNew:true},
 ];
 
 const SECTIONS = [
@@ -497,8 +514,10 @@ const SECTIONS = [
   {code:'RD',name:'Role Dashboards — Interactivity'},
   {code:'NV',name:'Navigation & Notifications'},
   {code:'CB',name:'Contacts — Omnichannel Benchmark'},
+  {code:'RS',name:'Routing Settings — Manager Access'},
+  {code:'SP',name:'Sector Auto-Provisioning'},
 ];
-const NEW_SECTION_CODES = ['MS','RD','NV','CB'];
+const NEW_SECTION_CODES = ['MS','RD','NV','CB','RS','SP'];
 
 // ── State ────────────────────────────────────────────────────────────────────
 let activeSession = null;   // { id, session_date, session_name, tester_name }

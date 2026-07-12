@@ -126,14 +126,17 @@ export function webhookRoutes(db: DatabaseClient, _eventBus: EventBus) {
 
       const retryPolicy = (dl.retry_policy as any) ?? { maxRetries: 3, backoffMs: 1000 };
 
-      // Reset the existing row rather than inserting a duplicate
-      await db.query(
+      // Reset the existing row rather than inserting a duplicate. Uses
+      // withSuperAdmin (not the plain db.query()) — RLS on webhook_deliveries
+      // otherwise silently rejects the update since this connection has no
+      // tenant context set.
+      await db.withSuperAdmin((client) => client.query(
         `UPDATE webhook_deliveries
          SET attempts=0, succeeded=false, dead_lettered=false,
              last_error=NULL, next_attempt_at=NOW(), updated_at=NOW()
          WHERE id=$1`,
         [deliveryId],
-      );
+      ));
 
       return reply.send({ success: true, message: 'Delivery re-enqueued', deliveryId });
     });

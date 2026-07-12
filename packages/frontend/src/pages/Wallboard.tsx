@@ -21,7 +21,6 @@ interface AgentRow {
 
 interface QueueStat {
   queue_name: string;
-  department: string;
   open: number;
   assigned: number;
   pending: number;

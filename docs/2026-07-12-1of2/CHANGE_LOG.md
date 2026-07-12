@@ -3,50 +3,7 @@ _Most recent at top. Treated as the primary record for development tracking._
 
 ---
 
-## Change Log - 2026-07-12 (Live phone-test fixes — field capture round 1)
-
-### Context
-First live test of the production APK on a real Android phone (field.officer@demo.com). Check-in → remarks → complete verified working with real GPS. Three issues found and fixed:
-
-### Fixed
-**1. Lead save rejected in sector workspaces (found: "save failed" on phone)**
-- The demo (Banking) workspace requires Customer Type / Account Number / Account Type on every contact — impossible for a walk-in field lead. Quick-capture sources (`card_scan`, `voice`, `mobile`, `field`) are now exempt from sector-required fields; the requirement still applies when the lead is later converted/edited to a full customer. Matches Salesforce/Zoho quick-create behaviour.
-
-**2. Voice capture could get stuck on "listening" with no data**
-- The mic button turned red before the phone's recognizer confirmed it started; if the recognizer failed/ended silently, Stop did nothing. Stop now always resets immediately, and a failed start shows a clear "voice unavailable" message instead of hanging.
-
-**3. Card scan missed the person's name and mobile number**
-- Scan photo quality raised (0.6 → 0.8) and the AI instructions now explicitly hunt for the stylised name text and classify Pakistani mobile prefixes (03xx / +92 3xx, Cell/Mob/WhatsApp labels) into mobile vs landline.
-
-### Added
-- **New Lead + Task buttons on the My Tasks screen** (field officer's landing screen) — previously only reachable via the Dashboard tab.
-
-### Also
-- Password for field.officer@demo.com was rotated by a parallel session and reset back; test jobs re-seeded for live phone testing.
-## Change Log - 2026-07-12 (Push 2 of 2) — Login Investigation + Live Wallboard 500 Errors Fixed
-
-### Investigated
-
-**Daily login failures reported by user ("spinner that never stops")**
-- Full architecture test (GitHub → Railway → Vercel → Supabase) run live: created a throwaway account, logged in through the actual deployed Vercel site end-to-end — worked cleanly, no errors, correct dashboard load.
-- Confirmed API is genuinely hosted on Railway (not dependent on the user's laptop) and Vercel's deployed frontend correctly points at the Railway API URL (not localhost, not its own domain).
-- Confirmed CORS is correctly configured between Vercel and Railway.
-- Live-verified a real user login (manager account) while streaming Railway logs in real time — login itself succeeded with no errors.
-
-### Fixed
-
-**Live Wallboard — `agent-load` and `queue-stats` endpoints were 500ing on every call**
-- Found via live log streaming during login investigation: `column t.is_overdue does not exist` and `column tq.department does not exist` — both columns referenced in `packages/api/src/routes/analytics.ts` never existed in the schema at all (not recent drift — these were broken from the start).
-- `is_overdue` was never a stored column; "breached" must be computed as `sla_due_at IS NOT NULL AND sla_due_at < NOW()`. Fixed in both endpoints.
-- `ticket_queues.department` was never modeled (no department concept exists on queues) — dropped the field rather than inventing a fake data source. Matching unused field removed from the frontend `QueueStat` type (`packages/frontend/src/pages/Wallboard.tsx`).
-- Both endpoints are gated to `manager`/`tenant_admin`/`super_admin` — every manager who opened Live Wallboard hit this 500 error. Live-verified fixed: both now return correct `200 OK` data.
-- Not yet confirmed whether this was the root cause of the reported login-spinner issue specifically, or a separate pre-existing bug surfaced during the investigation — needs the user to reproduce the spinner again with live log streaming to confirm.
-
-### Housekeeping
-
-**Reset test password for all 73 existing users to a known value** for login diagnostics, at user's request. Real per-user passwords cannot be recovered (bcrypt one-way hashes) — this was necessary to test the actual login flow live.
-
-
+## Change Log - 2026-07-12 — Consent Tracking, Sector Auto-Provisioning, Webhook Pipeline Fix, Routing to Managers
 
 ### Added
 
@@ -84,27 +41,6 @@ First live test of the production APK on a real Android phone (field.officer@dem
 
 ### QA test plan
 - +14 new test cases this session (RS-01..05, TA-04 closure, SP-01..04, CB-04..08), all recorded as **pass** in the hosted QA test plan (Supabase-backed `qa-test-plan.html`).
-
----
-
-## Change Log - 2026-07-11 (Field Mobile App — recovery, cloud re-test, field-visit flow)
-
-### Recovered
-**Mobile app + field API work restored from git stash**
-- A parallel session had stashed all uncommitted mobile work (stash@{0}); restored surgically without touching newer web-CRM code: `activities.ts` (My Tasks `/mine`, GPS `/:id/checkin`, completion email + GPS on `/:id/complete`, parameterised activity list SQL), `contacts.ts` (`/scan-card` AI card scanner, `/parse-lead-text` voice-lead AI), `attachments.ts` registration in `server.ts`, and the entire `packages/mobile` diff (navigation-mount fix, cached-session restore, expo-location plugin, Vivid branding).
-
-### Added
-**Field-visit flow (mobile) — tested end-to-end against the cloud (Supabase) backend**
-- Field officer login → My Tasks (assigned activities only, To do / Done counters) → Job Details → GPS check-in → outcome remarks → Mark complete (confirmation dialog) → CRM updated with completion time, GPS location, and remarks; customer notification email fires automatically (currently blocked only by pending vividsns.com SendGrid DNS verification).
-- Cross-platform dialog helper `src/lib/dialog.ts` (RN `Alert` is a silent no-op on web preview).
-- Test account: `field.officer@demo.com` (agent, Sales) created in cloud DB; 3 sample field jobs seeded.
-- Attachments lazy table-create now tolerates hardened DB roles (skips DDL when table already exists).
-
-### Verified (8-test suite vs AmanahCX repo code)
-- Login, My Tasks, GPS check-in, complete-with-remarks, voice-lead AI, voice-task AI (+auto contact link, Urdu date phrases), AI card scan — all PASS. Deal-photo attachment verified earlier with a deal-owning account (officer correctly sees no deals — visibility scoping).
-
-### Known gaps (next up)
-- Manager field-team view (today's agenda / approached / locked), last-sync display (mobile + desktop), remarks mirroring to ticket timeline.
 
 ---
 

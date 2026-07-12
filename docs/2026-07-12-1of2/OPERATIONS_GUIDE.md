@@ -3,23 +3,7 @@
 _Plain-language reference for workspace managers, agents, and admins.
 Updated automatically on every release. Each section covers one feature: who uses it, what it does, and exactly how to operate it._
 
-Last updated: 2026-07-11
-
----
-
-## Field Mobile App (AmanahCX for Android)
-
-**Who uses it:** field sales officers, delivery/repair staff, and their managers.
-
-**What it does:** field staff carry the CRM in their pocket. They see only the work assigned to them, capture new leads on the spot, and close out customer visits — everything lands in the same CRM the office uses, instantly.
-
-**How to operate it:**
-1. **Log in** with your normal CRM email and password (workspace, email, password). You land on **My Tasks** — the jobs assigned to you, with To do and Done counters.
-2. **Open a job** to see the customer, due time, and notes. Buttons: **Call** the customer, **Navigate** (opens Google Maps), **Check in** (records your arrival location).
-3. **Finish a job:** type what was done in the remarks box and tap **Mark job complete**. You'll be asked to confirm. The CRM records the completion time, your location, and your remarks — and emails the customer a confirmation automatically.
-4. **Capture a lead** three ways: type it, **photograph a visiting card** (AI fills the form), or **speak it** (English, Urdu or Punjabi — AI sorts your words into name/company/phone). You always review and confirm before anything is saved.
-5. **Create a task by voice:** "Call Ahmed tomorrow at 3pm about the bulk order" — the app sets the type, due time, priority, and links the contact automatically. Confirm before saving.
-6. **No internet? Keep working.** Leads and tasks saved offline queue on the phone and push to the CRM automatically the moment a connection returns. The dashboard shows how many items are waiting to sync.
+Last updated: 2026-07-10
 
 ---
 
