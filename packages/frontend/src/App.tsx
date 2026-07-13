@@ -248,6 +248,14 @@ function Sidebar() {
               className={({ isActive }) => `flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm transition-all ${isActive ? 'text-white font-semibold' : 'text-white/60 hover:text-white hover:bg-white/10'}`}
               style={({ isActive }) => isActive ? { background: 'linear-gradient(135deg, rgba(41,171,226,0.25) 0%, rgba(77,139,60,0.15) 100%)', borderLeft: '2px solid #29ABE2' } : {}}
             ><Zap className="w-4 h-4 shrink-0" />Integrations</NavLink>
+            {/* Voice Bot — administrative configuration (name, voice, tone,
+                ticket rules); only when the workspace is licensed for it */}
+            {((tenant as any)?.active_modules ?? []).includes('voice_bot') && (
+              <NavLink to="/voice-bot"
+                className={({ isActive }) => `flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm transition-all ${isActive ? 'text-white font-semibold' : 'text-white/60 hover:text-white hover:bg-white/10'}`}
+                style={({ isActive }) => isActive ? { background: 'linear-gradient(135deg, rgba(41,171,226,0.25) 0%, rgba(77,139,60,0.15) 100%)', borderLeft: '2px solid #29ABE2' } : {}}
+              ><Bot className="w-4 h-4 shrink-0" />Voice Bot</NavLink>
+            )}
             <NavLink to="/settings"
               end
               className={({ isActive }) => `flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm transition-all ${isActive ? 'text-white font-semibold' : 'text-white/60 hover:text-white hover:bg-white/10'}`}
@@ -739,9 +747,12 @@ function AppLayout() {
           <Route path="/emails"            element={op(<Emails />)} />
           <Route path="/emails/analytics" element={op(<EmailAnalytics />)} />
           <Route path="/messages"        element={<TeamMessaging />} />
-          <Route path="/voice-bot"         element={op(<VoiceBotConfig />)} />
-          <Route path="/voice-bot/calls"   element={op(<VoiceBotCalls />)} />
-          <Route path="/voice-bot/tickets" element={op(<VoiceBotTickets />)} />
+          {/* Voice Bot pages are open to the tenant admin too — configuring
+              the bot is administrative work, and the calls/tickets APIs
+              already allow tenant_admin (no op() redirect here). */}
+          <Route path="/voice-bot"         element={<VoiceBotConfig />} />
+          <Route path="/voice-bot/calls"   element={<VoiceBotCalls />} />
+          <Route path="/voice-bot/tickets" element={<VoiceBotTickets />} />
           <Route path="/contacts/:id"      element={op(<ContactDetail />)} />
           <Route path="/activities"  element={op(<Activities />)} />
           <Route path="/analytics"   element={op(<Analytics />)} />
