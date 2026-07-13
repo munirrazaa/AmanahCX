@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { api } from '../services/api';
 import { useAuthStore } from '../store/auth.store';
+import { TestCallNadiaButton } from '../components/TestCallNadiaButton';
 
 function StatCard({ icon: Icon, label, value, sub, color, onClick }: {
   icon: any; label: string; value: string | number; sub?: string;
@@ -129,6 +130,7 @@ export function TenantAdminDashboard() {
             <span className="text-xs font-medium px-3 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-100 capitalize">
               {(tenant as any)?.plan ?? 'free'} plan
             </span>
+            {activeModules.includes('voice_bot') && <TestCallNadiaButton compact />}
             <button
               onClick={() => navigate('/settings/team')}
               className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white rounded-xl transition-all hover:opacity-90"

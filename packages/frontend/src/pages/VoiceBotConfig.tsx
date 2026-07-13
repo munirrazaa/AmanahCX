@@ -14,16 +14,16 @@
  *  • Live stats strip (total calls, tickets auto-created, avg duration)
  */
 
-import { useState, useRef } from 'react';
+import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
-  Bot, Phone, PhoneOff, Copy, CheckCircle2, ChevronRight, ExternalLink,
+  Bot, Phone, Copy, CheckCircle2, ChevronRight, ExternalLink,
   Settings2, Ticket, Zap, AlertCircle, Loader2, PhoneCall,
   Info, ToggleLeft, ToggleRight, ChevronDown, List,
 } from 'lucide-react';
 import { api } from '../services/api';
 import { useIsSuperAdmin } from '../hooks/useRole';
-import { Room, RoomEvent, Track } from 'livekit-client';
+import { TestCallNadiaButton } from '../components/TestCallNadiaButton';
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -246,91 +246,6 @@ function MinutesUsageCard({ usage, period, onPeriodChange }: { usage?: Usage; pe
             <div><p className="text-lg font-bold text-gray-900">{usage?.period.consumedMinutes.toFixed(0)}</p><p className="text-[10px] text-gray-500">Used ({usage?.period.label})</p></div>
           </div>
         </>
-      )}
-    </div>
-  );
-}
-
-// ── Test Call Nadia (browser) ───────────────────────────────────────────────
-
-function TestCallNadia() {
-  const [status, setStatus] = useState<'idle' | 'connecting' | 'live' | 'error'>('idle');
-  const [error, setError] = useState('');
-  const roomRef = useRef<Room | null>(null);
-  const elsRef = useRef<HTMLMediaElement[]>([]);
-
-  function cleanup() {
-    try { roomRef.current?.disconnect(); } catch { /* noop */ }
-    roomRef.current = null;
-    elsRef.current.forEach(el => { try { el.remove(); } catch { /* noop */ } });
-    elsRef.current = [];
-  }
-
-  async function start() {
-    setStatus('connecting');
-    setError('');
-    try {
-      const res = await api.post('/api/v1/voice-bot/test-call-browser', {});
-      const { url, token } = res.data.data;
-
-      const room = new Room({ adaptiveStream: true });
-      roomRef.current = room;
-
-      room.on(RoomEvent.TrackSubscribed, (track) => {
-        if (track.kind === Track.Kind.Audio) {
-          const el = track.attach();
-          el.autoplay = true;
-          (el as HTMLMediaElement).style.display = 'none';
-          document.body.appendChild(el);
-          elsRef.current.push(el as HTMLMediaElement);
-          (el as HTMLAudioElement).play?.().catch(() => { /* will play on gesture */ });
-        }
-      });
-      room.on(RoomEvent.Disconnected, () => { cleanup(); setStatus('idle'); });
-
-      await room.connect(url, token);
-      await room.localParticipant.setMicrophoneEnabled(true);
-      setStatus('live');
-    } catch (e: any) {
-      setError(e?.response?.data?.error?.message || e?.message || 'Could not start the call.');
-      setStatus('error');
-      cleanup();
-    }
-  }
-
-  function end() {
-    cleanup();
-    setStatus('idle');
-  }
-
-  return (
-    <div className="border-t border-gray-100 pt-4">
-      <div className="flex items-center gap-2 mb-2">
-        <Phone className="w-4 h-4 text-brand-400" />
-        <span className="text-sm text-gray-900 font-semibold">Test Call Nadia (Browser)</span>
-      </div>
-      <p className="text-xs text-gray-500 mb-3">
-        Talk to your configured bot right now, from this browser tab — no phone or SIP trunk needed. Uses your microphone.
-      </p>
-      {status === 'error' && (
-        <p className="text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2 mb-3">{error}</p>
-      )}
-      {(status === 'idle' || status === 'error') && (
-        <button onClick={start}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 transition-colors">
-          <Phone className="w-4 h-4" /> Call Nadia
-        </button>
-      )}
-      {status === 'connecting' && (
-        <button disabled className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium text-white bg-gray-400">
-          <Loader2 className="w-4 h-4 animate-spin" /> Connecting…
-        </button>
-      )}
-      {status === 'live' && (
-        <button onClick={end}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium text-white bg-red-600 hover:bg-red-700 transition-colors">
-          <PhoneOff className="w-4 h-4" /> End Call — Nadia is live
-        </button>
       )}
     </div>
   );
@@ -832,7 +747,7 @@ export function VoiceBotConfig() {
                       </div>
                     )}
 
-                    {selectedProvider === 'livekit' && <TestCallNadia />}
+                    {selectedProvider === 'livekit' && <TestCallNadiaButton />}
 
                     {selectedProvider === 'livekit' && isSuperAdmin && (
                       <div className="border-t border-gray-100 pt-4">
