@@ -272,6 +272,7 @@ function StepRow({
 
 function SlaModal({ policy, onClose }: { policy?: SlaPolicy; onClose: () => void }) {
   const qc = useQueryClient();
+  const [saveError, setSaveError] = useState('');
 
   const [form, setForm] = useState({
     name:               policy?.name                ?? '',
@@ -341,6 +342,10 @@ function SlaModal({ policy, onClose }: { policy?: SlaPolicy; onClose: () => void
       const { matchChannels, matchDepartments, matchTags, ...rest } = form;
       const payload = {
         ...rest,
+        // "All departments" is represented as '' in the <select> (empty option),
+        // but the backend enum only accepts sales/support/complaints or null —
+        // an empty string fails validation. Normalize here.
+        ticketType: rest.ticketType || null,
         reminderSchedule: schedule,
         businessHoursSchedule: bizHours,
         matchConditions: {
@@ -354,6 +359,11 @@ function SlaModal({ policy, onClose }: { policy?: SlaPolicy; onClose: () => void
         : api.post('/api/v1/tickets/sla-policies', payload);
     },
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['sla-policies'] }); onClose(); },
+    onError: (err: any) => {
+      setSaveError(err?.response?.data?.error?.message
+        || err?.response?.data?.error?.details?.[0]?.message
+        || 'Could not save this policy — please check the fields and try again.');
+    },
   });
 
   const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
@@ -613,16 +623,21 @@ function SlaModal({ policy, onClose }: { policy?: SlaPolicy; onClose: () => void
         </div>
 
         {/* Footer */}
-        <div className="px-6 pb-5 flex gap-2 border-t border-gray-100 pt-4">
+        <div className="px-6 pb-5 border-t border-gray-100 pt-4">
+          {saveError && (
+            <p className="text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2 mb-2">{saveError}</p>
+          )}
+          <div className="flex gap-2">
           <button onClick={onClose} className="flex-1 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50">Cancel</button>
           <button
-            onClick={() => mutation.mutate()}
+            onClick={() => { setSaveError(''); mutation.mutate(); }}
             disabled={!form.name || schedule.length === 0 || mutation.isPending}
             className="flex-1 py-2 bg-brand-600 text-white rounded-lg text-sm font-semibold hover:bg-brand-700 disabled:opacity-50 flex items-center justify-center gap-2"
           >
             {mutation.isPending && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
             {policy ? 'Save Changes' : 'Create Policy'}
           </button>
+          </div>
         </div>
       </div>
     </div>

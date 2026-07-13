@@ -583,8 +583,8 @@ function Sidebar() {
           </div>
         )}
 
-        {/* SLA Policies — policy_admin only (governance role) */}
-        {isPolicyAdmin && (
+        {/* SLA Policies — policy_admin (governance role), tenant admin, or manager */}
+        {(isPolicyAdmin || isTenantAdmin || isManager) && (
           <NavLink to="/tickets/sla"
             className={({ isActive }) =>
               `flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm transition-all ${
@@ -743,7 +743,9 @@ function AppLayout() {
           {/* Tickets: tenant admin gets read-only observer access (backend enforces OBSERVER_ONLY on writes) */}
           <Route path="/tickets"         element={<Tickets />} />
           <Route path="/tickets/queues"  element={op(<TicketQueues />)} />
-          <Route path="/tickets/sla"     element={op(<TicketSla />)} />
+          {/* SLA policy configuration is settings work (like Voice Bot config), not
+              operational ticket data — tenant admins and managers both need it. */}
+          <Route path="/tickets/sla"     element={<TicketSla />} />
           <Route path="/emails"            element={op(<Emails />)} />
           <Route path="/emails/analytics" element={op(<EmailAnalytics />)} />
           <Route path="/messages"        element={<TeamMessaging />} />

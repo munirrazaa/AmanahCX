@@ -98,7 +98,7 @@ export function useCan() {
     manageWorkspace: rank >= ROLE_RANK.tenant_admin,
     /** Create / revoke API keys and webhooks */
     manageIntegrations: rank >= ROLE_RANK.manager,
-    manageSla: user?.role === 'policy_admin',
+    manageSla: user?.role === 'policy_admin' || rank >= ROLE_RANK.manager,
     /** View analytics and reports */
     viewAnalytics: rank >= ROLE_RANK.agent,
     /** Manage all workspaces on the platform */

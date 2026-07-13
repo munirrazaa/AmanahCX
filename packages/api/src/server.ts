@@ -326,8 +326,12 @@ async function buildServer() {
     // Tenant admin has READ-ONLY observer access to tickets — all write operations are blocked
     // at the route level, except hard-deleting closed tickets (DELETE), which the route handler
     // itself further restricts to closed-status tickets only.
+    // SLA policy configuration is exempt: it's settings work (response/resolution targets,
+    // escalation schedule), not live ticket data — same reasoning as the Voice Bot exemption
+    // above. The route itself gates writes to policy_admin/tenant_admin/manager already.
     if (
       req.url.startsWith('/api/v1/tickets') &&
+      !req.url.startsWith('/api/v1/tickets/sla-policies') &&
       (req.user as any)?.role === 'tenant_admin' &&
       req.method !== 'GET' &&
       req.method !== 'DELETE'
