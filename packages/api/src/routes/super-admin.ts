@@ -453,6 +453,31 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
       const licensedModules = Array.from(new Set(['crm', ...body.modules]));
 
       await db.withSuperAdmin(async (client) => {
+        // Keep entitled_features in sync with the licensed modules — API
+        // routes gate via requireEntitlement(feature), so licensing a module
+        // without granting its features would show it in nav but 403 on use.
+        // Rule: drop features of unlicensed modules; grant the FULL feature
+        // set of any newly-licensed module. Legacy tenants with an empty
+        // entitled_features list stay empty (middleware allows everything
+        // for them, nothing to sync).
+        const [cur] = (await client.query(
+          `SELECT active_modules, entitled_features FROM tenants WHERE id = $1`, [id],
+        )).rows;
+        if (cur && Array.isArray(cur.entitled_features) && cur.entitled_features.length > 0) {
+          const prevModules: string[] = cur.active_modules ?? [];
+          const kept = (cur.entitled_features as string[]).filter((f) =>
+            licensedModules.includes(f.split('.')[0]));
+          const newlyLicensed = licensedModules.filter((m) => !prevModules.includes(m));
+          const granted = MODULE_CATALOG
+            .filter((m) => newlyLicensed.includes(m.key))
+            .flatMap((m) => m.features.map((f) => f.key));
+          const nextFeatures = Array.from(new Set([...kept, ...granted]));
+          await client.query(
+            `UPDATE tenants SET entitled_features = $1 WHERE id = $2`,
+            [JSON.stringify(nextFeatures), id],
+          );
+        }
+
         // Update licensed modules
         await client.query(
           `UPDATE tenants SET active_modules = $1, updated_at = NOW() WHERE id = $2`,

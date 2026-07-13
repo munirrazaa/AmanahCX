@@ -69,12 +69,17 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 // Full module catalog — keep in sync with MODULE_CATALOG in super-admin.ts
+// Must stay in sync with MODULE_CATALOG in packages/api/src/routes/super-admin.ts —
+// ticketing and voice_bot were missing here for a while, which made them
+// impossible to license from this screen at all (found 2026-07-13).
 const ALL_MODULES: Array<{ key: string; label: string; description: string; always?: boolean; icon: string }> = [
-  { key: 'crm',          label: 'Core CRM',          icon: '🏢', description: 'Contacts, companies, deals, activities and analytics.',        always: true  },
-  { key: 'emails',       label: 'Email Inbox',        icon: '📧', description: 'Shared team email inbox with assignment and SLA tracking.'              },
-  { key: 'integrations', label: 'Integrations',       icon: '🔌', description: 'SMS gateways, webhooks, Zapier/Make and API bridges.'                  },
-  { key: 'analytics',    label: 'Advanced Analytics', icon: '📊', description: 'Cross-module reports, heatmaps and performance dashboards.'             },
-  { key: 'sales',        label: 'Sales Module',       icon: '💼', description: 'Sales pipeline, invoicing, payments and forecasting.'                    },
+  { key: 'crm',          label: 'Core CRM',            icon: '🏢', description: 'Contacts, companies, deals, activities and analytics.',        always: true  },
+  { key: 'ticketing',    label: 'Ticketing & Support', icon: '🎫', description: 'Multi-department helpdesk with SLA timers, queues, routing and CSAT.'   },
+  { key: 'voice_bot',    label: 'Voice Bot',           icon: '🎙️', description: 'AI voice agent over SIP — self-hosted or Retell AI / Vapi / Bland.ai.'  },
+  { key: 'emails',       label: 'Email Inbox',         icon: '📧', description: 'Shared team email inbox with assignment and SLA tracking.'              },
+  { key: 'integrations', label: 'Integrations',        icon: '🔌', description: 'SMS gateways, webhooks, Zapier/Make and API bridges.'                  },
+  { key: 'analytics',    label: 'Advanced Analytics',  icon: '📊', description: 'Cross-module reports, heatmaps and performance dashboards.'             },
+  { key: 'sales',        label: 'Sales Module',        icon: '💼', description: 'Sales pipeline, invoicing, payments and forecasting.'                    },
 ];
 
 // ── Pricing plan presets ─────────────────────────────────────────────────────
@@ -3309,12 +3314,11 @@ export function SuperAdmin() {
                   <th className="text-left px-4 py-3 text-xs font-semibold text-gray-400">Plan</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-gray-400">Status</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-gray-400">Modules</th>
+                  {/* Only user count — a workspace's contacts/deals are the
+                      tenant's own business data, not the platform operator's
+                      concern (removed 2026-07-13 per owner). */}
                   <th className="text-right px-4 py-3 text-xs font-semibold text-gray-400">
-                    <span className="flex items-center justify-end gap-3">
-                      <span className="flex items-center gap-1"><Users className="w-3 h-3" />Users</span>
-                      <span className="flex items-center gap-1"><Users className="w-3 h-3" />Contacts</span>
-                      <span className="flex items-center gap-1"><TrendingUp className="w-3 h-3" />Deals</span>
-                    </span>
+                    <span className="flex items-center justify-end gap-1"><Users className="w-3 h-3" />Users</span>
                   </th>
                   <th className="w-10 px-4 py-3" />
                 </tr>
@@ -3344,11 +3348,7 @@ export function SuperAdmin() {
                       </div>
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <span className="inline-flex gap-5 text-sm text-gray-600">
-                        <span className="font-medium">{t.user_count ?? 0}</span>
-                        <span className="font-medium">{t.contact_count ?? 0}</span>
-                        <span className="font-medium">{t.open_deals ?? 0}</span>
-                      </span>
+                      <span className="text-sm text-gray-600 font-medium">{t.user_count ?? 0}</span>
                     </td>
                     <td className="px-4 py-3 relative">
                       <button onClick={() => setOpenActions(openActions === t.id ? null : t.id)}
