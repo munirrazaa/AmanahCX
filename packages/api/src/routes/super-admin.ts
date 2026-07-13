@@ -609,6 +609,95 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
     // ── Platform Roles (for sub-admins) ──────────────────────────────────────
 
     // GET /super-admin/platform-roles
+    // ── Voice bot minutes — allocation, top-up, and cross-tenant usage overview ──
+
+    fastify.get('/tenants/:id/voice-bot-usage', async (req, reply) => {
+      const { id } = req.params as { id: string };
+      const usage = await db.withSuperAdmin(async (client) => {
+        const quota = await client.query(`SELECT minutes_allocated FROM voice_bot_quotas WHERE tenant_id = $1`, [id]);
+        const consumed = await client.query(
+          `SELECT COALESCE(SUM(duration_seconds), 0) AS total_seconds, COUNT(*) AS call_count FROM voice_bot_calls WHERE tenant_id = $1`,
+          [id],
+        );
+        const topups = await client.query(
+          `SELECT t.id, t.minutes_added, t.note, t.created_at, u.name AS created_by_name
+             FROM voice_bot_minute_topups t LEFT JOIN users u ON u.id = t.created_by
+            WHERE t.tenant_id = $1 ORDER BY t.created_at DESC LIMIT 20`,
+          [id],
+        );
+        return { quota: quota.rows[0], consumed: consumed.rows[0], topups: topups.rows };
+      });
+      const allocated = Number(usage.quota?.minutes_allocated ?? 0);
+      const consumedMinutes = Number(usage.consumed.total_seconds) / 60;
+      return reply.send({
+        success: true,
+        data: {
+          allocatedMinutes: allocated,
+          consumedMinutes: Number(consumedMinutes.toFixed(2)),
+          remainingMinutes: Number((allocated - consumedMinutes).toFixed(2)),
+          callCount: Number(usage.consumed.call_count),
+          topups: usage.topups,
+        },
+      });
+    });
+
+    fastify.post('/tenants/:id/voice-bot-minutes', async (req, reply) => {
+      const { id } = req.params as { id: string };
+      const body = z.object({
+        minutesToAdd: z.number().positive(),
+        note: z.string().optional(),
+      }).parse(req.body);
+
+      const [quota] = await db.withSuperAdmin(async (client) => {
+        await client.query(
+          `INSERT INTO voice_bot_minute_topups (tenant_id, minutes_added, note, created_by)
+           VALUES ($1, $2, $3, $4)`,
+          [id, body.minutesToAdd, body.note ?? null, req.user.sub],
+        );
+        const r = await client.query(
+          `INSERT INTO voice_bot_quotas (tenant_id, minutes_allocated)
+           VALUES ($1, $2)
+           ON CONFLICT (tenant_id) DO UPDATE SET
+             minutes_allocated = voice_bot_quotas.minutes_allocated + EXCLUDED.minutes_allocated,
+             updated_at = NOW()
+           RETURNING *`,
+          [id, body.minutesToAdd],
+        );
+        return r.rows;
+      });
+      return reply.send({ success: true, data: quota });
+    });
+
+    // All-tenants overview (allocated vs consumed) for the super admin dashboard
+    fastify.get('/voice-bot-usage', async (_req, reply) => {
+      const rows = await db.withSuperAdmin(async (client) => {
+        const r = await client.query(
+          `SELECT t.id AS tenant_id, t.name AS tenant_name,
+                  COALESCE(q.minutes_allocated, 0) AS allocated_minutes,
+                  COALESCE(SUM(vbc.duration_seconds), 0) / 60.0 AS consumed_minutes,
+                  COUNT(vbc.id) AS call_count
+             FROM tenants t
+             LEFT JOIN voice_bot_quotas q ON q.tenant_id = t.id
+             LEFT JOIN voice_bot_calls vbc ON vbc.tenant_id = t.id
+            WHERE t.status != 'deleted'
+            GROUP BY t.id, t.name, q.minutes_allocated
+            ORDER BY consumed_minutes DESC`,
+        );
+        return r.rows;
+      });
+      return reply.send({
+        success: true,
+        data: rows.map((r: any) => ({
+          tenantId: r.tenant_id,
+          tenantName: r.tenant_name,
+          allocatedMinutes: Number(r.allocated_minutes),
+          consumedMinutes: Number(Number(r.consumed_minutes).toFixed(2)),
+          remainingMinutes: Number((Number(r.allocated_minutes) - Number(r.consumed_minutes)).toFixed(2)),
+          callCount: Number(r.call_count),
+        })),
+      });
+    });
+
     fastify.get('/platform-roles', async (_req, reply) => {
       const rows = await db.withSuperAdmin(async (client) => {
         const r = await client.query(

@@ -79,6 +79,13 @@ interface Stats {
   };
 }
 
+interface Usage {
+  allocatedMinutes: number;
+  consumedMinutesAllTime: number;
+  remainingMinutes: number;
+  period: { label: string; consumedMinutes: number; callCount: number };
+}
+
 // ── Provider definitions ──────────────────────────────────────────────────
 
 const PROVIDERS = [
@@ -198,6 +205,47 @@ function StatsStrip({ stats }: { stats?: Stats }) {
   );
 }
 
+// ── Minutes usage card ───────────────────────────────────────────────────
+
+function MinutesUsageCard({ usage, period, onPeriodChange }: { usage?: Usage; period: string; onPeriodChange: (p: string) => void }) {
+  const allocated = usage?.allocatedMinutes ?? 0;
+  const remaining = usage?.remainingMinutes ?? 0;
+  const pctUsed = allocated > 0 ? Math.min(100, Math.round(((allocated - remaining) / allocated) * 100)) : 0;
+  const lowBalance = allocated > 0 && remaining <= allocated * 0.1;
+
+  return (
+    <div className="mb-6 rounded-2xl border border-white/10 p-5" style={{ background: 'rgba(255,255,255,0.03)' }}>
+      <div className="flex items-center justify-between mb-4">
+        <span className="text-sm text-white font-semibold">Voice Bot Minutes</span>
+        <select value={period} onChange={e => onPeriodChange(e.target.value)}
+          className="bg-gray-900/60 border border-gray-700/60 text-gray-300 rounded-lg px-2 py-1 text-xs outline-none">
+          <option value="today">Today</option>
+          <option value="7d">Last 7 days</option>
+          <option value="30d">Last 30 days</option>
+          <option value="month">This month</option>
+          <option value="all">All time</option>
+        </select>
+      </div>
+      {allocated === 0 ? (
+        <p className="text-xs text-gray-500">No minutes have been allocated to this workspace yet — contact your platform provider.</p>
+      ) : (
+        <>
+          <div className="w-full h-2 rounded-full bg-gray-800 overflow-hidden mb-3">
+            <div className={`h-full rounded-full ${lowBalance ? 'bg-red-500' : 'bg-brand-400'}`} style={{ width: `${pctUsed}%` }} />
+          </div>
+          {lowBalance && <p className="text-xs text-red-400 mb-3">Running low — {remaining.toFixed(0)} minute(s) remaining. Calls will stop routing to the bot once minutes run out.</p>}
+          <div className="grid grid-cols-4 gap-3 text-center">
+            <div><p className="text-lg font-bold text-white">{allocated.toFixed(0)}</p><p className="text-[10px] text-gray-500">Allocated</p></div>
+            <div><p className="text-lg font-bold text-white">{usage?.consumedMinutesAllTime.toFixed(0)}</p><p className="text-[10px] text-gray-500">Used (all time)</p></div>
+            <div><p className={`text-lg font-bold ${lowBalance ? 'text-red-400' : 'text-brand-400'}`}>{remaining.toFixed(0)}</p><p className="text-[10px] text-gray-500">Remaining</p></div>
+            <div><p className="text-lg font-bold text-white">{usage?.period.consumedMinutes.toFixed(0)}</p><p className="text-[10px] text-gray-500">Used ({usage?.period.label})</p></div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────
 
 export function VoiceBotConfig() {
@@ -224,6 +272,13 @@ export function VoiceBotConfig() {
     queryKey: ['voice-bot-stats'],
     queryFn: async () => { const r = await api.get('/api/v1/voice-bot/stats'); return r.data.data; },
     staleTime: 60_000,
+  });
+
+  const [usagePeriod, setUsagePeriod] = useState('30d');
+  const { data: usage } = useQuery<Usage>({
+    queryKey: ['voice-bot-usage', usagePeriod],
+    queryFn: async () => { const r = await api.get(`/api/v1/voice-bot/usage?period=${usagePeriod}`); return r.data.data; },
+    staleTime: 30_000,
   });
 
   const { data: queues } = useQuery<TicketQueue[]>({
@@ -363,6 +418,9 @@ export function VoiceBotConfig() {
 
         {/* Stats strip */}
         <StatsStrip stats={stats} />
+
+        {/* Minutes usage */}
+        <MinutesUsageCard usage={usage} period={usagePeriod} onPeriodChange={setUsagePeriod} />
 
         {/* How it works banner */}
         <div className="mb-6 px-5 py-4 rounded-2xl border border-brand-700/30"

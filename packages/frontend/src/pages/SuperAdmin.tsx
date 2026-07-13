@@ -14,7 +14,7 @@ import {
   Package, Ban, Play, KeyRound, Trash2, RefreshCw, FileText,
   BarChart2, Receipt, ClipboardList, Edit2, Eye, EyeOff,
   Lock, Calendar, ChevronDown, ChevronRight, Download, ShoppingCart,
-  Hourglass, BadgeCheck, XCircle, CheckCircle,
+  Hourglass, BadgeCheck, XCircle, CheckCircle, Phone,
 } from 'lucide-react';
 import { api } from '../services/api';
 import { useIsSuperAdmin } from '../hooks/useRole';
@@ -919,6 +919,7 @@ function TenantActions({ tenant, onClose }: { tenant: any; onClose: () => void }
   const [showUsers, setShowUsers] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [showResetResult, setShowResetResult] = useState(false);
+  const [showVoiceBotMinutes, setShowVoiceBotMinutes] = useState(false);
 
   return (
     // Click-away overlay and the menu are SIBLINGS: the menu anchors to the
@@ -1064,6 +1065,14 @@ function TenantActions({ tenant, onClose }: { tenant: any; onClose: () => void }
           {showUsers ? <ChevronDown className="w-3 h-3 ml-auto text-gray-400" /> : <ChevronRight className="w-3 h-3 ml-auto text-gray-400" />}
         </button>
 
+        {/* Voice Bot minutes — only relevant once the tenant is licensed for it */}
+        {(tenant.active_modules ?? []).includes('voice_bot') && (
+          <button onClick={() => setShowVoiceBotMinutes(true)}
+            className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-gray-700 hover:bg-gray-50">
+            <Phone className="w-4 h-4 text-gray-400" /> Voice Bot Minutes
+          </button>
+        )}
+
         {/* Status actions */}
         <div className="border-t border-gray-50 mt-1 pt-1">
           {tenant.status !== 'suspended' ? (
@@ -1106,6 +1115,97 @@ function TenantActions({ tenant, onClose }: { tenant: any; onClose: () => void }
       {showUsers && (
         <TenantUsersModal tenant={tenant} onClose={() => { setShowUsers(false); onClose(); }} />
       )}
+      {showVoiceBotMinutes && (
+        <VoiceBotMinutesModal tenant={tenant} onClose={() => { setShowVoiceBotMinutes(false); onClose(); }} />
+      )}
+    </div>
+  );
+}
+
+// ── Voice Bot Minutes Modal ─────────────────────────────────────────────────
+function VoiceBotMinutesModal({ tenant, onClose }: { tenant: any; onClose: () => void }) {
+  const [minutesToAdd, setMinutesToAdd] = useState('');
+  const [note, setNote] = useState('');
+
+  const { data: usage, isLoading, refetch } = useQuery<{
+    allocatedMinutes: number; consumedMinutes: number; remainingMinutes: number; callCount: number;
+    topups: Array<{ id: string; minutes_added: number; note: string | null; created_at: string; created_by_name: string | null }>;
+  }>({
+    queryKey: ['sa-voice-bot-usage', tenant.id],
+    queryFn: () => api.get(`/super-admin/tenants/${tenant.id}/voice-bot-usage`).then(r => r.data.data),
+  });
+
+  const topUpMutation = useMutation({
+    mutationFn: () => api.post(`/super-admin/tenants/${tenant.id}/voice-bot-minutes`, {
+      minutesToAdd: Number(minutesToAdd),
+      note: note || undefined,
+    }),
+    onSuccess: () => { refetch(); setMinutesToAdd(''); setNote(''); },
+  });
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 flex flex-col" style={{ maxHeight: '85vh' }}>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 shrink-0">
+          <div>
+            <h3 className="text-sm font-semibold text-gray-900">Voice Bot Minutes — {tenant.name}</h3>
+            <p className="text-xs text-gray-400 font-mono">{tenant.slug}</p>
+          </div>
+          <button onClick={onClose}><X className="w-4 h-4 text-gray-400" /></button>
+        </div>
+        <div className="overflow-y-auto flex-1 p-6 space-y-5">
+          {isLoading ? (
+            <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-gray-400" /></div>
+          ) : (
+            <>
+              <div className="grid grid-cols-3 gap-3 text-center">
+                <div className="bg-gray-50 rounded-xl py-3">
+                  <p className="text-lg font-bold text-gray-900">{usage?.allocatedMinutes.toFixed(0) ?? 0}</p>
+                  <p className="text-[10px] text-gray-400">Allocated</p>
+                </div>
+                <div className="bg-gray-50 rounded-xl py-3">
+                  <p className="text-lg font-bold text-gray-900">{usage?.consumedMinutes.toFixed(0) ?? 0}</p>
+                  <p className="text-[10px] text-gray-400">Consumed</p>
+                </div>
+                <div className={`rounded-xl py-3 ${(usage?.remainingMinutes ?? 0) <= 0 ? 'bg-red-50' : 'bg-brand-50'}`}>
+                  <p className={`text-lg font-bold ${(usage?.remainingMinutes ?? 0) <= 0 ? 'text-red-600' : 'text-brand-600'}`}>{usage?.remainingMinutes.toFixed(0) ?? 0}</p>
+                  <p className="text-[10px] text-gray-400">Remaining</p>
+                </div>
+              </div>
+
+              <div className="border border-gray-100 rounded-xl p-4">
+                <p className="text-xs font-semibold text-gray-700 mb-2">Add Minutes</p>
+                <div className="flex gap-2 mb-2">
+                  <input type="number" min="1" placeholder="e.g. 1000" value={minutesToAdd}
+                    onChange={e => setMinutesToAdd(e.target.value)}
+                    className="w-28 border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs outline-none focus:border-brand-400" />
+                  <input type="text" placeholder="Note (optional, e.g. invoice #)" value={note}
+                    onChange={e => setNote(e.target.value)}
+                    className="flex-1 border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs outline-none focus:border-brand-400" />
+                  <button onClick={() => topUpMutation.mutate()}
+                    disabled={!minutesToAdd || Number(minutesToAdd) <= 0 || topUpMutation.isPending}
+                    className="px-3 py-1.5 bg-brand-600 text-white text-xs rounded-lg hover:bg-brand-700 disabled:opacity-40 whitespace-nowrap">
+                    {topUpMutation.isPending ? 'Adding…' : 'Top Up'}
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <p className="text-xs font-semibold text-gray-700 mb-2">Top-Up History</p>
+                <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                  {(usage?.topups ?? []).length === 0 && <p className="text-[11px] text-gray-400">No top-ups recorded yet.</p>}
+                  {usage?.topups.map(t => (
+                    <div key={t.id} className="flex items-center justify-between text-[11px] bg-gray-50 rounded-lg px-3 py-1.5">
+                      <span className="text-gray-700">+{Number(t.minutes_added).toFixed(0)} min {t.note ? `— ${t.note}` : ''}</span>
+                      <span className="text-gray-400">{new Date(t.created_at).toLocaleDateString('en-GB')}{t.created_by_name ? ` · ${t.created_by_name}` : ''}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

@@ -1269,6 +1269,64 @@ export function voiceBotRoutes(db: DatabaseClient, eventBus: EventBus) {
       return reply.send({ success: true, data: stats });
     });
 
+    // ── Minutes usage — allocated (from super admin) vs consumed (from real calls) ──
+    fastify.get('/usage', { preHandler: requireScope('activities:read') }, async (req, reply) => {
+      const { period } = req.query as { period?: 'today' | '7d' | '30d' | 'month' | 'all' };
+      const now = new Date();
+      let fromDate: Date;
+      switch (period) {
+        case 'today': fromDate = new Date(now.getFullYear(), now.getMonth(), now.getDate()); break;
+        case '7d':    fromDate = new Date(now.getTime() - 7  * 86_400_000); break;
+        case 'month': fromDate = new Date(now.getFullYear(), now.getMonth(), 1); break;
+        case 'all':   fromDate = new Date(0); break;
+        case '30d':
+        default:      fromDate = new Date(now.getTime() - 30 * 86_400_000); break;
+      }
+
+      const usage = await db.withTenant(req.tenant.id, async (c) => {
+        const quota = await c.query(
+          `SELECT minutes_allocated FROM voice_bot_quotas WHERE tenant_id = $1`,
+          [req.tenant.id],
+        );
+        const consumed = await c.query(
+          `SELECT COALESCE(SUM(duration_seconds), 0) AS total_seconds, COUNT(*) AS call_count
+             FROM voice_bot_calls WHERE tenant_id = $1 AND created_at >= $2`,
+          [req.tenant.id, fromDate.toISOString()],
+        );
+        const consumedAllTime = await c.query(
+          `SELECT COALESCE(SUM(duration_seconds), 0) AS total_seconds
+             FROM voice_bot_calls WHERE tenant_id = $1`,
+          [req.tenant.id],
+        );
+        const daily = await c.query(
+          `SELECT DATE(created_at) AS date, COALESCE(SUM(duration_seconds), 0) / 60.0 AS minutes
+             FROM voice_bot_calls WHERE tenant_id = $1 AND created_at >= $2
+             GROUP BY DATE(created_at) ORDER BY date`,
+          [req.tenant.id, fromDate.toISOString()],
+        );
+        return { quota: quota.rows[0], consumed: consumed.rows[0], consumedAllTime: consumedAllTime.rows[0], daily: daily.rows };
+      });
+
+      const allocated = Number(usage.quota?.minutes_allocated ?? 0);
+      const consumedAllTimeMinutes = Number(usage.consumedAllTime.total_seconds) / 60;
+      const remaining = allocated - consumedAllTimeMinutes;
+
+      return reply.send({
+        success: true,
+        data: {
+          allocatedMinutes: allocated,
+          consumedMinutesAllTime: Number(consumedAllTimeMinutes.toFixed(2)),
+          remainingMinutes: Number(remaining.toFixed(2)),
+          period: {
+            label: period ?? '30d',
+            consumedMinutes: Number((Number(usage.consumed.total_seconds) / 60).toFixed(2)),
+            callCount: Number(usage.consumed.call_count),
+          },
+          daily: usage.daily.map((d: any) => ({ date: d.date, minutes: Number(Number(d.minutes).toFixed(2)) })),
+        },
+      });
+    });
+
     // ── Initiate a test call (Vapi / Retell) ───────────────────────────
 
     fastify.post('/test-call', { preHandler: requireRole('tenant_admin', 'super_admin') }, async (req, reply) => {
