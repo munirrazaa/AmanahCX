@@ -1,9 +1,10 @@
 /**
- * Tickets — Manual ticket dashboard
+ * Tickets — unified ticket queue (all channels: manual, voice_bot, email, etc.)
  *
- * Shows only channel = 'manual' tickets.
- * Voice-bot auto-created tickets have their own page (VoiceTickets).
+ * Was channel='manual'-only until 2026-07-13 — voice-bot tickets had no
+ * actionable page at all (VoiceBotTickets is read-only, no accept/claim).
  *
+
  * Layout:
  *  ┌─────────────────────────────────────────────────┐
  *  │ 6 KPI cards: created / pending / within-TAT /   │
@@ -1746,8 +1747,16 @@ export function Tickets() {
   }
 
   // Derive API params
+  // NOTE: previously hardcoded channel: 'manual', with voice-bot tickets only
+  // visible on a separate read-only page (VoiceBotTickets — no accept/claim
+  // action there at all). That meant a voice-bot ticket had nowhere an agent
+  // could actually work it, and the stats strip above (unfiltered by
+  // channel) never matched what showed in the list below — found 2026-07-13
+  // testing the voice bot end-to-end. Every real helpdesk (Zendesk,
+  // Freshdesk) unifies all channels into one working queue, with channel as
+  // a filter/badge rather than a hard partition — this now matches that.
   const params = useMemo(() => {
-    const p: Record<string, string> = { pageSize: '50', channel: 'manual' };
+    const p: Record<string, string> = { pageSize: '50' };
     if (tab !== 'all') p.status = tab;
     if (search)   p.search   = search;
     if (priority) p.priority = priority;

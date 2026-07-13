@@ -494,41 +494,45 @@ async function createComplaintFromStructured(
     const subject = (s.subject || s.description || 'Voice complaint').slice(0, 120);
     const description = s.description || s.subject || '';
 
-    const [contact] = await db.withSuperAdmin(async (c) => {
-      if (!s.reporterPhone) return [];
-      const r = await c.query(
-        `SELECT id FROM contacts WHERE tenant_id=$1 AND phone ILIKE $2 LIMIT 1`,
-        [tenantId, `%${s.reporterPhone.replace(/\D/g, '').slice(-10)}%`],
-      );
-      return r.rows;
-    });
-
-    const [{ next_val }] = await db.withSuperAdmin(async (c) =>
-      (await c.query(
-        `INSERT INTO ticket_counters (tenant_id, next_val) VALUES ($1, 2)
-         ON CONFLICT (tenant_id) DO UPDATE SET next_val = ticket_counters.next_val + 1
-         RETURNING next_val`, [tenantId])).rows);
+    // These five lookups/inserts are mutually independent — none needs
+    // another's result — so run them concurrently instead of one at a time.
+    // Each `db.withSuperAdmin` round-trips to a REMOTE (Supabase) database;
+    // sequentially that was 5 of the 7 total round-trips in this function,
+    // the dominant cost in the ~5s+ ticket-creation delay reported live
+    // 2026-07-13. Cuts this function from 7 sequential round-trips to 3.
+    const [[contact], [{ next_val }], [queueRow], [slaRow], [botCall]] = await Promise.all([
+      db.withSuperAdmin(async (c) => {
+        if (!s.reporterPhone) return [];
+        const r = await c.query(
+          `SELECT id FROM contacts WHERE tenant_id=$1 AND phone ILIKE $2 LIMIT 1`,
+          [tenantId, `%${s.reporterPhone.replace(/\D/g, '').slice(-10)}%`],
+        );
+        return r.rows;
+      }),
+      db.withSuperAdmin(async (c) =>
+        (await c.query(
+          `INSERT INTO ticket_counters (tenant_id, next_val) VALUES ($1, 2)
+           ON CONFLICT (tenant_id) DO UPDATE SET next_val = ticket_counters.next_val + 1
+           RETURNING next_val`, [tenantId])).rows),
+      db.withSuperAdmin(async (c) =>
+        (await c.query(`SELECT id FROM ticket_queues WHERE tenant_id=$1 AND is_default=true LIMIT 1`, [tenantId])).rows),
+      db.withSuperAdmin(async (c) =>
+        (await c.query(`SELECT id FROM sla_policies WHERE tenant_id=$1 AND priority=$2 AND is_active=true LIMIT 1`, [tenantId, priority])).rows),
+      db.withSuperAdmin(async (c) =>
+        (await c.query(
+          `INSERT INTO voice_bot_calls
+             (tenant_id, provider, provider_call_id, from_number, status, transcript, summary,
+              sentiment, extracted_subject, extracted_priority, extracted_reporter_name,
+              extracted_reporter_email, raw_payload)
+           VALUES ($1,'livekit',$2,$3,'completed',$4,$5,$6,$7,$8,$9,$10,$11::jsonb)
+           RETURNING id`,
+          [tenantId, s.callId ?? null, s.reporterPhone ?? null, s.transcript ?? null, description,
+           priority === 'urgent' ? 'urgent' : 'negative', subject, priority,
+           s.reporterName ?? null, s.reporterEmail ?? null,
+           JSON.stringify({ category: s.category, fraudAmount: s.fraudAmount })],
+        )).rows),
+    ]);
     const ticketNumber = `TKT-${String(Number(next_val) - 1).padStart(5, '0')}`;
-
-    const [queueRow] = await db.withSuperAdmin(async (c) =>
-      (await c.query(`SELECT id FROM ticket_queues WHERE tenant_id=$1 AND is_default=true LIMIT 1`, [tenantId])).rows);
-    const [slaRow] = await db.withSuperAdmin(async (c) =>
-      (await c.query(`SELECT id FROM sla_policies WHERE tenant_id=$1 AND priority=$2 AND is_active=true LIMIT 1`, [tenantId, priority])).rows);
-
-    // Call record (provider='livekit')
-    const [botCall] = await db.withSuperAdmin(async (c) =>
-      (await c.query(
-        `INSERT INTO voice_bot_calls
-           (tenant_id, provider, provider_call_id, from_number, status, transcript, summary,
-            sentiment, extracted_subject, extracted_priority, extracted_reporter_name,
-            extracted_reporter_email, raw_payload)
-         VALUES ($1,'livekit',$2,$3,'completed',$4,$5,$6,$7,$8,$9,$10,$11::jsonb)
-         RETURNING id`,
-        [tenantId, s.callId ?? null, s.reporterPhone ?? null, s.transcript ?? null, description,
-         priority === 'urgent' ? 'urgent' : 'negative', subject, priority,
-         s.reporterName ?? null, s.reporterEmail ?? null,
-         JSON.stringify({ category: s.category, fraudAmount: s.fraudAmount })],
-      )).rows);
 
     const [ticket] = await db.withSuperAdmin(async (c) =>
       (await c.query(

@@ -52,6 +52,19 @@ from stt_whisper import WhisperSTT
 
 load_dotenv()
 
+# Direct file logging — stdout capture of this long-running process keeps
+# going stale in the dev environment, leaving call sessions undiagnosable.
+# This appends straight to a file with an immediate flush, bypassing stdout.
+_DEBUG_LOG_PATH = os.environ.get("NADIA_DEBUG_LOG", "/tmp/nadia_debug.log")
+
+def dbg(msg: str) -> None:
+    try:
+        from datetime import datetime
+        with open(_DEBUG_LOG_PATH, "a") as f:
+            f.write(f"{datetime.now().isoformat(timespec='seconds')} {msg}\n")
+    except Exception:
+        pass
+
 
 class NadiaAgent(Agent):
     def __init__(self, settings: AgentSettings, tenant_id: str, call_id: str):
@@ -74,7 +87,7 @@ class NadiaAgent(Agent):
     # NOTE: does not delegate to Agent.default.stt_node — see module
     # docstring for why that would crash with no session-level STT.
     async def stt_node(self, audio, model_settings: ModelSettings):
-        print("[nadia] stt_node started", flush=True)
+        dbg("stt_node started")
         vad_stream = self._vad.stream()
         frame_count = 0
 
@@ -84,20 +97,20 @@ class NadiaAgent(Agent):
                 frame_count += 1
                 vad_stream.push_frame(frame)
             vad_stream.end_input()
-            print(f"[nadia] stt_node: audio input ended, {frame_count} frames forwarded", flush=True)
+            dbg(f"stt_node: audio ended, {frame_count} frames")
 
         forward_task = asyncio.create_task(_forward_audio())
         try:
             async for ev in vad_stream:
-                print(f"[nadia] vad event: {ev.type}", flush=True)
+                pass  # vad event (too chatty for the debug log)
                 if ev.type == vad.VADEventType.END_OF_SPEECH:
-                    print(f"[nadia] running whisper on {len(ev.frames)} frame(s)", flush=True)
+                    dbg(f"whisper on {len(ev.frames)} frame(s)")
                     result = self.whisper.transcribe(ev.frames)
-                    print(f"[nadia] whisper result: {result.alternatives[0].text if result else None}", flush=True)
+                    dbg(f"whisper result: {result.alternatives[0].text if result else None}")
                     if result:
                         yield result
         except Exception as e:
-            print(f"[nadia] stt_node CRASHED: {type(e).__name__}: {e}", flush=True)
+            dbg(f"stt_node CRASHED: {type(e).__name__}: {e}")
             raise
         finally:
             forward_task.cancel()
@@ -185,9 +198,12 @@ async def entrypoint(ctx: agents.JobContext) -> None:
     # naming convention carries this through.
     tenant_id = (ctx.job.metadata or "") or os.environ.get("CRM_TENANT_ID", "")
     call_id = ctx.room.name
+    dbg(f"entrypoint start room={call_id} tenant={tenant_id[:8]}")
 
     settings = await load_settings(tenant_id)
+    dbg(f"settings loaded bot={settings.bot_name} voice={settings.voice_id} rate={settings.speaking_rate}")
     nadia = NadiaAgent(settings=settings, tenant_id=tenant_id, call_id=call_id)
+    dbg("NadiaAgent constructed")
 
     tts = upliftai.TTS(
         voice_id=settings.voice_id,
@@ -214,6 +230,11 @@ async def entrypoint(ctx: agents.JobContext) -> None:
         text = getattr(item, "text_content", None) or getattr(item, "text", None)
         if text:
             transcript_parts.append(text)
+            dbg(f"conversation item: {str(text)[:80]}")
+
+    @session.on("error")
+    def _on_error(ev) -> None:
+        dbg(f"SESSION ERROR: {getattr(ev, 'error', ev)}")
 
     async def _report_call_ended() -> None:
         base_url = os.environ["CRM_API_BASE_URL"]
@@ -231,19 +252,25 @@ async def entrypoint(ctx: agents.JobContext) -> None:
 
     ctx.add_shutdown_callback(lambda: asyncio.create_task(_report_call_ended()))
 
-    await session.start(
-        room=ctx.room,
-        agent=nadia,
-        room_input_options=RoomInputOptions(),
-    )
+    try:
+        await session.start(
+            room=ctx.room,
+            agent=nadia,
+            room_input_options=RoomInputOptions(),
+        )
+        dbg("session started")
 
-    if settings.greeting_message:
-        await session.generate_reply(instructions=f"Greet the caller with: {settings.greeting_message}")
-    else:
-        # No per-tenant override — follow the greeting already specified in
-        # the system prompt's "Call structure" step 1 (see prompts.py for
-        # HBL MFB's exact wording).
-        await session.generate_reply(instructions="Greet the caller now, following your instructions.")
+        if settings.greeting_message:
+            await session.generate_reply(instructions=f"Greet the caller with: {settings.greeting_message}")
+        else:
+            # No per-tenant override — follow the greeting already specified in
+            # the system prompt's "Call structure" step 1 (see prompts.py for
+            # HBL MFB's exact wording).
+            await session.generate_reply(instructions="Greet the caller now, following your instructions.")
+        dbg("greeting dispatched")
+    except Exception as e:
+        dbg(f"ENTRYPOINT CRASHED: {type(e).__name__}: {e}")
+        raise
 
 
 if __name__ == "__main__":

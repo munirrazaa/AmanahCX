@@ -18,10 +18,12 @@ class AgentSettings:
     bot_name: str = "Nadia"                  # spoken in greetings; editable on the Voice Bot admin screen
     language: str = "ur-PK"                 # BCP-47-ish tag; 'ur-PK' = Urdu (Pakistan)
     tone: str = "professional"               # professional | friendly | empathetic | formal
-    speaking_rate: float = 1.0               # TEMPORARY: reverted from 0.85 to isolate a reported
-                                              # mid-speech audio glitch — testing whether it's caused
-                                              # by our time-stretch/concatenation step. Revert back
-                                              # once confirmed either way.
+    speaking_rate: float = 0.9               # Re-enabled per user feedback 2026-07-13 (speed had
+                                              # crept back to 1.0x/"too fast" from an earlier debug
+                                              # session that was never reverted). NOTE: any value
+                                              # other than 1.0 re-triggers the full-reply-buffering
+                                              # path in agent.py's tts_node — this is also why the
+                                              # reply pause got longer again, not a separate issue.
                                               # Uplift AI's TTS API has no native speed parameter
                                               # (checked docs.upliftai.org 2026-07-12) — this is
                                               # applied ourselves via ffmpeg time-stretch, see
