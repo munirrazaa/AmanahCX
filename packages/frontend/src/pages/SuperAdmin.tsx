@@ -921,10 +921,14 @@ function TenantActions({ tenant, onClose }: { tenant: any; onClose: () => void }
   const [showResetResult, setShowResetResult] = useState(false);
 
   return (
-    <div className="fixed inset-0 z-50" onClick={onClose}>
-      <div className="absolute right-0 mt-1 w-56 bg-white rounded-xl shadow-xl border border-gray-100 py-1 z-50 overflow-hidden"
-        style={{ top: '100%' }}
-        onClick={(e) => e.stopPropagation()}>
+    // Click-away overlay and the menu are SIBLINGS: the menu anchors to the
+    // ⋮ button's cell (the td is `relative`), not to the full-screen overlay.
+    // The previous structure nested the menu inside the fixed inset-0 overlay
+    // with top:100% — 100% of the VIEWPORT — so it always rendered just below
+    // the screen and the menu was unusable since day one (found 2026-07-13).
+    <div onClick={(e) => e.stopPropagation()}>
+      <div className="fixed inset-0 z-40" onClick={onClose} />
+      <div className="absolute right-2 top-9 w-56 bg-white rounded-xl shadow-xl border border-gray-100 py-1 z-50 max-h-[70vh] overflow-y-auto">
 
         {/* Plan change */}
         <div className="px-3 py-2 border-b border-gray-50">
@@ -3298,7 +3302,8 @@ export function SuperAdmin() {
         </div>}
 
         {/* Table */}
-        {activeTab === 'tenants' && <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+        {/* overflow-visible so the per-row ⋮ actions dropdown isn't clipped */}
+        {activeTab === 'tenants' && <div className="bg-white rounded-xl border border-gray-100 overflow-visible">
           {isLoading ? (
             <div className="flex justify-center py-16"><Loader2 className="w-6 h-6 text-brand-400 animate-spin" /></div>
           ) : tenants.length === 0 ? (
