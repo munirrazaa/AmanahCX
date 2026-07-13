@@ -32,6 +32,7 @@ import { z } from 'zod';
 import type { DatabaseClient, EventBus } from '@crm/core';
 import { CRM_EVENTS } from '@crm/core';
 import { requireScope, requireRole, requireEntitlement } from '../middlewares/auth.middleware';
+import { AccessToken, AgentDispatchClient } from 'livekit-server-sdk';
 
 // ── Default IVR menu ─────────────────────────────────────────────────────
 const DEFAULT_IVR_MENU = [
@@ -1338,6 +1339,40 @@ export function voiceBotRoutes(db: DatabaseClient, eventBus: EventBus) {
           daily: usage.daily.map((d: any) => ({ date: d.date, minutes: Number(Number(d.minutes).toFixed(2)) })),
         },
       });
+    });
+
+    // ── Browser test call — dispatches Nadia into a fresh room and returns a
+    //    join token, so a tenant admin can test the self-hosted bot from
+    //    inside AmanahCX without a phone/SIP trunk. Distinct from /voice/web-call
+    //    (which is blocked for tenant_admin by the operational-data wall) — this
+    //    route lives under /voice-bot, which is deliberately exempt since it's
+    //    settings/config work, not viewing real customer call data.
+    fastify.post('/test-call-browser', { preHandler: requireRole('tenant_admin', 'super_admin') }, async (req, reply) => {
+      const url = process.env.LIVEKIT_URL;
+      const apiKey = process.env.LIVEKIT_API_KEY;
+      const apiSecret = process.env.LIVEKIT_API_SECRET;
+      if (!url || !apiKey || !apiSecret) {
+        return reply.code(503).send({ success: false, error: { code: 'LIVEKIT_NOT_CONFIGURED', message: 'Voice calling is not configured yet.' } });
+      }
+      const agentName = process.env.LIVEKIT_AGENT_NAME || 'nadia';
+      const room = `test-${req.tenant.id.slice(0, 8)}-${Date.now().toString(36)}`;
+      const httpUrl = url.replace(/^wss:/i, 'https:').replace(/^ws:/i, 'http:');
+      const dispatchHost = process.env.LIVEKIT_DISPATCH_URL || httpUrl;
+
+      try {
+        const dispatchClient = new AgentDispatchClient(dispatchHost, apiKey, apiSecret);
+        await dispatchClient.createDispatch(room, agentName, {
+          metadata: JSON.stringify({ tenantId: req.tenant.id, startedBy: req.user.sub, source: 'voice_bot_admin_test' }),
+        });
+      } catch (err: any) {
+        return reply.code(502).send({ success: false, error: { code: 'DISPATCH_FAILED', message: err?.message ?? 'agent dispatch failed' } });
+      }
+
+      const at = new AccessToken(apiKey, apiSecret, { identity: `test-${req.user.sub}`, name: 'Test Caller', ttl: '1h' });
+      at.addGrant({ roomJoin: true, room, canPublish: true, canSubscribe: true, canPublishData: true });
+      const token = await at.toJwt();
+
+      return reply.send({ success: true, data: { url, token, room, agent: agentName } });
     });
 
     // ── Initiate a test call (Vapi / Retell) ───────────────────────────
