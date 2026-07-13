@@ -270,16 +270,19 @@ async function auditLog(
  */
 function computeSlaDeadline(
   start:            Date,
-  durationHours:    number,
+  duration:         number,
   businessHoursOnly: boolean,
   schedule:         Record<string, { enabled: boolean; start: string; end: string }>,
   holidayDates:     Set<string>,   // 'YYYY-MM-DD' strings in UTC
+  timeUnit:         'hours' | 'minutes' = 'hours',
 ): Date {
+  const durationMinutes = timeUnit === 'minutes' ? duration : duration * 60;
+
   if (!businessHoursOnly || Object.keys(schedule).length === 0) {
-    return new Date(start.getTime() + durationHours * 3_600_000);
+    return new Date(start.getTime() + durationMinutes * 60_000);
   }
 
-  let remaining = durationHours * 60; // working minutes left to consume
+  let remaining = durationMinutes; // working minutes left to consume
   const cursor  = new Date(start);
 
   // Map day-name keys to 0-based JS getDay() (0=Sun … 6=Sat)
@@ -364,7 +367,7 @@ async function buildSlaDeadlines(
   tenantId: string,
   start:    Date,
   policy:   { first_response_hours: number; resolution_hours: number;
-               business_hours_only: boolean; business_hours_schedule: any },
+               business_hours_only: boolean; business_hours_schedule: any; time_unit?: string },
 ): Promise<{ firstResponseDue: Date; resolutionDue: Date }> {
   // Fetch holidays for this tenant
   const holidays = await db.withSuperAdmin(async (c) => {
@@ -398,12 +401,14 @@ async function buildSlaDeadlines(
 
   const schedule = (policy.business_hours_schedule as Record<string, any>) ?? {};
 
+  const timeUnit = policy.time_unit === 'minutes' ? 'minutes' : 'hours';
+
   return {
     firstResponseDue: computeSlaDeadline(
-      start, policy.first_response_hours, policy.business_hours_only, schedule, holidaySet,
+      start, policy.first_response_hours, policy.business_hours_only, schedule, holidaySet, timeUnit,
     ),
     resolutionDue: computeSlaDeadline(
-      start, policy.resolution_hours, policy.business_hours_only, schedule, holidaySet,
+      start, policy.resolution_hours, policy.business_hours_only, schedule, holidaySet, timeUnit,
     ),
   };
 }
@@ -1844,7 +1849,7 @@ ${note ? `<p><strong>Reason:</strong> ${note}</p>` : ''}
         const r = await client.query(
           `SELECT t.*,
                   s.first_response_hours, s.resolution_hours,
-                  s.business_hours_only, s.business_hours_schedule
+                  s.business_hours_only, s.business_hours_schedule, s.time_unit
            FROM tickets t
            LEFT JOIN sla_policies s ON t.sla_policy_id = s.id
            WHERE t.id = $1 AND t.tenant_id = $2`,
@@ -1866,6 +1871,7 @@ ${note ? `<p><strong>Reason:</strong> ${note}</p>` : ''}
         resolution_hours:        existing.resolution_hours        ?? 24,
         business_hours_only:     existing.business_hours_only     ?? false,
         business_hours_schedule: existing.business_hours_schedule ?? {},
+        time_unit:               existing.time_unit                ?? 'hours',
       };
       const { firstResponseDue, resolutionDue: slaDueAt } = await buildSlaDeadlines(
         db, tenantId, acceptedAt, policy,
@@ -3017,6 +3023,7 @@ export async function runSlaWorker(db: DatabaseClient, eventBus: EventBus): Prom
            t.assignee_id, t.created_at, t.first_response_at,
            t.first_response_breached, t.first_response_warned,
            s.first_response_hours,
+           s.time_unit,
            s.id AS sla_policy_id
          FROM tickets t
          LEFT JOIN sla_policies s ON t.sla_policy_id = s.id
@@ -3031,7 +3038,8 @@ export async function runSlaWorker(db: DatabaseClient, eventBus: EventBus): Prom
     for (const ticket of firstResponseTickets) {
       const now            = Date.now();
       const createdMs      = new Date(ticket.created_at).getTime();
-      const deadlineMs     = createdMs + ticket.first_response_hours * 3_600_000;
+      const unitMs         = ticket.time_unit === 'minutes' ? 60_000 : 3_600_000;
+      const deadlineMs     = createdMs + ticket.first_response_hours * unitMs;
       const totalMs        = deadlineMs - createdMs;
       const elapsedMs      = now - createdMs;
       const elapsedPct     = totalMs > 0 ? (elapsedMs / totalMs) * 100 : 0;
