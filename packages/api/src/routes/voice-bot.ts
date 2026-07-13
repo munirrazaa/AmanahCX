@@ -578,12 +578,25 @@ const INTENT_PATTERNS: Array<{ intent: string; keywords: string[] }> = [
   { intent: 'sales',            keywords: ['buy', 'purchase', 'price', 'offer', 'quote', 'sales', 'interested in'] },
 ];
 
-function detectIntent(call: NormalisedCall): string {
+function detectIntent(call: NormalisedCall, customIntents: Array<{ intent: string; keywords: string[] }> = []): string {
   const text = ((call.summary ?? '') + ' ' + (call.transcript ?? '')).toLowerCase();
-  for (const { intent, keywords } of INTENT_PATTERNS) {
+  // Tenant-defined custom intents are checked first so they can override the built-ins.
+  for (const { intent, keywords } of [...customIntents, ...INTENT_PATTERNS]) {
     if (keywords.some(k => text.includes(k))) return intent;
   }
   return 'complaint'; // default — safest fallback always creates a ticket
+}
+
+// Tenant's own "answer, don't create a ticket" reasons, added via the admin screen
+// on top of the 8 built-in INTENT_PATTERNS above.
+async function getCustomIntents(db: DatabaseClient, tenantId: string) {
+  return db.withSuperAdmin(async (c) => {
+    const r = await c.query(
+      `SELECT intent_key, keywords FROM voice_bot_custom_intents WHERE tenant_id = $1`,
+      [tenantId],
+    );
+    return r.rows.map((row: any) => ({ intent: row.intent_key as string, keywords: row.keywords as string[] }));
+  });
 }
 
 // ── Route factory ─────────────────────────────────────────────────────────
@@ -712,7 +725,8 @@ export function voiceBotRoutes(db: DatabaseClient, eventBus: EventBus) {
         // Self-service check — if the detected intent is in the tenant's self-service list,
         // resolve the call without creating a ticket and mark resolution_type = 'self_service'.
         const selfServiceIntents: string[] = botConfig?.self_service_intents ?? [];
-        const detectedIntent = detectIntent(callData);
+        const customIntents = await getCustomIntents(db, req.tenant.id);
+        const detectedIntent = detectIntent(callData, customIntents);
         const isSelfService = selfServiceIntents.length > 0 &&
           selfServiceIntents.some(i => i.toLowerCase() === detectedIntent.toLowerCase());
 
@@ -883,6 +897,92 @@ export function voiceBotRoutes(db: DatabaseClient, eventBus: EventBus) {
       return reply.send({ success: true, data: cfg });
     });
 
+    // ── Voice catalog (shared across tenants; super admin manages the list) ──
+    fastify.get('/voices', async (req, reply) => {
+      const voices = await db.withSuperAdmin(async (c) => {
+        const r = await c.query(
+          `SELECT id, provider, voice_id, label, description
+             FROM voice_bot_voices WHERE is_active = true ORDER BY created_at ASC`,
+        );
+        return r.rows;
+      });
+      return reply.send({ success: true, data: voices });
+    });
+
+    fastify.post('/voices', { preHandler: requireRole('super_admin') }, async (req, reply) => {
+      const body = z.object({
+        provider:    z.enum(['livekit']).default('livekit'),
+        voiceId:     z.string().min(1),
+        label:       z.string().min(1),
+        description: z.string().optional(),
+      }).parse(req.body);
+
+      const [voice] = await db.withSuperAdmin(async (c) => {
+        const r = await c.query(
+          `INSERT INTO voice_bot_voices (provider, voice_id, label, description)
+           VALUES ($1,$2,$3,$4)
+           ON CONFLICT (provider, voice_id) DO UPDATE SET
+             label = EXCLUDED.label, description = EXCLUDED.description, is_active = true
+           RETURNING *`,
+          [body.provider, body.voiceId, body.label, body.description ?? null],
+        );
+        return r.rows;
+      });
+      return reply.send({ success: true, data: voice });
+    });
+
+    fastify.delete('/voices/:id', { preHandler: requireRole('super_admin') }, async (req, reply) => {
+      const { id } = req.params as { id: string };
+      await db.withSuperAdmin(async (c) => {
+        await c.query(`UPDATE voice_bot_voices SET is_active = false WHERE id = $1`, [id]);
+      });
+      return reply.send({ success: true });
+    });
+
+    // ── Custom self-service intents (per tenant — "answer, don't ticket" reasons) ──
+    fastify.get('/custom-intents', { preHandler: requireScope('settings:read') }, async (req, reply) => {
+      const intents = await db.withTenant(req.tenant.id, async (c) => {
+        const r = await c.query(
+          `SELECT id, intent_key, label, keywords, created_at
+             FROM voice_bot_custom_intents WHERE tenant_id = $1 ORDER BY created_at ASC`,
+          [req.tenant.id],
+        );
+        return r.rows;
+      });
+      return reply.send({ success: true, data: intents });
+    });
+
+    fastify.post('/custom-intents', { preHandler: requireRole('tenant_admin', 'super_admin') }, async (req, reply) => {
+      const body = z.object({
+        label:    z.string().min(1).max(80),
+        keywords: z.array(z.string().min(1)).min(1),
+      }).parse(req.body);
+
+      const intentKey = body.label.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+      if (!intentKey) return reply.code(400).send({ success: false, error: 'Label must contain at least one letter or number' });
+
+      const [intent] = await db.withTenant(req.tenant.id, async (c) => {
+        const r = await c.query(
+          `INSERT INTO voice_bot_custom_intents (tenant_id, intent_key, label, keywords, created_by)
+           VALUES ($1,$2,$3,$4,$5)
+           ON CONFLICT (tenant_id, intent_key) DO UPDATE SET
+             label = EXCLUDED.label, keywords = EXCLUDED.keywords
+           RETURNING *`,
+          [req.tenant.id, intentKey, body.label, body.keywords.map(k => k.toLowerCase()), req.user.sub],
+        );
+        return r.rows;
+      });
+      return reply.send({ success: true, data: intent });
+    });
+
+    fastify.delete('/custom-intents/:id', { preHandler: requireRole('tenant_admin', 'super_admin') }, async (req, reply) => {
+      const { id } = req.params as { id: string };
+      await db.withTenant(req.tenant.id, async (c) => {
+        await c.query(`DELETE FROM voice_bot_custom_intents WHERE id = $1 AND tenant_id = $2`, [id, req.tenant.id]);
+      });
+      return reply.send({ success: true });
+    });
+
     // ── Connector secret (stored in tenant.settings so webhooks can read it) ──
     fastify.put('/config/connector-secret', { preHandler: requireRole('tenant_admin', 'super_admin') }, async (req, reply) => {
       const { provider, webhookSecret } = z.object({
@@ -963,7 +1063,8 @@ export function voiceBotRoutes(db: DatabaseClient, eventBus: EventBus) {
 
       // Apply same self-service logic as the real webhook path
       const selfServiceIntents: string[] = botConfig?.self_service_intents ?? [];
-      const detectedIntent = detectIntent(fakeCallData);
+      const customIntents = await getCustomIntents(db, tenantId);
+      const detectedIntent = detectIntent(fakeCallData, customIntents);
       const isSelfService = selfServiceIntents.length > 0 &&
         selfServiceIntents.some(i => i.toLowerCase() === detectedIntent.toLowerCase());
 

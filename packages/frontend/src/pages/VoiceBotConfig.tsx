@@ -22,6 +22,7 @@ import {
   Info, ToggleLeft, ToggleRight, ChevronDown, List,
 } from 'lucide-react';
 import { api } from '../services/api';
+import { useIsSuperAdmin } from '../hooks/useRole';
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -61,6 +62,10 @@ interface BotConfig {
 }
 
 interface TicketQueue { id: string; name: string; }
+
+interface Voice { id: string; provider: string; voice_id: string; label: string; description?: string; }
+
+interface CustomIntent { id: string; intent_key: string; label: string; keywords: string[]; }
 
 interface WebhookUrls { vapi: string; retell: string; bland: string; }
 
@@ -150,13 +155,6 @@ const PROVIDERS = [
   },
 ];
 
-// Uplift AI voices available to the self-hosted bot. Browse samples at
-// docs.upliftai.org/orator_voices; add entries here as more are approved.
-const LIVEKIT_VOICES = [
-  { id: 'helpdesk-agent',    label: 'Helpdesk Agent — warm female, patient & empathetic' },
-  { id: 'broadband-support', label: 'Broadband Support — polished male, methodical & formal' },
-];
-
 // ── Reusable input style ──────────────────────────────────────────────────
 
 const inputCls = "w-full bg-gray-900/60 border border-gray-700/60 text-gray-200 placeholder-gray-600 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-brand-500/60 transition-colors";
@@ -231,6 +229,41 @@ export function VoiceBotConfig() {
   const { data: queues } = useQuery<TicketQueue[]>({
     queryKey: ['ticket-queues-mini'],
     queryFn: async () => { const r = await api.get('/api/v1/tickets/queues'); return r.data.data; },
+  });
+
+  const { data: voices } = useQuery<Voice[]>({
+    queryKey: ['voice-bot-voices'],
+    queryFn: async () => { const r = await api.get('/api/v1/voice-bot/voices'); return r.data.data; },
+  });
+
+  const { data: customIntents } = useQuery<CustomIntent[]>({
+    queryKey: ['voice-bot-custom-intents'],
+    queryFn: async () => { const r = await api.get('/api/v1/voice-bot/custom-intents'); return r.data.data; },
+  });
+
+  const isSuperAdmin = useIsSuperAdmin();
+  const [newVoice, setNewVoice] = useState({ voiceId: '', label: '' });
+  const [newIntent, setNewIntent] = useState({ label: '', keywords: '' });
+
+  const addVoiceMut = useMutation({
+    mutationFn: async () => api.post('/api/v1/voice-bot/voices', { voiceId: newVoice.voiceId, label: newVoice.label }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['voice-bot-voices'] }); setNewVoice({ voiceId: '', label: '' }); },
+  });
+  const removeVoiceMut = useMutation({
+    mutationFn: async (id: string) => api.delete(`/api/v1/voice-bot/voices/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['voice-bot-voices'] }),
+  });
+
+  const addIntentMut = useMutation({
+    mutationFn: async () => api.post('/api/v1/voice-bot/custom-intents', {
+      label: newIntent.label,
+      keywords: newIntent.keywords.split(',').map(k => k.trim()).filter(Boolean),
+    }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['voice-bot-custom-intents'] }); setNewIntent({ label: '', keywords: '' }); },
+  });
+  const removeIntentMut = useMutation({
+    mutationFn: async (id: string) => api.delete(`/api/v1/voice-bot/custom-intents/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['voice-bot-custom-intents'] }),
   });
 
   const saveMut = useMutation({
@@ -536,7 +569,7 @@ export function VoiceBotConfig() {
                           <select value={formState.voice_id ?? 'helpdesk-agent'}
                             onChange={e => setFormState(f => ({ ...f, voice_id: e.target.value }))}
                             className={`${inputCls} appearance-none`}>
-                            {LIVEKIT_VOICES.map(v => <option key={v.id} value={v.id}>{v.label}</option>)}
+                            {(voices ?? []).map(v => <option key={v.id} value={v.voice_id}>{v.label}</option>)}
                           </select>
                         </div>
                       ) : (
@@ -575,6 +608,74 @@ export function VoiceBotConfig() {
                             <span>Slower (0.5×)</span><span>Normal (1×)</span><span>Faster (1.5×)</span>
                           </div>
                         </div>
+                      </div>
+                    )}
+
+                    {selectedProvider === 'livekit' && (
+                      <div className="border-t border-white/10 pt-4">
+                        <div className="flex items-center gap-2 mb-3">
+                          <PhoneCall className="w-4 h-4 text-brand-400" />
+                          <span className="text-sm text-white font-semibold">SIP Trunk Connection</span>
+                        </div>
+                        <p className="text-xs text-gray-600 mb-3">
+                          Details for the telecom provider (e.g. Telecard) that routes real phone calls to this bot. Leave blank until your SIP trunk is ready.
+                        </p>
+                        <div className="grid grid-cols-3 gap-3">
+                          <div>
+                            <label className="block text-xs text-gray-500 mb-1">SIP Trunk Provider</label>
+                            <input type="text" placeholder="e.g. Telecard"
+                              value={formState.sip_trunk_provider ?? ''}
+                              onChange={e => setFormState(f => ({ ...f, sip_trunk_provider: e.target.value }))}
+                              className={inputCls} />
+                          </div>
+                          <div>
+                            <label className="block text-xs text-gray-500 mb-1">Trunk Number / DID</label>
+                            <input type="text" placeholder="+924211234567"
+                              value={formState.sip_trunk_number ?? ''}
+                              onChange={e => setFormState(f => ({ ...f, sip_trunk_number: e.target.value }))}
+                              className={inputCls} />
+                          </div>
+                          <div>
+                            <label className="block text-xs text-gray-500 mb-1">SIP URI</label>
+                            <input type="text" placeholder="sip:trunk@telecard.example.com"
+                              value={formState.sip_uri ?? ''}
+                              onChange={e => setFormState(f => ({ ...f, sip_uri: e.target.value }))}
+                              className={inputCls} />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {selectedProvider === 'livekit' && isSuperAdmin && (
+                      <div className="border-t border-white/10 pt-4">
+                        <div className="flex items-center gap-2 mb-3">
+                          <Bot className="w-4 h-4 text-brand-400" />
+                          <span className="text-sm text-white font-semibold">Manage Voices (platform-wide)</span>
+                        </div>
+                        <div className="space-y-2 mb-3">
+                          {(voices ?? []).map(v => (
+                            <div key={v.id} className="flex items-center justify-between px-3 py-2 rounded-lg bg-gray-800/60 border border-gray-700/50 text-xs">
+                              <div>
+                                <span className="text-gray-200 font-medium">{v.label}</span>
+                                <span className="text-gray-600 ml-2">({v.voice_id})</span>
+                              </div>
+                              <button onClick={() => removeVoiceMut.mutate(v.id)} className="text-gray-500 hover:text-red-400">Remove</button>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="flex gap-2">
+                          <input type="text" placeholder="Uplift voice ID" value={newVoice.voiceId}
+                            onChange={e => setNewVoice(s => ({ ...s, voiceId: e.target.value }))}
+                            className={`${inputCls} flex-1`} />
+                          <input type="text" placeholder="Display label" value={newVoice.label}
+                            onChange={e => setNewVoice(s => ({ ...s, label: e.target.value }))}
+                            className={`${inputCls} flex-1`} />
+                          <button onClick={() => addVoiceMut.mutate()} disabled={!newVoice.voiceId || !newVoice.label}
+                            className="px-4 py-2 rounded-xl bg-brand-500/20 text-brand-300 text-xs font-medium border border-brand-500/40 disabled:opacity-40 whitespace-nowrap">
+                            Add Voice
+                          </button>
+                        </div>
+                        <p className="text-xs text-gray-600 mt-2">Browse available voice IDs at docs.upliftai.org/orator_voices.</p>
                       </div>
                     )}
 
@@ -629,6 +730,7 @@ export function VoiceBotConfig() {
                             { value: 'branch_hours',     label: 'Branch / Opening Hours' },
                             { value: 'installment_info', label: 'Installment / EMI Info' },
                             { value: 'faq',              label: 'General FAQ' },
+                            ...(customIntents ?? []).map(ci => ({ value: ci.intent_key, label: ci.label })),
                           ].map(({ value, label }) => {
                             const selected = (formState.self_service_intents ?? []).includes(value);
                             return (
@@ -651,6 +753,33 @@ export function VoiceBotConfig() {
                             {(formState.self_service_intents ?? []).length} intent(s) will be handled by bot without a ticket
                           </p>
                         )}
+
+                        <div className="border-t border-gray-700/50 mt-3 pt-3">
+                          <p className="text-xs text-gray-400 mb-2">Add your own reason — the bot checks the call for these keywords and, if matched, answers directly instead of raising a ticket. Tick it above (once saved) to activate.</p>
+                          <div className="space-y-2 mb-2">
+                            {(customIntents ?? []).map(ci => (
+                              <div key={ci.id} className="flex items-center justify-between px-3 py-2 rounded-lg bg-gray-800/60 border border-gray-700/50 text-xs">
+                                <div>
+                                  <span className="text-gray-200 font-medium">{ci.label}</span>
+                                  <span className="text-gray-600 ml-2">({ci.keywords.join(', ')})</span>
+                                </div>
+                                <button onClick={() => removeIntentMut.mutate(ci.id)} className="text-gray-500 hover:text-red-400">Remove</button>
+                              </div>
+                            ))}
+                          </div>
+                          <div className="flex gap-2">
+                            <input type="text" placeholder="Reason label, e.g. Card Activation Status" value={newIntent.label}
+                              onChange={e => setNewIntent(s => ({ ...s, label: e.target.value }))}
+                              className={`${inputCls} flex-1`} />
+                            <input type="text" placeholder="Keywords, comma-separated" value={newIntent.keywords}
+                              onChange={e => setNewIntent(s => ({ ...s, keywords: e.target.value }))}
+                              className={`${inputCls} flex-1`} />
+                            <button onClick={() => addIntentMut.mutate()} disabled={!newIntent.label || !newIntent.keywords}
+                              className="px-4 py-2 rounded-xl bg-brand-500/20 text-brand-300 text-xs font-medium border border-brand-500/40 disabled:opacity-40 whitespace-nowrap">
+                              Add Reason
+                            </button>
+                          </div>
+                        </div>
                       </div>
 
                       <div className="grid grid-cols-2 gap-3">
@@ -808,7 +937,7 @@ export function VoiceBotConfig() {
                     {[
                       ...(selectedProvider === 'livekit' ? [
                         { label: 'Bot Name',       value: activeConfig.bot_name ?? 'Nadia' },
-                        { label: 'Voice',          value: LIVEKIT_VOICES.find(v => v.id === activeConfig.voice_id)?.label ?? activeConfig.voice_id ?? '—' },
+                        { label: 'Voice',          value: (voices ?? []).find(v => v.voice_id === activeConfig.voice_id)?.label ?? activeConfig.voice_id ?? '—' },
                         { label: 'Tone',           value: activeConfig.tone ?? 'empathetic' },
                         { label: 'Speaking speed', value: `${Number(activeConfig.speaking_rate ?? 0.9).toFixed(2)}×` },
                       ] : [

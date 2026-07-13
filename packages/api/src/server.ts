@@ -295,10 +295,14 @@ async function buildServer() {
     // Tenant admin is an ADMINISTRATIVE role only (manage users, roles, settings,
     // integrations / keep the system live). They have NO visibility of operational
     // data — contacts, deals, activities, tickets, sales/invoicing, analytics,
-    // emails, voice and billing are all off-limits. This is separation of duties:
+    // emails and billing are all off-limits. This is separation of duties:
     // the person who manages accounts is not the person who sees the operations.
     // Billing (both subscription AND customer invoicing) belongs to a Finance/Sales
     // role, never the admin.
+    // NOTE: /api/v1/voice-bot is deliberately EXCLUDED from this wall — it's the
+    // Settings → Voice Bot admin screen (config, SIP trunk, voices, custom
+    // intents), which is exactly the tenant admin's job; every voice-bot route
+    // already gates itself per-route via requireRole/requireEntitlement.
     const TENANT_ADMIN_BLOCKED_PREFIXES = [
       '/api/v1/contacts',
       '/api/v1/companies',
@@ -309,11 +313,11 @@ async function buildServer() {
       '/api/v1/opportunities',
       '/api/v1/emails',
       '/api/v1/voice',
-      '/api/v1/voice-bot',
       '/api/v1/billing',
     ];
     if (
       req.url.startsWith('/api/v1/') &&
+      !req.url.startsWith('/api/v1/voice-bot') &&
       (req.user as any)?.role === 'tenant_admin' &&
       TENANT_ADMIN_BLOCKED_PREFIXES.some((p) => req.url.startsWith(p))
     ) {
