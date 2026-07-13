@@ -59,6 +59,10 @@ interface BotConfig {
   speaking_rate?: number;
   sip_trunk_provider?: string;
   sip_trunk_number?: string;
+  sip_trunk_username?: string;
+  sip_trunk_password?: string;
+  sip_trunk_nickname?: string;
+  outbound_transport?: string;
 }
 
 interface TicketQueue { id: string; name: string; }
@@ -164,7 +168,7 @@ const PROVIDERS = [
 
 // ── Reusable input style ──────────────────────────────────────────────────
 
-const inputCls = "w-full bg-gray-900/60 border border-gray-700/60 text-gray-200 placeholder-gray-600 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-brand-500/60 transition-colors";
+const inputCls = "w-full bg-white border border-gray-200 text-gray-800 placeholder-gray-400 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-brand-500/60 transition-colors";
 
 // ── Copy button ───────────────────────────────────────────────────────────
 
@@ -173,7 +177,7 @@ function CopyButton({ text }: { text: string }) {
   return (
     <button
       onClick={() => { navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 2000); }}
-      className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border border-white/10 hover:border-brand-500/50 text-gray-400 hover:text-brand-300"
+      className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border border-gray-100 hover:border-brand-500/50 text-gray-400 hover:text-brand-600"
     >
       {copied ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
       {copied ? 'Copied' : 'Copy'}
@@ -186,17 +190,17 @@ function CopyButton({ text }: { text: string }) {
 function StatsStrip({ stats }: { stats?: Stats }) {
   const s = stats?.summary;
   const items = [
-    { label: 'Total calls', value: s?.total_calls ?? '—', color: 'text-white' },
+    { label: 'Total calls', value: s?.total_calls ?? '—', color: 'text-gray-900' },
     { label: 'Tickets auto-created', value: s?.calls_with_tickets ?? '—', color: 'text-brand-400' },
-    { label: 'Avg duration', value: s?.avg_duration ? `${Math.round(parseFloat(s.avg_duration))}s` : '—', color: 'text-white' },
-    { label: 'Unique callers', value: s?.unique_callers ?? '—', color: 'text-white' },
+    { label: 'Avg duration', value: s?.avg_duration ? `${Math.round(parseFloat(s.avg_duration))}s` : '—', color: 'text-gray-900' },
+    { label: 'Unique callers', value: s?.unique_callers ?? '—', color: 'text-gray-900' },
     { label: 'Urgent calls', value: s?.urgent_calls ?? '—', color: 'text-orange-400' },
   ];
   return (
     <div className="grid grid-cols-5 gap-3 mb-6">
       {items.map(({ label, value, color }) => (
-        <div key={label} className="rounded-xl px-4 py-3 border border-white/10"
-             style={{ background: 'rgba(255,255,255,0.03)' }}>
+        <div key={label} className="rounded-xl px-4 py-3 border border-gray-100"
+             style={{ background: '#ffffff' }}>
           <p className={`text-xl font-bold ${color}`}>{value}</p>
           <p className="text-xs text-gray-500 mt-0.5">{label}</p>
         </div>
@@ -214,11 +218,11 @@ function MinutesUsageCard({ usage, period, onPeriodChange }: { usage?: Usage; pe
   const lowBalance = allocated > 0 && remaining <= allocated * 0.1;
 
   return (
-    <div className="mb-6 rounded-2xl border border-white/10 p-5" style={{ background: 'rgba(255,255,255,0.03)' }}>
+    <div className="mb-6 rounded-2xl border border-gray-100 p-5" style={{ background: '#ffffff' }}>
       <div className="flex items-center justify-between mb-4">
-        <span className="text-sm text-white font-semibold">Voice Bot Minutes</span>
+        <span className="text-sm text-gray-900 font-semibold">Voice Bot Minutes</span>
         <select value={period} onChange={e => onPeriodChange(e.target.value)}
-          className="bg-gray-900/60 border border-gray-700/60 text-gray-300 rounded-lg px-2 py-1 text-xs outline-none">
+          className="bg-white border border-gray-200 text-gray-500 rounded-lg px-2 py-1 text-xs outline-none">
           <option value="today">Today</option>
           <option value="7d">Last 7 days</option>
           <option value="30d">Last 30 days</option>
@@ -230,15 +234,15 @@ function MinutesUsageCard({ usage, period, onPeriodChange }: { usage?: Usage; pe
         <p className="text-xs text-gray-500">No minutes have been allocated to this workspace yet — contact your platform provider.</p>
       ) : (
         <>
-          <div className="w-full h-2 rounded-full bg-gray-800 overflow-hidden mb-3">
+          <div className="w-full h-2 rounded-full bg-gray-200 overflow-hidden mb-3">
             <div className={`h-full rounded-full ${lowBalance ? 'bg-red-500' : 'bg-brand-400'}`} style={{ width: `${pctUsed}%` }} />
           </div>
           {lowBalance && <p className="text-xs text-red-400 mb-3">Running low — {remaining.toFixed(0)} minute(s) remaining. Calls will stop routing to the bot once minutes run out.</p>}
           <div className="grid grid-cols-4 gap-3 text-center">
-            <div><p className="text-lg font-bold text-white">{allocated.toFixed(0)}</p><p className="text-[10px] text-gray-500">Allocated</p></div>
-            <div><p className="text-lg font-bold text-white">{usage?.consumedMinutesAllTime.toFixed(0)}</p><p className="text-[10px] text-gray-500">Used (all time)</p></div>
+            <div><p className="text-lg font-bold text-gray-900">{allocated.toFixed(0)}</p><p className="text-[10px] text-gray-500">Allocated</p></div>
+            <div><p className="text-lg font-bold text-gray-900">{usage?.consumedMinutesAllTime.toFixed(0)}</p><p className="text-[10px] text-gray-500">Used (all time)</p></div>
             <div><p className={`text-lg font-bold ${lowBalance ? 'text-red-400' : 'text-brand-400'}`}>{remaining.toFixed(0)}</p><p className="text-[10px] text-gray-500">Remaining</p></div>
-            <div><p className="text-lg font-bold text-white">{usage?.period.consumedMinutes.toFixed(0)}</p><p className="text-[10px] text-gray-500">Used ({usage?.period.label})</p></div>
+            <div><p className="text-lg font-bold text-gray-900">{usage?.period.consumedMinutes.toFixed(0)}</p><p className="text-[10px] text-gray-500">Used ({usage?.period.label})</p></div>
           </div>
         </>
       )}
@@ -345,6 +349,10 @@ export function VoiceBotConfig() {
         speakingRate:        body.speaking_rate != null ? Number(body.speaking_rate) : undefined,
         sipTrunkProvider:    body.sip_trunk_provider,
         sipTrunkNumber:      body.sip_trunk_number,
+        sipTrunkUsername:    body.sip_trunk_username,
+        sipTrunkPassword:    body.sip_trunk_password,
+        sipTrunkNickname:    body.sip_trunk_nickname,
+        outboundTransport:   body.outbound_transport,
       });
       return r.data;
     },
@@ -395,7 +403,7 @@ export function VoiceBotConfig() {
   };
 
   return (
-    <div className="min-h-screen p-6" style={{ background: '#0d1117' }}>
+    <div className="min-h-screen p-6 bg-gray-50">
       <div className="max-w-5xl mx-auto">
 
         {/* Header */}
@@ -403,15 +411,15 @@ export function VoiceBotConfig() {
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl flex items-center justify-center"
                  style={{ background: 'linear-gradient(135deg, #29ABE2 0%, #4D8B3C 100%)' }}>
-              <Bot className="w-5 h-5 text-white" />
+              <Bot className="w-5 h-5 text-gray-900" />
             </div>
             <div>
-              <h1 className="text-white font-bold text-xl">Voice Bot</h1>
+              <h1 className="text-gray-900 font-bold text-xl">Voice Bot</h1>
               <p className="text-gray-500 text-xs">Phase 1 — Third-party AI provider integration via SIP</p>
             </div>
           </div>
           <a href="/voice-bot/calls"
-            className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm text-brand-300 border border-brand-700/50 hover:bg-brand-900/30 transition-colors">
+            className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm text-brand-600 border border-brand-200 hover:bg-brand-50 transition-colors">
             <List className="w-4 h-4" />View Bot Calls
           </a>
         </div>
@@ -428,7 +436,7 @@ export function VoiceBotConfig() {
           <div className="flex items-start gap-3">
             <Info className="w-5 h-5 text-brand-400 shrink-0 mt-0.5" />
             <div>
-              <p className="text-white font-semibold text-sm mb-1">How Phase 1 works</p>
+              <p className="text-gray-900 font-semibold text-sm mb-1">How Phase 1 works</p>
               <div className="flex items-center gap-2 flex-wrap text-xs text-gray-400">
                 {[
                   'Customer calls your helpline',
@@ -439,7 +447,7 @@ export function VoiceBotConfig() {
                   'Agent receives notification',
                 ].map((step, i, arr) => (
                   <span key={step} className="flex items-center gap-2">
-                    <span className="text-white/70">{step}</span>
+                    <span className="text-gray-900/70">{step}</span>
                     {i < arr.length - 1 && <ChevronRight className="w-3 h-3 text-brand-600" />}
                   </span>
                 ))}
@@ -462,26 +470,26 @@ export function VoiceBotConfig() {
                 className={`text-left p-4 rounded-2xl border transition-all ${
                   isSelected
                     ? 'border-brand-500 ring-1 ring-brand-500/30'
-                    : 'border-white/10 hover:border-white/20'
+                    : 'border-gray-100 hover:border-gray-300'
                 }`}
-                style={{ background: isSelected ? 'rgba(41,171,226,0.08)' : 'rgba(255,255,255,0.03)' }}
+                style={{ background: isSelected ? 'rgba(41,171,226,0.08)' : '#ffffff' }}
               >
                 <div className="flex items-start justify-between mb-3">
                   <span className="text-3xl">{p.logo}</span>
                   <div className="flex items-center gap-2">
                     {hasConfig && (
-                      <span className="flex items-center gap-1 text-[10px] font-semibold text-emerald-400 bg-emerald-900/40 border border-emerald-700/50 px-2 py-0.5 rounded-full">
+                      <span className="flex items-center gap-1 text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
                         <CheckCircle2 className="w-3 h-3" /> Active
                       </span>
                     )}
                   </div>
                 </div>
-                <p className="text-white font-bold text-sm">{p.name}</p>
+                <p className="text-gray-900 font-bold text-sm">{p.name}</p>
                 <p className="text-[11px] text-gray-500 mt-0.5">{p.tagline}</p>
-                <p className="text-[11px] text-gray-600 mt-2 line-clamp-2">{p.description}</p>
+                <p className="text-[11px] text-gray-500 mt-2 line-clamp-2">{p.description}</p>
                 <a href={p.docsUrl} target="_blank" rel="noreferrer"
                    onClick={e => e.stopPropagation()}
-                   className="inline-flex items-center gap-1 text-[10px] text-brand-400 hover:text-brand-300 mt-2">
+                   className="inline-flex items-center gap-1 text-[10px] text-brand-400 hover:text-brand-600 mt-2">
                   Docs <ExternalLink className="w-2.5 h-2.5" />
                 </a>
               </button>
@@ -496,16 +504,16 @@ export function VoiceBotConfig() {
 
               {/* Webhook URL — not applicable to the self-hosted bot (it talks to the CRM directly) */}
               {selectedProvider !== 'livekit' && (
-              <div className="rounded-2xl border border-white/10 p-5"
-                   style={{ background: 'rgba(255,255,255,0.03)' }}>
+              <div className="rounded-2xl border border-gray-100 p-5"
+                   style={{ background: '#ffffff' }}>
                 <div className="flex items-center gap-2 mb-4">
                   <Zap className="w-4 h-4 text-brand-400" />
-                  <h3 className="text-white font-semibold text-sm">Webhook URL</h3>
+                  <h3 className="text-gray-900 font-semibold text-sm">Webhook URL</h3>
                   <span className="text-xs text-gray-500">— paste this into {pDef.name}'s dashboard</span>
                 </div>
                 <div className="flex items-center gap-2 p-3 rounded-xl border border-dashed border-brand-600/40"
                      style={{ background: 'rgba(41,171,226,0.05)' }}>
-                  <code className="flex-1 text-xs text-brand-300 break-all font-mono">
+                  <code className="flex-1 text-xs text-brand-700 break-all font-mono">
                     {(webhookUrls as any)?.[selectedProvider] ?? 'Loading…'}
                   </code>
                   {(webhookUrls as any)?.[selectedProvider] && (
@@ -516,33 +524,33 @@ export function VoiceBotConfig() {
               )}
 
               {/* Setup guide */}
-              <div className="rounded-2xl border border-white/10 overflow-hidden"
-                   style={{ background: 'rgba(255,255,255,0.03)' }}>
+              <div className="rounded-2xl border border-gray-100 overflow-hidden"
+                   style={{ background: '#ffffff' }}>
                 <button
                   onClick={() => setShowGuide(showGuide === selectedProvider ? null : selectedProvider)}
-                  className="w-full flex items-center justify-between px-5 py-4 hover:bg-white/5 transition-colors"
+                  className="w-full flex items-center justify-between px-5 py-4 hover:bg-gray-100 transition-colors"
                 >
                   <div className="flex items-center gap-2">
                     <Info className="w-4 h-4 text-brand-400" />
-                    <span className="text-white font-semibold text-sm">Step-by-step setup for {pDef.name}</span>
+                    <span className="text-gray-900 font-semibold text-sm">Step-by-step setup for {pDef.name}</span>
                   </div>
                   <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform ${showGuide === selectedProvider ? 'rotate-180' : ''}`} />
                 </button>
                 {showGuide === selectedProvider && (
-                  <div className="px-5 pb-5 border-t border-white/10">
+                  <div className="px-5 pb-5 border-t border-gray-100">
                     <ol className="mt-4 space-y-3">
                       {pDef.setupSteps.map((step, i) => (
                         <li key={i} className="flex items-start gap-3">
-                          <span className="w-6 h-6 rounded-full shrink-0 flex items-center justify-center text-xs font-bold text-white"
+                          <span className="w-6 h-6 rounded-full shrink-0 flex items-center justify-center text-xs font-bold text-gray-900"
                                 style={{ background: 'linear-gradient(135deg, #29ABE2 0%, #4D8B3C 100%)' }}>
                             {i + 1}
                           </span>
-                          <p className="text-sm text-gray-300 pt-0.5">{step}</p>
+                          <p className="text-sm text-gray-500 pt-0.5">{step}</p>
                         </li>
                       ))}
                     </ol>
                     <a href={pDef.dashboardUrl} target="_blank" rel="noreferrer"
-                       className="inline-flex items-center gap-2 mt-4 px-4 py-2 rounded-xl text-sm font-semibold text-white border border-white/10 hover:bg-white/5 transition-colors">
+                       className="inline-flex items-center gap-2 mt-4 px-4 py-2 rounded-xl text-sm font-semibold text-gray-900 border border-gray-100 hover:bg-gray-100 transition-colors">
                       Open {pDef.name} Dashboard <ExternalLink className="w-3.5 h-3.5" />
                     </a>
                   </div>
@@ -550,16 +558,16 @@ export function VoiceBotConfig() {
               </div>
 
               {/* Bot configuration */}
-              <div className="rounded-2xl border border-white/10 p-5"
-                   style={{ background: 'rgba(255,255,255,0.03)' }}>
+              <div className="rounded-2xl border border-gray-100 p-5"
+                   style={{ background: '#ffffff' }}>
                 <div className="flex items-center justify-between mb-5">
                   <div className="flex items-center gap-2">
                     <Settings2 className="w-4 h-4 text-brand-400" />
-                    <h3 className="text-white font-semibold text-sm">Bot Configuration</h3>
+                    <h3 className="text-gray-900 font-semibold text-sm">Bot Configuration</h3>
                   </div>
                   {!editMode && (
                     <button onClick={() => startEdit(activeConfig)}
-                      className="px-3 py-1.5 rounded-lg text-xs font-semibold text-brand-300 border border-brand-700/50 hover:bg-brand-900/30 transition-colors">
+                      className="px-3 py-1.5 rounded-lg text-xs font-semibold text-brand-600 border border-brand-200 hover:bg-brand-50 transition-colors">
                       {activeConfig ? 'Edit' : 'Configure'}
                     </button>
                   )}
@@ -569,11 +577,11 @@ export function VoiceBotConfig() {
                   <div className="space-y-4">
                     {/* Active toggle */}
                     <div className="flex items-center justify-between">
-                      <span className="text-sm text-gray-300">Active</span>
+                      <span className="text-sm text-gray-500">Active</span>
                       <button onClick={() => setFormState(f => ({ ...f, is_active: !f.is_active }))}>
                         {formState.is_active
                           ? <ToggleRight className="w-8 h-8 text-brand-400" />
-                          : <ToggleLeft  className="w-8 h-8 text-gray-600"  />}
+                          : <ToggleLeft  className="w-8 h-8 text-gray-500"  />}
                       </button>
                     </div>
 
@@ -585,7 +593,7 @@ export function VoiceBotConfig() {
                             value={formState.bot_name ?? ''}
                             onChange={e => setFormState(f => ({ ...f, bot_name: e.target.value }))}
                             className={inputCls} />
-                          <p className="text-xs text-gray-600 mt-1">Spoken in the greeting — "I am [name] speaking…"</p>
+                          <p className="text-xs text-gray-500 mt-1">Spoken in the greeting — "I am [name] speaking…"</p>
                         </div>
                       ) : (
                         <div>
@@ -662,7 +670,7 @@ export function VoiceBotConfig() {
                             value={formState.speaking_rate ?? 0.9}
                             onChange={e => setFormState(f => ({ ...f, speaking_rate: Number(e.target.value) }))}
                             className="w-full mt-2.5 accent-brand-400" />
-                          <div className="flex justify-between text-[10px] text-gray-600">
+                          <div className="flex justify-between text-[10px] text-gray-500">
                             <span>Slower (0.5×)</span><span>Normal (1×)</span><span>Faster (1.5×)</span>
                           </div>
                         </div>
@@ -670,15 +678,15 @@ export function VoiceBotConfig() {
                     )}
 
                     {selectedProvider === 'livekit' && (
-                      <div className="border-t border-white/10 pt-4">
+                      <div className="border-t border-gray-100 pt-4">
                         <div className="flex items-center gap-2 mb-3">
                           <PhoneCall className="w-4 h-4 text-brand-400" />
-                          <span className="text-sm text-white font-semibold">SIP Trunk Connection</span>
+                          <span className="text-sm text-gray-900 font-semibold">Connect to your number via SIP trunking</span>
                         </div>
-                        <p className="text-xs text-gray-600 mb-3">
+                        <p className="text-xs text-gray-500 mb-3">
                           Details for the telecom provider (e.g. Telecard) that routes real phone calls to this bot. Leave blank until your SIP trunk is ready.
                         </p>
-                        <div className="grid grid-cols-3 gap-3">
+                        <div className="grid grid-cols-2 gap-3 mb-3">
                           <div>
                             <label className="block text-xs text-gray-500 mb-1">SIP Trunk Provider</label>
                             <input type="text" placeholder="e.g. Telecard"
@@ -687,35 +695,69 @@ export function VoiceBotConfig() {
                               className={inputCls} />
                           </div>
                           <div>
-                            <label className="block text-xs text-gray-500 mb-1">Trunk Number / DID</label>
-                            <input type="text" placeholder="+924211234567"
+                            <label className="block text-xs text-gray-500 mb-1">Phone Number</label>
+                            <input type="text" placeholder="Enter phone number"
                               value={formState.sip_trunk_number ?? ''}
                               onChange={e => setFormState(f => ({ ...f, sip_trunk_number: e.target.value }))}
                               className={inputCls} />
                           </div>
+                        </div>
+                        <div className="mb-3">
+                          <label className="block text-xs text-gray-500 mb-1">Termination URI</label>
+                          <input type="text" placeholder="Enter termination URI (not this platform's own SIP server URI)"
+                            value={formState.sip_uri ?? ''}
+                            onChange={e => setFormState(f => ({ ...f, sip_uri: e.target.value }))}
+                            className={inputCls} />
+                        </div>
+                        <div className="grid grid-cols-2 gap-3 mb-3">
                           <div>
-                            <label className="block text-xs text-gray-500 mb-1">SIP URI</label>
-                            <input type="text" placeholder="sip:trunk@telecard.example.com"
-                              value={formState.sip_uri ?? ''}
-                              onChange={e => setFormState(f => ({ ...f, sip_uri: e.target.value }))}
+                            <label className="block text-xs text-gray-500 mb-1">SIP Trunk User Name (Optional)</label>
+                            <input type="text" placeholder="Enter SIP Trunk User Name"
+                              value={formState.sip_trunk_username ?? ''}
+                              onChange={e => setFormState(f => ({ ...f, sip_trunk_username: e.target.value }))}
                               className={inputCls} />
+                          </div>
+                          <div>
+                            <label className="block text-xs text-gray-500 mb-1">SIP Trunk Password (Optional)</label>
+                            <input type="password" placeholder="Enter SIP Trunk Password"
+                              value={formState.sip_trunk_password ?? ''}
+                              onChange={e => setFormState(f => ({ ...f, sip_trunk_password: e.target.value }))}
+                              className={inputCls} />
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-xs text-gray-500 mb-1">Nickname (Optional)</label>
+                            <input type="text" placeholder="Enter Nickname"
+                              value={formState.sip_trunk_nickname ?? ''}
+                              onChange={e => setFormState(f => ({ ...f, sip_trunk_nickname: e.target.value }))}
+                              className={inputCls} />
+                          </div>
+                          <div>
+                            <label className="block text-xs text-gray-500 mb-1">Outbound Transport</label>
+                            <select value={formState.outbound_transport ?? 'TCP'}
+                              onChange={e => setFormState(f => ({ ...f, outbound_transport: e.target.value }))}
+                              className={`${inputCls} appearance-none`}>
+                              <option value="TCP">TCP</option>
+                              <option value="UDP">UDP</option>
+                            </select>
                           </div>
                         </div>
                       </div>
                     )}
 
                     {selectedProvider === 'livekit' && isSuperAdmin && (
-                      <div className="border-t border-white/10 pt-4">
+                      <div className="border-t border-gray-100 pt-4">
                         <div className="flex items-center gap-2 mb-3">
                           <Bot className="w-4 h-4 text-brand-400" />
-                          <span className="text-sm text-white font-semibold">Manage Voices (platform-wide)</span>
+                          <span className="text-sm text-gray-900 font-semibold">Manage Voices (platform-wide)</span>
                         </div>
                         <div className="space-y-2 mb-3">
                           {(voices ?? []).map(v => (
-                            <div key={v.id} className="flex items-center justify-between px-3 py-2 rounded-lg bg-gray-800/60 border border-gray-700/50 text-xs">
+                            <div key={v.id} className="flex items-center justify-between px-3 py-2 rounded-lg bg-gray-50 border border-gray-200 text-xs">
                               <div>
-                                <span className="text-gray-200 font-medium">{v.label}</span>
-                                <span className="text-gray-600 ml-2">({v.voice_id})</span>
+                                <span className="text-gray-800 font-medium">{v.label}</span>
+                                <span className="text-gray-500 ml-2">({v.voice_id})</span>
                               </div>
                               <button onClick={() => removeVoiceMut.mutate(v.id)} className="text-gray-500 hover:text-red-400">Remove</button>
                             </div>
@@ -729,11 +771,11 @@ export function VoiceBotConfig() {
                             onChange={e => setNewVoice(s => ({ ...s, label: e.target.value }))}
                             className={`${inputCls} flex-1`} />
                           <button onClick={() => addVoiceMut.mutate()} disabled={!newVoice.voiceId || !newVoice.label}
-                            className="px-4 py-2 rounded-xl bg-brand-500/20 text-brand-300 text-xs font-medium border border-brand-500/40 disabled:opacity-40 whitespace-nowrap">
+                            className="px-4 py-2 rounded-xl bg-brand-50 text-brand-700 text-xs font-medium border border-brand-200 disabled:opacity-40 whitespace-nowrap">
                             Add Voice
                           </button>
                         </div>
-                        <p className="text-xs text-gray-600 mt-2">Browse available voice IDs at docs.upliftai.org/orator_voices.</p>
+                        <p className="text-xs text-gray-500 mt-2">Browse available voice IDs at docs.upliftai.org/orator_voices.</p>
                       </div>
                     )}
 
@@ -749,7 +791,7 @@ export function VoiceBotConfig() {
                     <div>
                       <label className="block text-xs text-gray-500 mb-1">
                         System Prompt
-                        <span className="ml-1 text-gray-600">(additional instructions for the AI)</span>
+                        <span className="ml-1 text-gray-500">(additional instructions for the AI)</span>
                       </label>
                       <textarea rows={5}
                         placeholder={`You are a professional customer support agent for our company.\n\nYour goal is to:\n1. Greet the caller warmly\n2. Collect their name, contact number, and nature of the complaint\n3. Understand the urgency of the issue\n4. Summarise the issue clearly at the end\n\nAlways be polite and empathetic.`}
@@ -759,27 +801,27 @@ export function VoiceBotConfig() {
                     </div>
 
                     {/* Ticket creation rules */}
-                    <div className="border-t border-white/10 pt-4">
+                    <div className="border-t border-gray-100 pt-4">
                       <div className="flex items-center gap-2 mb-4">
                         <Ticket className="w-4 h-4 text-brand-400" />
-                        <span className="text-sm text-white font-semibold">Ticket Creation Rules</span>
+                        <span className="text-sm text-gray-900 font-semibold">Ticket Creation Rules</span>
                       </div>
 
                       <div className="flex items-center justify-between mb-4">
                         <div>
-                          <p className="text-sm text-gray-300">Auto-create ticket after every call</p>
-                          <p className="text-xs text-gray-600 mt-0.5">A ticket is created in CRM as soon as the call ends</p>
+                          <p className="text-sm text-gray-500">Auto-create ticket after every call</p>
+                          <p className="text-xs text-gray-500 mt-0.5">A ticket is created in CRM as soon as the call ends</p>
                         </div>
                         <button onClick={() => setFormState(f => ({ ...f, auto_create_ticket: !f.auto_create_ticket }))}>
                           {formState.auto_create_ticket
                             ? <ToggleRight className="w-8 h-8 text-brand-400" />
-                            : <ToggleLeft  className="w-8 h-8 text-gray-600"  />}
+                            : <ToggleLeft  className="w-8 h-8 text-gray-500"  />}
                         </button>
                       </div>
 
                       {/* Self-service intents — calls matching these are resolved by the bot with no ticket */}
-                      <div className="mb-4 p-3 rounded-lg bg-gray-800/60 border border-gray-700/50">
-                        <p className="text-sm text-gray-300 font-medium mb-1">Self-Service Intents (No Ticket)</p>
+                      <div className="mb-4 p-3 rounded-lg bg-gray-50 border border-gray-200">
+                        <p className="text-sm text-gray-500 font-medium mb-1">Self-Service Intents (No Ticket)</p>
                         <p className="text-xs text-gray-500 mb-3">When the bot detects one of these query types, it resolves the call directly — no ticket is created. Everything else still creates a ticket.</p>
                         <div className="grid grid-cols-2 gap-2">
                           {[
@@ -792,14 +834,14 @@ export function VoiceBotConfig() {
                           ].map(({ value, label }) => {
                             const selected = (formState.self_service_intents ?? []).includes(value);
                             return (
-                              <label key={value} className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer text-xs transition-colors ${selected ? 'border-brand-500 bg-brand-500/10 text-brand-300' : 'border-gray-700 text-gray-400 hover:border-gray-600'}`}>
+                              <label key={value} className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer text-xs transition-colors ${selected ? 'border-brand-500 bg-brand-500/10 text-brand-600' : 'border-gray-200 text-gray-500 hover:border-gray-300'}`}>
                                 <input type="checkbox" className="hidden" checked={selected}
                                   onChange={() => setFormState(f => {
                                     const cur = f.self_service_intents ?? [];
                                     return { ...f, self_service_intents: selected ? cur.filter(i => i !== value) : [...cur, value] };
                                   })} />
-                                <span className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 ${selected ? 'bg-brand-500 border-brand-500' : 'border-gray-600'}`}>
-                                  {selected && <span className="text-white text-[9px] font-bold">✓</span>}
+                                <span className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 ${selected ? 'bg-brand-500 border-brand-500' : 'border-gray-300'}`}>
+                                  {selected && <span className="text-gray-900 text-[9px] font-bold">✓</span>}
                                 </span>
                                 {label}
                               </label>
@@ -812,14 +854,14 @@ export function VoiceBotConfig() {
                           </p>
                         )}
 
-                        <div className="border-t border-gray-700/50 mt-3 pt-3">
+                        <div className="border-t border-gray-200 mt-3 pt-3">
                           <p className="text-xs text-gray-400 mb-2">Add your own reason — the bot checks the call for these keywords and, if matched, answers directly instead of raising a ticket. Tick it above (once saved) to activate.</p>
                           <div className="space-y-2 mb-2">
                             {(customIntents ?? []).map(ci => (
-                              <div key={ci.id} className="flex items-center justify-between px-3 py-2 rounded-lg bg-gray-800/60 border border-gray-700/50 text-xs">
+                              <div key={ci.id} className="flex items-center justify-between px-3 py-2 rounded-lg bg-gray-50 border border-gray-200 text-xs">
                                 <div>
-                                  <span className="text-gray-200 font-medium">{ci.label}</span>
-                                  <span className="text-gray-600 ml-2">({ci.keywords.join(', ')})</span>
+                                  <span className="text-gray-800 font-medium">{ci.label}</span>
+                                  <span className="text-gray-500 ml-2">({ci.keywords.join(', ')})</span>
                                 </div>
                                 <button onClick={() => removeIntentMut.mutate(ci.id)} className="text-gray-500 hover:text-red-400">Remove</button>
                               </div>
@@ -833,7 +875,7 @@ export function VoiceBotConfig() {
                               onChange={e => setNewIntent(s => ({ ...s, keywords: e.target.value }))}
                               className={`${inputCls} flex-1`} />
                             <button onClick={() => addIntentMut.mutate()} disabled={!newIntent.label || !newIntent.keywords}
-                              className="px-4 py-2 rounded-xl bg-brand-500/20 text-brand-300 text-xs font-medium border border-brand-500/40 disabled:opacity-40 whitespace-nowrap">
+                              className="px-4 py-2 rounded-xl bg-brand-50 text-brand-700 text-xs font-medium border border-brand-200 disabled:opacity-40 whitespace-nowrap">
                               Add Reason
                             </button>
                           </div>
@@ -866,7 +908,7 @@ export function VoiceBotConfig() {
                       <div className="mt-3">
                         <label className="block text-xs text-gray-500 mb-1">
                           Urgency keywords
-                          <span className="ml-1 text-gray-600">(comma-separated — escalate to Urgent priority)</span>
+                          <span className="ml-1 text-gray-500">(comma-separated — escalate to Urgent priority)</span>
                         </label>
                         <input type="text"
                           value={(formState.keyword_urgency ?? []).join(', ')}
@@ -881,10 +923,10 @@ export function VoiceBotConfig() {
 
 
                       {/* IVR Menu Builder */}
-                      <div className="mt-4 border-t border-white/10 pt-4">
+                      <div className="mt-4 border-t border-gray-100 pt-4">
                         <div className="flex items-center justify-between mb-2">
                           <div>
-                            <p className="text-xs font-semibold text-white">IVR Menu Options</p>
+                            <p className="text-xs font-semibold text-gray-900">IVR Menu Options</p>
                             <p className="text-xs text-gray-500 mt-0.5">Define what options are presented to the caller</p>
                           </div>
                           <button type="button"
@@ -919,7 +961,7 @@ export function VoiceBotConfig() {
                                   menu[idx] = { ...menu[idx], label: e.target.value };
                                   setFormState(f => ({ ...f, ivr_menu: menu }));
                                 }}
-                                className="flex-1 bg-transparent border border-white/10 rounded-lg px-2 py-1 text-xs text-white outline-none focus:border-brand-400/60"
+                                className="flex-1 bg-transparent border border-gray-100 rounded-lg px-2 py-1 text-xs text-gray-900 outline-none focus:border-brand-400/60"
                                 placeholder="Option label..."
                               />
                               <select
@@ -929,7 +971,7 @@ export function VoiceBotConfig() {
                                   menu[idx] = { ...menu[idx], ticketType: e.target.value as any, intent: e.target.value as any };
                                   setFormState(f => ({ ...f, ivr_menu: menu }));
                                 }}
-                                className="text-xs bg-white/5 border border-white/10 rounded-lg px-2 py-1 text-white outline-none">
+                                className="text-xs bg-white/5 border border-gray-100 rounded-lg px-2 py-1 text-gray-900 outline-none">
                                 <option value="complaint">🎫 Complaint</option>
                                 <option value="inquiry">💬 Inquiry</option>
                                 <option value="sales">💼 Sales</option>
@@ -942,7 +984,7 @@ export function VoiceBotConfig() {
                                   menu[idx] = { ...menu[idx], queueId: e.target.value || null };
                                   setFormState(f => ({ ...f, ivr_menu: menu }));
                                 }}
-                                className="text-xs bg-white/5 border border-white/10 rounded-lg px-2 py-1 text-white outline-none">
+                                className="text-xs bg-white/5 border border-gray-100 rounded-lg px-2 py-1 text-gray-900 outline-none">
                                 <option value="">Default queue</option>
                                 {(queues ?? []).map((q: any) => (
                                   <option key={q.id} value={q.id}>{q.name}</option>
@@ -953,7 +995,7 @@ export function VoiceBotConfig() {
                                   const menu = (formState.ivr_menu ?? []).filter((_: any, i: number) => i !== idx);
                                   setFormState(f => ({ ...f, ivr_menu: menu }));
                                 }}
-                                className="text-gray-600 hover:text-red-400 p-0.5 shrink-0">
+                                className="text-gray-500 hover:text-red-400 p-0.5 shrink-0">
                                 ✕
                               </button>
                             </div>
@@ -969,19 +1011,19 @@ export function VoiceBotConfig() {
                           onChange={e => setFormState(f => ({ ...f, sip_uri: e.target.value }))}
                           placeholder="sip:helpline@yourprovider.com"
                           className={inputCls} />
-                        <p className="text-xs text-gray-600 mt-1">SIP endpoint for direct PSTN/VoIP integration</p>
+                        <p className="text-xs text-gray-500 mt-1">SIP endpoint for direct PSTN/VoIP integration</p>
                       </div>
 
                     {/* Save / Cancel */}
                     <div className="flex items-center justify-between pt-2">
                       <button onClick={() => setEditMode(false)}
-                        className="px-4 py-2 rounded-xl text-sm text-gray-400 hover:bg-white/5 transition-colors">
+                        className="px-4 py-2 rounded-xl text-sm text-gray-400 hover:bg-gray-100 transition-colors">
                         Cancel
                       </button>
                       <button
                         onClick={() => saveMut.mutate({ ...formState, provider: selectedProvider })}
                         disabled={saveMut.isPending}
-                        className="flex items-center gap-2 px-5 py-2 rounded-xl text-sm font-semibold text-white disabled:opacity-40"
+                        className="flex items-center gap-2 px-5 py-2 rounded-xl text-sm font-semibold text-gray-900 disabled:opacity-40"
                         style={{ background: 'linear-gradient(135deg, #29ABE2 0%, #1a8cbf 100%)' }}
                       >
                         {saveMut.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
@@ -1008,24 +1050,24 @@ export function VoiceBotConfig() {
                       { label: 'Default queue',        value: activeConfig.queue_name ?? 'Default queue' },
                       { label: 'Self-service intents', value: (activeConfig.self_service_intents ?? []).length > 0 ? `${(activeConfig.self_service_intents ?? []).length} configured` : 'None (all calls → ticket)' },
                     ].map(({ label, value }) => (
-                      <div key={label} className="flex items-center justify-between py-2 border-b border-white/5 last:border-0">
+                      <div key={label} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
                         <span className="text-xs text-gray-500">{label}</span>
-                        <span className="text-xs text-white font-medium">{value}</span>
+                        <span className="text-xs text-gray-900 font-medium">{value}</span>
                       </div>
                     ))}
                   </div>
                 ) : (
                   <div className="flex flex-col items-center py-8 gap-3">
-                    <AlertCircle className="w-8 h-8 text-gray-600" />
+                    <AlertCircle className="w-8 h-8 text-gray-500" />
                     <p className="text-gray-500 text-sm">Not configured yet</p>
                     {selectedProvider !== 'livekit' && (
-                      <p className="text-gray-600 text-xs text-center max-w-xs">
+                      <p className="text-gray-500 text-xs text-center max-w-xs">
                         Also make sure to add your {PROVIDERS.find(p => p.id === selectedProvider)?.name} API key in
                         the <a href="/integrations" className="text-brand-400 hover:underline">Integrations page</a>
                       </p>
                     )}
                     <button onClick={() => startEdit()}
-                      className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-white"
+                      className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-gray-900"
                       style={{ background: 'linear-gradient(135deg, #29ABE2 0%, #1a8cbf 100%)' }}>
                       Configure {PROVIDERS.find(p => p.id === selectedProvider)?.name}
                     </button>
@@ -1041,11 +1083,11 @@ export function VoiceBotConfig() {
 
               {/* Test call — outbound test API only supports hosted providers */}
               {activeConfig && selectedProvider !== 'livekit' && (
-                <div className="rounded-2xl border border-white/10 p-5"
-                     style={{ background: 'rgba(255,255,255,0.03)' }}>
+                <div className="rounded-2xl border border-gray-100 p-5"
+                     style={{ background: '#ffffff' }}>
                   <div className="flex items-center gap-2 mb-4">
                     <PhoneCall className="w-4 h-4 text-emerald-400" />
-                    <h3 className="text-white font-semibold text-sm">Test Call</h3>
+                    <h3 className="text-gray-900 font-semibold text-sm">Test Call</h3>
                     <span className="text-xs text-gray-500">— verify the integration end-to-end</span>
                   </div>
                   <div className="flex items-center gap-3">
@@ -1056,7 +1098,7 @@ export function VoiceBotConfig() {
                     <button
                       onClick={() => testMut.mutate()}
                       disabled={testMut.isPending || !testNumber}
-                      className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-40 shrink-0"
+                      className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-gray-900 disabled:opacity-40 shrink-0"
                       style={{ background: 'linear-gradient(135deg, #4D8B3C 0%, #3a6b2e 100%)' }}
                     >
                       {testMut.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Phone className="w-4 h-4" />}
@@ -1068,7 +1110,7 @@ export function VoiceBotConfig() {
                       {testResult}
                     </p>
                   )}
-                  <p className="text-xs text-gray-600 mt-2">
+                  <p className="text-xs text-gray-500 mt-2">
                     The AI bot will call the number above. When the call ends, a test ticket will be created automatically.
                   </p>
                 </div>

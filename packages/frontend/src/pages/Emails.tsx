@@ -63,12 +63,12 @@ interface Deal    { id: string; name: string; }
 // ── Status config ─────────────────────────────────────────────────────────
 
 const STATUS_CFG = {
-  queued:    { label: 'Queued',    icon: Clock,         color: 'text-gray-400',   bg: 'bg-gray-800/60 border-gray-700/50' },
-  sending:   { label: 'Sending',   icon: Loader2,       color: 'text-brand-400',  bg: 'bg-brand-900/40 border-brand-700/50' },
-  delivered: { label: 'Delivered', icon: CheckCircle2,  color: 'text-emerald-400',bg: 'bg-emerald-900/40 border-emerald-700/50' },
-  failed:    { label: 'Failed',    icon: XCircle,       color: 'text-red-400',    bg: 'bg-red-900/40 border-red-700/50' },
-  bounced:   { label: 'Bounced',   icon: AlertCircle,   color: 'text-orange-400', bg: 'bg-orange-900/40 border-orange-700/50' },
-  archived:  { label: 'Archived',  icon: Trash2,        color: 'text-gray-500',   bg: 'bg-gray-900/40 border-gray-700/30' },
+  queued:    { label: 'Queued',    icon: Clock,         color: 'text-gray-500',   bg: 'bg-gray-50 border-gray-200' },
+  sending:   { label: 'Sending',   icon: Loader2,       color: 'text-brand-600',  bg: 'bg-brand-50 border-brand-200' },
+  delivered: { label: 'Delivered', icon: CheckCircle2,  color: 'text-emerald-600',bg: 'bg-emerald-50 border-emerald-200' },
+  failed:    { label: 'Failed',    icon: XCircle,       color: 'text-red-600',    bg: 'bg-red-50 border-red-200' },
+  bounced:   { label: 'Bounced',   icon: AlertCircle,   color: 'text-orange-600', bg: 'bg-orange-50 border-orange-200' },
+  archived:  { label: 'Archived',  icon: Trash2,        color: 'text-gray-400',   bg: 'bg-gray-50 border-gray-200' },
 };
 
 function StatusBadge({ status }: { status: Email['status'] }) {
@@ -155,24 +155,23 @@ export function ComposeModal({ onClose, prefill }: ComposeProps) {
     setShowTemplate(false);
   };
 
-  const inputCls = "w-full bg-gray-900/60 border border-gray-700/60 text-gray-200 placeholder-gray-600 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-brand-500/60 transition-colors";
+  const inputCls = "w-full bg-white border border-gray-200 text-gray-900 placeholder-gray-400 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-brand-500/60 transition-colors";
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4"
-         style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)' }}>
-      <div className="w-full max-w-2xl rounded-2xl border border-white/10 shadow-2xl flex flex-col max-h-[90vh]"
-           style={{ background: '#0d1117' }}>
+         style={{ background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(4px)' }}>
+      <div className="w-full max-w-2xl rounded-2xl border border-gray-100 shadow-2xl flex flex-col max-h-[90vh] bg-white">
 
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-white/10">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-xl flex items-center justify-center"
                  style={{ background: 'linear-gradient(135deg, #29ABE2 0%, #1a8cbf 100%)' }}>
               <Mail className="w-4 h-4 text-white" />
             </div>
-            <h2 className="text-white font-semibold">New Email</h2>
+            <h2 className="text-gray-900 font-semibold">New Email</h2>
           </div>
-          <button onClick={onClose} className="text-gray-500 hover:text-gray-300 p-1 rounded-lg transition-colors">
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1 rounded-lg transition-colors">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -192,12 +191,11 @@ export function ComposeModal({ onClose, prefill }: ComposeProps) {
               <ChevronDown className="w-3.5 h-3.5" />
             </button>
             {showTemplate && templates && templates.length > 0 && (
-              <div className="absolute top-full left-0 mt-1 w-72 rounded-xl border border-white/10 shadow-xl z-10 overflow-hidden"
-                   style={{ background: '#161b22' }}>
+              <div className="absolute top-full left-0 mt-1 w-72 rounded-xl border border-gray-100 shadow-xl z-10 overflow-hidden bg-white">
                 {templates.map(t => (
                   <button key={t.id} onClick={() => applyTemplate(t)}
-                    className="w-full text-left px-4 py-2.5 hover:bg-white/5 transition-colors border-b border-white/5 last:border-0">
-                    <p className="text-sm text-white font-medium">{t.name}</p>
+                    className="w-full text-left px-4 py-2.5 hover:bg-gray-50 transition-colors border-b border-gray-100 last:border-0">
+                    <p className="text-sm text-gray-900 font-medium">{t.name}</p>
                     <p className="text-xs text-gray-500 truncate mt-0.5">{t.subject}</p>
                   </button>
                 ))}
@@ -223,7 +221,7 @@ export function ComposeModal({ onClose, prefill }: ComposeProps) {
 
           {/* CC / BCC toggle */}
           <button type="button" onClick={() => setShowCcBcc(!showCcBcc)}
-            className="text-xs text-gray-500 hover:text-brand-400 flex items-center gap-1 transition-colors">
+            className="text-xs text-gray-500 hover:text-brand-600 flex items-center gap-1 transition-colors">
             <ChevronDown className={`w-3 h-3 transition-transform ${showCcBcc ? 'rotate-180' : ''}`} />
             {showCcBcc ? 'Hide' : 'Add'} CC / BCC / Reply-to
           </button>
@@ -290,12 +288,12 @@ export function ComposeModal({ onClose, prefill }: ComposeProps) {
             <button type="button"
               onClick={() => setForm(f => ({ ...f, useHtml: true }))}
               className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors ${
-                form.useHtml ? 'bg-brand-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+                form.useHtml ? 'bg-brand-600 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
               }`}>HTML</button>
             <button type="button"
               onClick={() => setForm(f => ({ ...f, useHtml: false }))}
               className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors ${
-                !form.useHtml ? 'bg-brand-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+                !form.useHtml ? 'bg-brand-600 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
               }`}>Plain text</button>
           </div>
 
@@ -330,17 +328,17 @@ export function ComposeModal({ onClose, prefill }: ComposeProps) {
           )}
 
           {error && (
-            <div className="flex items-start gap-2 px-3 py-2.5 rounded-xl bg-red-900/30 border border-red-700/50 text-red-300 text-sm">
-              <AlertCircle className="w-4 h-4 mt-0.5 shrink-0 text-red-400" />
+            <div className="flex items-start gap-2 px-3 py-2.5 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm">
+              <AlertCircle className="w-4 h-4 mt-0.5 shrink-0 text-red-500" />
               {error}
             </div>
           )}
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between px-5 py-4 border-t border-white/10">
+        <div className="flex items-center justify-between px-5 py-4 border-t border-gray-100">
           <button onClick={onClose}
-            className="px-4 py-2 rounded-xl text-sm text-gray-400 hover:text-gray-200 hover:bg-white/5 transition-colors">
+            className="px-4 py-2 rounded-xl text-sm text-gray-500 hover:text-gray-700 hover:bg-gray-50 transition-colors">
             Cancel
           </button>
           <button
@@ -382,19 +380,18 @@ function EmailPanel({ emailId, onClose }: { emailId: string; onClose: () => void
   });
 
   return (
-    <div className="w-[420px] shrink-0 border-l border-white/10 flex flex-col h-full"
-         style={{ background: '#0d1117' }}>
+    <div className="w-[420px] shrink-0 border-l border-gray-100 flex flex-col h-full bg-white">
       {/* Header */}
-      <div className="flex items-center justify-between px-5 py-4 border-b border-white/10">
-        <h3 className="text-white font-semibold text-sm">Email Detail</h3>
-        <button onClick={onClose} className="text-gray-500 hover:text-gray-300 p-1 rounded transition-colors">
+      <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+        <h3 className="text-gray-900 font-semibold text-sm">Email Detail</h3>
+        <button onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1 rounded transition-colors">
           <X className="w-4 h-4" />
         </button>
       </div>
 
       {isLoading ? (
         <div className="flex-1 flex items-center justify-center">
-          <Loader2 className="w-6 h-6 animate-spin text-brand-400" />
+          <Loader2 className="w-6 h-6 animate-spin text-brand-500" />
         </div>
       ) : data ? (
         <div className="flex-1 overflow-y-auto p-5 space-y-5">
@@ -402,14 +399,14 @@ function EmailPanel({ emailId, onClose }: { emailId: string; onClose: () => void
           <div className="flex items-center gap-2">
             <StatusBadge status={data.status} />
             {data.opened_at && (
-              <span className="text-xs text-emerald-400">
+              <span className="text-xs text-emerald-600">
                 Opened {new Date(data.opened_at).toLocaleString()}
               </span>
             )}
           </div>
 
           {/* Metadata grid */}
-          <div className="rounded-xl border border-white/10 overflow-hidden">
+          <div className="rounded-xl border border-gray-100 overflow-hidden">
             {[
               { label: 'From',    value: data.from_name ? `${data.from_name} <${data.from_email}>` : data.from_email },
               { label: 'To',      value: data.to_name   ? `${data.to_name} <${data.to_email}>`     : data.to_email   },
@@ -422,16 +419,16 @@ function EmailPanel({ emailId, onClose }: { emailId: string; onClose: () => void
               ...(data.deal_name    ? [{ label: 'Deal',    value: data.deal_name    }] : []),
               ...(data.sent_by_name ? [{ label: 'Sent by', value: data.sent_by_name }] : []),
             ].map(({ label, value }) => (
-              <div key={label} className="flex gap-3 px-4 py-2.5 border-b border-white/5 last:border-0">
+              <div key={label} className="flex gap-3 px-4 py-2.5 border-b border-gray-100 last:border-0">
                 <span className="text-xs text-gray-500 w-16 shrink-0 pt-0.5">{label}</span>
-                <span className="text-xs text-gray-200 break-all">{value}</span>
+                <span className="text-xs text-gray-700 break-all">{value}</span>
               </div>
             ))}
           </div>
 
           {/* Error */}
           {data.error && (
-            <div className="px-4 py-3 rounded-xl bg-red-900/30 border border-red-700/50 text-red-300 text-xs">
+            <div className="px-4 py-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs">
               <p className="font-semibold mb-1">Delivery error</p>
               {data.error}
             </div>
@@ -442,11 +439,11 @@ function EmailPanel({ emailId, onClose }: { emailId: string; onClose: () => void
             <p className="text-xs text-gray-500 mb-2 font-semibold uppercase tracking-wide">Message body</p>
             {data.body_html ? (
               <div
-                className="rounded-xl border border-white/10 p-4 text-sm text-gray-300 bg-white/5 overflow-auto max-h-64"
+                className="rounded-xl border border-gray-100 p-4 text-sm text-gray-700 bg-gray-50 overflow-auto max-h-64"
                 dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(data.body_html, { USE_PROFILES: { html: true } }) }}
               />
             ) : (
-              <pre className="rounded-xl border border-white/10 p-4 text-sm text-gray-300 bg-white/5 overflow-auto max-h-64 whitespace-pre-wrap font-sans">
+              <pre className="rounded-xl border border-gray-100 p-4 text-sm text-gray-700 bg-gray-50 overflow-auto max-h-64 whitespace-pre-wrap font-sans">
                 {data.body_text ?? '(no body)'}
               </pre>
             )}
@@ -467,21 +464,21 @@ function EmailPanel({ emailId, onClose }: { emailId: string; onClose: () => void
             <button
               onClick={() => deleteMut.mutate()}
               disabled={deleteMut.isPending}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm text-red-400 hover:bg-red-900/30 border border-red-900/50 transition-colors"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm text-red-600 hover:bg-red-50 border border-red-200 transition-colors"
             >
               <Trash2 className="w-4 h-4" />
               Archive
             </button>
             <button
               onClick={() => navigator.clipboard.writeText(data.to_email)}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm text-gray-400 hover:bg-white/5 border border-white/10 transition-colors"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm text-gray-500 hover:bg-gray-50 border border-gray-200 transition-colors"
             >
               <Copy className="w-4 h-4" />
             </button>
           </div>
         </div>
       ) : (
-        <div className="flex-1 flex items-center justify-center text-gray-600 text-sm">
+        <div className="flex-1 flex items-center justify-center text-gray-400 text-sm">
           Email not found
         </div>
       )}
@@ -503,8 +500,8 @@ function EmailCard({ email, selected, onClick }: { email: Email; selected: boole
   return (
     <div
       onClick={onClick}
-      className={`px-5 py-4 border-b border-white/5 cursor-pointer transition-colors hover:bg-white/5 ${
-        selected ? 'bg-brand-900/20 border-l-2 border-l-brand-500' : ''
+      className={`px-5 py-4 border-b border-gray-100 cursor-pointer transition-colors hover:bg-gray-50 ${
+        selected ? 'bg-brand-50 border-l-2 border-l-brand-500' : ''
       }`}
     >
       <div className="flex items-start gap-3">
@@ -518,12 +515,12 @@ function EmailCard({ email, selected, onClick }: { email: Email; selected: boole
 
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between gap-2 mb-0.5">
-            <span className="text-sm font-semibold text-white truncate">
+            <span className="text-sm font-semibold text-gray-900 truncate">
               {email.to_name ?? email.to_email}
             </span>
-            <span className="text-[10px] text-gray-500 shrink-0">{ago(email.created_at)}</span>
+            <span className="text-[10px] text-gray-400 shrink-0">{ago(email.created_at)}</span>
           </div>
-          <p className="text-sm text-gray-300 truncate mb-1.5">{email.subject}</p>
+          <p className="text-sm text-gray-700 truncate mb-1.5">{email.subject}</p>
           <div className="flex items-center gap-2 flex-wrap">
             <StatusBadge status={email.status} />
             {email.contact_name && (
@@ -537,7 +534,7 @@ function EmailCard({ email, selected, onClick }: { email: Email; selected: boole
               </span>
             )}
             {email.provider && (
-              <span className="text-[10px] text-gray-600 capitalize">{email.provider}</span>
+              <span className="text-[10px] text-gray-400 capitalize">{email.provider}</span>
             )}
           </div>
         </div>
@@ -555,18 +552,17 @@ function StatsBar({ emails }: { emails: Email[] }) {
   }, {} as Record<string, number>);
 
   const stats = [
-    { label: 'Total',     value: emails.length,             color: 'text-white' },
-    { label: 'Delivered', value: counts.delivered ?? 0,     color: 'text-emerald-400' },
-    { label: 'Failed',    value: counts.failed ?? 0,        color: 'text-red-400' },
-    { label: 'Sending',   value: (counts.sending ?? 0) + (counts.queued ?? 0), color: 'text-brand-400' },
+    { label: 'Total',     value: emails.length,             color: 'text-gray-900' },
+    { label: 'Delivered', value: counts.delivered ?? 0,     color: 'text-emerald-600' },
+    { label: 'Failed',    value: counts.failed ?? 0,        color: 'text-red-600' },
+    { label: 'Sending',   value: (counts.sending ?? 0) + (counts.queued ?? 0), color: 'text-brand-600' },
   ];
 
   return (
     <div className="grid grid-cols-4 gap-3 mb-5">
       {stats.map(({ label, value, color }) => (
         <div key={label}
-          className="rounded-xl px-4 py-3 border border-white/10 flex flex-col gap-0.5"
-          style={{ background: 'rgba(255,255,255,0.03)' }}
+          className="rounded-xl px-4 py-3 border border-gray-100 bg-white flex flex-col gap-0.5"
         >
           <span className={`text-xl font-bold ${color}`}>{value}</span>
           <span className="text-xs text-gray-500">{label}</span>
@@ -604,20 +600,20 @@ export function Emails() {
   const total  = data?.meta?.total ?? 0;
 
   return (
-    <div className="flex h-screen overflow-hidden" style={{ background: '#0d1117' }}>
+    <div className="flex h-screen overflow-hidden bg-gray-50">
 
       {/* ── Main list area ───────────────────────────────────────── */}
       <div className="flex-1 flex flex-col overflow-hidden">
 
         {/* Header */}
-        <div className="px-6 py-5 border-b border-white/10 flex items-center justify-between gap-4 shrink-0">
+        <div className="px-6 py-5 border-b border-gray-100 bg-white flex items-center justify-between gap-4 shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl flex items-center justify-center"
                  style={{ background: 'linear-gradient(135deg, #29ABE2 0%, #1a8cbf 100%)' }}>
               <Mail className="w-5 h-5 text-white" />
             </div>
             <div>
-              <h1 className="text-white font-bold text-lg leading-tight">Emails</h1>
+              <h1 className="text-gray-900 font-bold text-lg leading-tight">Emails</h1>
               <p className="text-gray-500 text-xs">{total} message{total !== 1 ? 's' : ''} sent</p>
             </div>
           </div>
@@ -633,22 +629,22 @@ export function Emails() {
         </div>
 
         {/* Filters */}
-        <div className="px-6 py-3 border-b border-white/10 flex items-center gap-3 shrink-0">
+        <div className="px-6 py-3 border-b border-gray-100 bg-white flex items-center gap-3 shrink-0">
           <div className="relative flex-1 max-w-xs">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-500" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
             <input
               type="text"
               placeholder="Search subject or recipient…"
               value={search}
               onChange={e => { setSearch(e.target.value); setPage(1); }}
-              className="pl-9 pr-4 py-2 bg-gray-900/60 border border-gray-700/60 text-gray-300 placeholder-gray-600 rounded-xl text-xs outline-none focus:border-brand-500/60 w-full"
+              className="pl-9 pr-4 py-2 bg-white border border-gray-200 text-gray-700 placeholder-gray-400 rounded-xl text-xs outline-none focus:border-brand-500/60 w-full"
             />
           </div>
 
           <select
             value={statusFilter}
             onChange={e => { setStatus(e.target.value); setPage(1); }}
-            className="px-3 py-2 bg-gray-900/60 border border-gray-700/60 text-gray-400 rounded-xl text-xs outline-none focus:border-brand-500/60 appearance-none"
+            className="px-3 py-2 bg-white border border-gray-200 text-gray-600 rounded-xl text-xs outline-none focus:border-brand-500/60 appearance-none"
           >
             <option value="">All statuses</option>
             {Object.entries(STATUS_CFG).filter(([k]) => k !== 'archived').map(([k, v]) => (
@@ -657,7 +653,7 @@ export function Emails() {
           </select>
 
           {isFetching && !isLoading && (
-            <Loader2 className="w-4 h-4 animate-spin text-brand-400 shrink-0" />
+            <Loader2 className="w-4 h-4 animate-spin text-brand-500 shrink-0" />
           )}
         </div>
 
@@ -665,17 +661,16 @@ export function Emails() {
         <div className="flex-1 overflow-y-auto">
           {isLoading ? (
             <div className="flex items-center justify-center h-64">
-              <Loader2 className="w-8 h-8 animate-spin text-brand-400" />
+              <Loader2 className="w-8 h-8 animate-spin text-brand-500" />
             </div>
           ) : emails.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-64 gap-4">
-              <div className="w-16 h-16 rounded-2xl flex items-center justify-center"
-                   style={{ background: 'rgba(41,171,226,0.1)' }}>
-                <Mail className="w-8 h-8 text-brand-400/50" />
+              <div className="w-16 h-16 rounded-2xl flex items-center justify-center bg-brand-50">
+                <Mail className="w-8 h-8 text-brand-300" />
               </div>
               <div className="text-center">
-                <p className="text-gray-400 font-medium">No emails yet</p>
-                <p className="text-gray-600 text-sm mt-1">
+                <p className="text-gray-600 font-medium">No emails yet</p>
+                <p className="text-gray-400 text-sm mt-1">
                   {search || statusFilter
                     ? 'Try changing your filters'
                     : 'Compose your first email to get started'}
@@ -706,16 +701,16 @@ export function Emails() {
               ))}
               {/* Pagination */}
               {total > 30 && (
-                <div className="flex items-center justify-center gap-3 py-4 border-t border-white/5">
+                <div className="flex items-center justify-center gap-3 py-4 border-t border-gray-100">
                   <button disabled={page <= 1} onClick={() => setPage(p => p - 1)}
-                    className="px-3 py-1.5 rounded-lg text-xs text-gray-400 disabled:opacity-30 hover:bg-white/5 border border-white/10 transition-colors">
+                    className="px-3 py-1.5 rounded-lg text-xs text-gray-500 disabled:opacity-30 hover:bg-gray-50 border border-gray-200 transition-colors">
                     ← Prev
                   </button>
                   <span className="text-xs text-gray-500">
                     Page {page} of {Math.ceil(total / 30)}
                   </span>
                   <button disabled={page >= Math.ceil(total / 30)} onClick={() => setPage(p => p + 1)}
-                    className="px-3 py-1.5 rounded-lg text-xs text-gray-400 disabled:opacity-30 hover:bg-white/5 border border-white/10 transition-colors">
+                    className="px-3 py-1.5 rounded-lg text-xs text-gray-500 disabled:opacity-30 hover:bg-gray-50 border border-gray-200 transition-colors">
                     Next →
                   </button>
                 </div>

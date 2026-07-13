@@ -814,6 +814,10 @@ export function voiceBotRoutes(db: DatabaseClient, eventBus: EventBus) {
       endCallPhrases:          z.array(z.string()).optional(),
       sipTrunkProvider:        z.string().optional(),
       sipTrunkNumber:          z.string().optional(),
+      sipTrunkUsername:        z.string().optional(),
+      sipTrunkPassword:        z.string().optional(),
+      sipTrunkNickname:        z.string().optional(),
+      outboundTransport:       z.enum(['TCP', 'UDP']).optional(),
     });
 
     fastify.put('/config', { preHandler: requireRole('tenant_admin', 'super_admin') }, async (req, reply) => {
@@ -828,9 +832,10 @@ export function voiceBotRoutes(db: DatabaseClient, eventBus: EventBus) {
                sip_uri, ivr_menu, self_service_intents,
                tone, speaking_rate, stt_provider, stt_language_hint, tts_provider,
                llm_model, interruption_sensitivity, max_call_duration_sec, end_call_phrases,
-               sip_trunk_provider, sip_trunk_number, bot_name)
+               sip_trunk_provider, sip_trunk_number, bot_name,
+               sip_trunk_username, sip_trunk_password, sip_trunk_nickname, outbound_transport)
             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,
-                    $17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28)
+                    $17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32)
             ON CONFLICT (tenant_id, provider) DO UPDATE SET
               is_active             = EXCLUDED.is_active,
               assistant_id          = EXCLUDED.assistant_id,
@@ -858,6 +863,10 @@ export function voiceBotRoutes(db: DatabaseClient, eventBus: EventBus) {
               sip_trunk_provider    = EXCLUDED.sip_trunk_provider,
               sip_trunk_number      = EXCLUDED.sip_trunk_number,
               bot_name              = EXCLUDED.bot_name,
+              sip_trunk_username    = EXCLUDED.sip_trunk_username,
+              sip_trunk_password    = EXCLUDED.sip_trunk_password,
+              sip_trunk_nickname    = EXCLUDED.sip_trunk_nickname,
+              outbound_transport    = EXCLUDED.outbound_transport,
               updated_at            = NOW()
             RETURNING *`,
            [
@@ -889,6 +898,10 @@ export function voiceBotRoutes(db: DatabaseClient, eventBus: EventBus) {
              body.sipTrunkProvider        ?? null,
              body.sipTrunkNumber          ?? null,
              body.botName                 ?? 'Nadia',
+             body.sipTrunkUsername        ?? null,
+             body.sipTrunkPassword        ?? null,
+             body.sipTrunkNickname        ?? null,
+             body.outboundTransport       ?? 'TCP',
            ],
         );
         return r.rows;
