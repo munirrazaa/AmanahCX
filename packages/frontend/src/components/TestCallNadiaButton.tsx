@@ -1,9 +1,23 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Phone, PhoneOff, Loader2 } from 'lucide-react';
 import { Room, RoomEvent, Track } from 'livekit-client';
 import { api } from '../services/api';
 
 type Status = 'idle' | 'connecting' | 'live' | 'error';
+
+// Only ONE test call may be live at a time, app-wide. The button is rendered
+// in two places (Admin Dashboard header + Voice Bot settings page), and a call
+// survives the component unmounting only long enough for us to kill it here —
+// without this, starting a second call while the first was still connected
+// produced two Nadias talking over each other.
+let activeCall: { room: Room; els: HTMLMediaElement[] } | null = null;
+
+function killActiveCall() {
+  if (!activeCall) return;
+  try { activeCall.room.disconnect(); } catch { /* noop */ }
+  activeCall.els.forEach(el => { try { el.remove(); } catch { /* noop */ } });
+  activeCall = null;
+}
 
 /**
  * Talks to the tenant's configured Nadia voice bot straight from the browser —
@@ -22,13 +36,19 @@ export function TestCallNadiaButton({ compact = false }: { compact?: boolean }) 
   const elsRef = useRef<HTMLMediaElement[]>([]);
 
   function cleanup() {
+    if (activeCall?.room === roomRef.current) activeCall = null;
     try { roomRef.current?.disconnect(); } catch { /* noop */ }
     roomRef.current = null;
     elsRef.current.forEach(el => { try { el.remove(); } catch { /* noop */ } });
     elsRef.current = [];
   }
 
+  // End the call when the user navigates away and this button unmounts —
+  // otherwise the session keeps running invisibly in the background.
+  useEffect(() => cleanup, []);
+
   async function start() {
+    killActiveCall(); // never allow two simultaneous sessions
     setStatus('connecting');
     setError('');
     try {
@@ -37,6 +57,7 @@ export function TestCallNadiaButton({ compact = false }: { compact?: boolean }) 
 
       const room = new Room({ adaptiveStream: true });
       roomRef.current = room;
+      activeCall = { room, els: elsRef.current };
 
       room.on(RoomEvent.TrackSubscribed, (track) => {
         if (track.kind === Track.Kind.Audio) {
