@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Talk to Nadia</title>
+<script src="https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js"></script>
+<style>
+  body { font-family: -apple-system, sans-serif; background: #0b0b0f; color: #eee; display: flex; flex-direction: column; align-items: center; padding: 60px 20px; }
+  button { font-size: 18px; padding: 14px 28px; border-radius: 8px; border: none; cursor: pointer; margin: 8px; }
+  #connectBtn { background: #2BB8CC; color: #000; }
+  #connectBtn:disabled { background: #444; color: #999; cursor: not-allowed; }
+  #log { margin-top: 30px; width: 100%; max-width: 600px; font-size: 13px; color: #9c9; white-space: pre-wrap; background: #111; padding: 12px; border-radius: 8px; min-height: 200px; }
+  #status { font-size: 16px; margin-top: 10px; }
+</style>
+</head>
+<body>
+  <h2>🎙️ Talk to Nadia</h2>
+  <button id="connectBtn">Connect &amp; start talking</button>
+  <div id="status">Not connected</div>
+  <div id="log"></div>
+
+<script>
+  const LIVEKIT_URL = "wss://amanahcx-r1y18d13.livekit.cloud";
+  const TOKEN = "PASTE_TOKEN_HERE"; // run `python3 webtest/mint_token.py` and paste the TOKEN value here
+
+  const logEl = document.getElementById("log");
+  const statusEl = document.getElementById("status");
+  const btn = document.getElementById("connectBtn");
+
+  function log(msg) {
+    logEl.textContent += msg + "\n";
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  btn.onclick = async () => {
+    btn.disabled = true;
+    statusEl.textContent = "Connecting...";
+    const room = new LivekitClient.Room();
+
+    room.on(LivekitClient.RoomEvent.ParticipantConnected, (p) => log("Participant joined: " + p.identity));
+    room.on(LivekitClient.RoomEvent.ParticipantDisconnected, (p) => log("Participant left: " + p.identity));
+    room.on(LivekitClient.RoomEvent.TrackSubscribed, (track, pub, participant) => {
+      log("Subscribed to " + track.kind + " track from " + participant.identity);
+      if (track.kind === "audio") {
+        const el = track.attach();
+        document.body.appendChild(el);
+      }
+    });
+    room.on(LivekitClient.RoomEvent.Disconnected, () => {
+      statusEl.textContent = "Disconnected";
+      log("Room disconnected");
+    });
+    room.on(LivekitClient.RoomEvent.TranscriptionReceived, (segments) => {
+      segments.forEach((s) => log((s.final ? "[final] " : "[interim] ") + s.text));
+    });
+
+    try {
+      await room.connect(LIVEKIT_URL, TOKEN);
+      log("Connected to room: " + room.name);
+      await room.localParticipant.setMicrophoneEnabled(true);
+      log("Microphone enabled — say something to Nadia.");
+      statusEl.textContent = "Connected — talk now";
+    } catch (err) {
+      log("ERROR: " + err.message);
+      statusEl.textContent = "Failed to connect";
+      btn.disabled = false;
+    }
+  };
+</script>
+</body>
+</html>

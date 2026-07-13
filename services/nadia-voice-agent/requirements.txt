@@ -1,0 +1,16 @@
+# Nadia — self-hosted LiveKit voice agent for the Pakistani market
+#
+# Versions pinned to match Uplift AI's own verified LiveKit tutorial
+# (docs.upliftai.org/tutorials/livekit-voice-agent, checked 2026-07-12).
+# Bump all livekit-* packages together if you upgrade.
+
+livekit-agents==1.5.1
+livekit-plugins-upliftai==1.5.1   # official Uplift AI TTS plugin — helpdesk-agent voice
+livekit-plugins-openai==1.5.1     # LLM brain (gpt-4o-mini)
+livekit-plugins-silero==1.5.1     # VAD (voice activity detection) + turn-taking
+livekit-plugins-turn-detector==1.5.1
+
+faster-whisper>=1.0               # self-hosted STT — open source, no per-call cost
+httpx>=0.27                       # calls to CRM ingestion endpoints
+python-dotenv>=1.0
+python-socketio>=5.11.0           # required by livekit-plugins-upliftai (websocket streaming)

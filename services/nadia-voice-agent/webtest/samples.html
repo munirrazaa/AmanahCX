@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Uplift raw TTS samples</title>
+<style>
+  body { font-family: -apple-system, sans-serif; background: #0b0b0f; color: #eee; padding: 40px; max-width: 700px; margin: 0 auto; }
+  .sample { margin: 24px 0; padding: 16px; background: #16161c; border-radius: 8px; }
+  audio { width: 100%; margin-top: 8px; }
+  h3 { margin: 0 0 4px 0; }
+  p { color: #999; font-size: 13px; margin: 4px 0 0 0; }
+</style>
+</head>
+<body>
+  <h2>Raw Uplift AI output — bypassing LiveKit/agent entirely</h2>
+  <p>Same voice ("helpdesk-agent"), same text, called directly against Uplift's API. If these sound natural, the robotic quality is coming from our LiveKit pipeline, not Uplift's voice.</p>
+
+  <div class="sample" style="border: 2px solid #2BB8CC;">
+    <h3>⭐ Uplift's own demo text, in Urdu script (compare this against their website sample)</h3>
+    <p>Same voice_id, same exact sentence as shown on docs.upliftai.org/orator_voices for helpdesk-agent — proper Urdu script this time, not Roman Urdu.</p>
+    <audio controls src="/samples/uplift_urdu_script_demo_text.mp3"></audio>
+  </div>
+
+  <div class="sample">
+    <h3>MP3_22050_128 — our own Roman Urdu greeting text (what our agent currently uses)</h3>
+    <audio controls src="/samples/uplift_raw_MP3_22050_128.mp3"></audio>
+  </div>
+
+  <div class="sample">
+    <h3>WAV_22050_32 (uncompressed, no MP3 artifacts)</h3>
+    <audio controls src="/samples/uplift_raw_WAV_22050_32.wav"></audio>
+  </div>
+
+  <div class="sample">
+    <h3>PCM_22050_16 (raw lossless)</h3>
+    <audio controls src="/samples/uplift_raw_PCM_22050_16.wav"></audio>
+  </div>
+
+  <div class="sample">
+    <h3>Speed test: 0.75x (slower, pitch preserved)</h3>
+    <audio controls src="/samples/stretch_slow.wav"></audio>
+  </div>
+
+  <div class="sample">
+    <h3>Speed test: 1.3x (faster, pitch preserved)</h3>
+    <audio controls src="/samples/stretch_fast.wav"></audio>
+  </div>
+</body>
+</html>

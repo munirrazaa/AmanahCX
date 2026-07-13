@@ -1,0 +1,6 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+webtest/samples/*.mp3
+webtest/samples/*.wav

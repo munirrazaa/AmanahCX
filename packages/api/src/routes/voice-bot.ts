@@ -759,7 +759,7 @@ export function voiceBotRoutes(db: DatabaseClient, eventBus: EventBus) {
     });
 
     const ConfigSchema = z.object({
-      provider:           z.enum(['vapi', 'retell', 'bland', 'twilio_ai']),
+      provider:           z.enum(['vapi', 'retell', 'bland', 'twilio_ai', 'livekit']),
       isActive:           z.boolean().optional(),
       assistantId:        z.string().optional(),
       phoneNumber:        z.string().optional(),
@@ -781,6 +781,20 @@ export function voiceBotRoutes(db: DatabaseClient, eventBus: EventBus) {
         description: z.string().optional(),
       })).optional(),
       selfServiceIntents: z.array(z.string()).optional(),
+
+      // LiveKit ("Nadia") self-hosted agent — Retell-style behaviour knobs.
+      // Ignored (but harmless) for vapi/retell/bland, which have their own dashboards.
+      tone:                    z.enum(['professional', 'friendly', 'empathetic', 'formal']).optional(),
+      speakingRate:            z.number().min(0.5).max(2.0).optional(),
+      sttProvider:             z.enum(['whisper']).optional(),
+      sttLanguageHint:         z.enum(['ur-en', 'ur', 'en']).optional(),
+      ttsProvider:             z.enum(['uplift']).optional(),
+      llmModel:                z.string().optional(),
+      interruptionSensitivity: z.number().min(0).max(1).optional(),
+      maxCallDurationSec:      z.number().int().min(30).max(3600).optional(),
+      endCallPhrases:          z.array(z.string()).optional(),
+      sipTrunkProvider:        z.string().optional(),
+      sipTrunkNumber:          z.string().optional(),
     });
 
     fastify.put('/config', { preHandler: requireRole('tenant_admin', 'super_admin') }, async (req, reply) => {
@@ -792,8 +806,12 @@ export function voiceBotRoutes(db: DatabaseClient, eventBus: EventBus) {
               (tenant_id, provider, is_active, assistant_id, phone_number,
                greeting_message, system_prompt, language, voice_id,
                auto_create_ticket, default_queue_id, default_priority, keyword_urgency,
-               sip_uri, ivr_menu, self_service_intents)
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+               sip_uri, ivr_menu, self_service_intents,
+               tone, speaking_rate, stt_provider, stt_language_hint, tts_provider,
+               llm_model, interruption_sensitivity, max_call_duration_sec, end_call_phrases,
+               sip_trunk_provider, sip_trunk_number)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,
+                    $17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27)
             ON CONFLICT (tenant_id, provider) DO UPDATE SET
               is_active             = EXCLUDED.is_active,
               assistant_id          = EXCLUDED.assistant_id,
@@ -809,6 +827,17 @@ export function voiceBotRoutes(db: DatabaseClient, eventBus: EventBus) {
               sip_uri               = EXCLUDED.sip_uri,
               ivr_menu              = EXCLUDED.ivr_menu,
               self_service_intents  = EXCLUDED.self_service_intents,
+              tone                  = EXCLUDED.tone,
+              speaking_rate         = EXCLUDED.speaking_rate,
+              stt_provider          = EXCLUDED.stt_provider,
+              stt_language_hint     = EXCLUDED.stt_language_hint,
+              tts_provider          = EXCLUDED.tts_provider,
+              llm_model             = EXCLUDED.llm_model,
+              interruption_sensitivity = EXCLUDED.interruption_sensitivity,
+              max_call_duration_sec = EXCLUDED.max_call_duration_sec,
+              end_call_phrases      = EXCLUDED.end_call_phrases,
+              sip_trunk_provider    = EXCLUDED.sip_trunk_provider,
+              sip_trunk_number      = EXCLUDED.sip_trunk_number,
               updated_at            = NOW()
             RETURNING *`,
            [
@@ -819,8 +848,8 @@ export function voiceBotRoutes(db: DatabaseClient, eventBus: EventBus) {
              body.phoneNumber     ?? null,
              body.greetingMessage ?? null,
              body.systemPrompt    ?? null,
-             body.language        ?? 'en-US',
-             body.voiceId         ?? null,
+             body.language        ?? (body.provider === 'livekit' ? 'ur-PK' : 'en-US'),
+             body.voiceId         ?? (body.provider === 'livekit' ? 'helpdesk-agent' : null),
              body.autoCreateTicket ?? true,
              body.defaultQueueId  ?? null,
              body.defaultPriority ?? 'medium',
@@ -828,6 +857,17 @@ export function voiceBotRoutes(db: DatabaseClient, eventBus: EventBus) {
              body.sipUri          ?? null,
              JSON.stringify(body.ivrMenu ?? DEFAULT_IVR_MENU),
              body.selfServiceIntents ?? [],
+             body.tone                    ?? 'professional',
+             body.speakingRate            ?? 0.9,
+             body.sttProvider             ?? 'whisper',
+             body.sttLanguageHint         ?? 'ur-en',
+             body.ttsProvider             ?? 'uplift',
+             body.llmModel                ?? 'gpt-4o-mini',
+             body.interruptionSensitivity ?? 0.5,
+             body.maxCallDurationSec      ?? 600,
+             body.endCallPhrases ?? ['اللہ حافظ', 'خدا حافظ', 'شکریہ، اللہ حافظ'],
+             body.sipTrunkProvider        ?? null,
+             body.sipTrunkNumber          ?? null,
            ],
         );
         return r.rows;
