@@ -126,7 +126,11 @@ export function contactRoutes(db: DatabaseClient, eventBus: EventBus) {
       });
 
       const customFields = body.customFields ?? {};
-      const missingFields = req.user.role === 'super_admin' ? [] : requiredFields.filter(
+      // Field quick-capture (card scan, voice, mobile) is exempt from sector-required
+      // fields — a fresh walk-in lead has no account number yet. The requirement is
+      // enforced later when the lead is converted/edited into a full customer record.
+      const isQuickCapture = ['card_scan', 'voice', 'mobile', 'field'].includes(body.source ?? '');
+      const missingFields = (req.user.role === 'super_admin' || isQuickCapture) ? [] : requiredFields.filter(
         (name: string) => customFields[name] === undefined || customFields[name] === null || customFields[name] === '',
       );
 
@@ -199,7 +203,7 @@ export function contactRoutes(db: DatabaseClient, eventBus: EventBus) {
               { type: 'image', source: { type: 'base64', media_type: body.mediaType, data: body.image } },
               {
                 type: 'text',
-                text: 'This is a photo of a business/visiting card. Extract the contact details and reply with ONLY a JSON object (no markdown) with these keys, using null for anything not on the card: firstName, lastName, jobTitle, company, email, phone, mobile, website, address. Phone numbers should keep their country code if shown. If the card is not readable or is not a business card, reply with {"error": "reason"}.',
+                text: 'This is a photo of a business/visiting card. Extract the contact details and reply with ONLY a JSON object (no markdown) with these keys, using null for anything not on the card: firstName, lastName, jobTitle, company, email, phone, mobile, website, address. The person NAME is usually the most prominent text after the company logo — often stylised, in a larger or decorative font, sometimes vertical or diagonal; look carefully for it and split into firstName/lastName. Numbers labelled Cell/Mob/Mobile/WhatsApp or starting with a mobile prefix (e.g. 03xx in Pakistan, +92 3xx) go in \"mobile\"; landline/Tel/Office/UAN numbers go in \"phone\"; if only one unlabelled number exists and it looks like a mobile number, put it in \"mobile\". Phone numbers should keep their country code if shown. If the card is not readable or is not a business card, reply with {"error": "reason"}.',
               },
             ],
           }],

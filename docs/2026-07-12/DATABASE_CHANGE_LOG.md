@@ -3,68 +3,9 @@ _Most recent at top. Tracks structural and security-relevant changes to the live
 
 ---
 
-## 2026-07-13 — voice_bot_configs: LiveKit agent columns + sip_uri/ivr_menu bug fix (migration 049)
-
-### What changed
-`ALTER TABLE voice_bot_configs` (all idempotent `ADD COLUMN IF NOT EXISTS`):
-- `sip_uri TEXT`, `ivr_menu JSONB` — these were already referenced by `PUT /config` in
-  `voice-bot.ts` but no migration had ever created them; every save of those two fields has
-  been failing with "column does not exist" since they were added to the route.
-- New LiveKit-specific columns: `tone`, `speaking_rate`, `stt_provider`, `stt_language_hint`,
-  `tts_provider`, `llm_model`, `interruption_sensitivity`, `max_call_duration_sec`,
-  `end_call_phrases`, `sip_trunk_provider`, `sip_trunk_number` — config knobs for the new
-  self-hosted "Nadia" LiveKit voice agent (see `CHANGE_LOG.md` 2026-07-13), equivalent to what
-  Retell AI/Vapi's own dashboards expose for a hosted agent.
-
-### Why
-The self-hosted LiveKit agent has no vendor dashboard of its own — the CRM's Voice Bot Config
-screen has to be that dashboard, so it needs columns for the settings a hosted platform would
-otherwise store on their side.
-
-### Filename-numbering note (resolves the ambiguity flagged in the 2026-07-12 entry below)
-Checked `_migrations` directly before writing this: no row for `049`, `050`, `051`, or `052`
-exists in the live database — filename `049_livekit_agent_config.sql` does not collide with
-anything already applied. The gap between `048` and `053` in the live history is unexplained
-by this session but confirmed harmless for this migration.
-
-### Verification
-**Not yet applied** — file exists at
-`packages/core/src/database/migrations/049_livekit_agent_config.sql`, `npm run db:migrate`
-has not been run against Supabase yet. Do that before relying on the new columns; the
-migration is purely additive so it's safe to run at any time.
-
----
-
 ## 2026-07-12 — No structural database changes
 
 - Application-code-only push (quick-capture validation, mobile UX fixes). Password reset on non-protected test user field.officer@demo.com (rotated by a parallel session, reset to documented test value).
-
----
-
-## 2026-07-12 — New table: contact_channel_consent (migration 053)
-
-### What changed
-New append-only table `contact_channel_consent` for per-channel communication consent:
-`id, tenant_id (FK tenants), contact_id (FK contacts), channel (whatsapp|sms|email),
-opted_in (bool), source (manual|reply|form|import|api), consented_at, recorded_by (FK users,
-SET NULL on delete), notes`. Two indexes for latest-state and history lookups. RLS enabled
-with the standard `tenant_isolation` policy (`app.tenant_id` GUC or `app.bypass_rls`).
-
-### Why
-Meta's WhatsApp Business API requires provable customer opt-in before business-initiated
-messages (account-suspension risk). Rows are never updated or deleted by the application —
-every opt-in/opt-out is a new row, preserving the compliance audit trail.
-
-### Verification
-Applied via Supabase migration `053_contact_channel_consent` and live-tested the same day:
-insert/read through the API under a tenant-scoped connection works; a different tenant's
-manager receives an empty result for the same contact (RLS isolation confirmed); mirrored in
-repo at `packages/core/src/database/migrations/053_contact_channel_consent.sql`.
-
-Note: migration numbering — the repo also contains an unrelated, not-yet-committed
-`049_livekit_agent_config.sql` in the AmanahCX working tree (separate voice-agent work, not
-part of this change); crm-platform's local sequence runs 049–052 with different content.
-The Supabase migration history is the authoritative record of what is applied to the live DB.
 
 ---
 

@@ -64,10 +64,22 @@ export default function MyTasksScreen() {
   return (
     <View style={styles.screen}>
       <View style={styles.header}>
-        <Text style={styles.title}>My Tasks</Text>
-        <Text style={styles.subtitle}>
-          {data ? `${data.pending} open · ${data.completed} completed` : ' '}
-        </Text>
+        <View>
+          <Text style={styles.title}>My Tasks</Text>
+          <Text style={styles.subtitle}>
+            {data ? `${data.pending} open · ${data.completed} completed` : ' '}
+          </Text>
+        </View>
+        <View style={styles.headerActions}>
+          <TouchableOpacity style={styles.newLeadBtn} onPress={() => router.push('/contact/new')}>
+            <Ionicons name="person-add" size={16} color="#fff" />
+            <Text style={styles.newLeadBtnText}>New Lead</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.newLeadBtn, styles.newTaskBtn]} onPress={() => router.push('/task/new')}>
+            <Ionicons name="mic" size={16} color="#fff" />
+            <Text style={styles.newLeadBtnText}>Task</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <View style={styles.statRow}>
@@ -138,7 +150,11 @@ export default function MyTasksScreen() {
 
 const styles = StyleSheet.create({
   screen:    { flex: 1, backgroundColor: '#0f172a' },
-  header:    { paddingHorizontal: 20, paddingTop: 60, paddingBottom: 8 },
+  headerActions: { flexDirection: 'row', gap: 8 },
+  newLeadBtn: { flexDirection: 'row', gap: 5, alignItems: 'center', backgroundColor: '#2BB8CC', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 9 },
+  newTaskBtn: { backgroundColor: '#4C9A4C' },
+  newLeadBtnText: { color: '#fff', fontWeight: '700', fontSize: 13 },
+  header: { paddingHorizontal: 20, paddingTop: 60, paddingBottom: 8, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
   title:     { fontSize: 24, fontWeight: '700', color: '#f1f5f9' },
   subtitle:  { fontSize: 13, color: '#64748b', marginTop: 4 },
   statRow:   { flexDirection: 'row', gap: 10, paddingHorizontal: 20, marginVertical: 14 },

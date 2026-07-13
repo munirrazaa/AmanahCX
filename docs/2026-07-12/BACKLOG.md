@@ -11,12 +11,6 @@ _All ideas, pending work, and deferred items. Prioritised against enterprise rea
 
 ## 🔴 P1 — Critical (Do Now — blocks enterprise readiness)
 
-### 0c. Daily Vercel login "spinner that never stops" — partially investigated, root cause NOT confirmed
-- **Verdict:** Do Now — needs live reproduction with the user to pin down
-- **Status:** Open — 2026-07-12. Full architecture (Vercel → Railway → Supabase) tested end-to-end and confirmed working; a real login was completed live while streaming Railway logs with no errors.
-- **What WAS found and fixed in the same session:** Live Wallboard's `agent-load`/`queue-stats` endpoints were 500ing on every call (referenced two columns — `tickets.is_overdue`, `ticket_queues.department` — that never existed in the schema). Fixed and verified. Not yet confirmed whether this was the actual cause of the reported spinner, since it's a Wallboard-specific bug, not something on the login path itself.
-- **Next step:** reproduce the spinner live with Railway logs streaming at the exact moment it happens, to see what the server does (or doesn't do) during the actual failing attempt — a fresh test with a throwaway account did not reproduce it.
-
 ### 0a. Agent dashboard access blocked — fixed; deeper entitlement drift found
 - **Verdict:** Done ✅ — 2026-07-10
 - **Why it happened:** The dashboard route required an `analytics:read` scope, which reads the `permissions.analytics` value — the same value tenant module-licensing correctly forces to `"none"` for any tenant that hasn't purchased the Analytics module (Haier's real situation: licensed for Core CRM + Ticketing only). The route's own code comment says the home dashboard shouldn't be gated this way, but the scope check silently reintroduced that exact gate.
@@ -70,27 +64,6 @@ _All ideas, pending work, and deferred items. Prioritised against enterprise rea
 ---
 
 ## 🟡 P2 — High (Do Soon — important for serious buyers)
-
-### Nadia (self-hosted LiveKit voice agent) — SIP trunk + tuning
-- **Verdict:** Do Soon
-- **Status:** In progress — 2026-07-13. Core pipeline built and tested (STT/LLM/TTS loop, real
-  ticket creation, HBL MFB complaint flow). See `CHANGE_LOG.md` 2026-07-13.
-- **Remaining:**
-  - Connect Telecard's SIP trunk once credentials arrive (currently only reachable via a
-    browser test page, not a real phone number).
-  - Move off this Mac (CPU-only) onto a real GPU server — self-hosted Whisper is currently
-    running the "small" model on CPU; "large-v3" + GPU will meaningfully improve Urdu/Minglish
-    accuracy and reduce response latency.
-  - Voice-quality tuning: currently using Uplift AI's stock `helpdesk-agent` voice; the
-    client's previous Retell AI setup used a custom-cloned voice with noticeably better
-    quality — worth evaluating whether a similar custom voice clone is worth pursuing for
-    Nadia specifically.
-  - Our own speed-control implementation (ffmpeg time-stretch, since Uplift has no native
-    rate parameter) buffers the entire reply before playing it — trades against response
-    latency. A user-reported mid-speech audio glitch is being isolated against this (reverted
-    to 1.0x speed temporarily to test) — not yet confirmed root cause.
-  - No dedicated CRM tenant for HBL MFB yet — currently testing against the generic "First
-    National Bank" demo tenant.
 
 ### 6. Holiday SLA pause — wire into deadline calculation engine
 - **Verdict:** Do Soon
@@ -148,17 +121,6 @@ _All ideas, pending work, and deferred items. Prioritised against enterprise rea
 
 ---
 
-### 14b. Marketing/bulk WhatsApp sends — strict consent gate
-- **Verdict:** Do when WhatsApp marketing is built (blocker for that feature, not for current ops)
-- **Status:** Foundation done ✅ 2026-07-12 — consent tracking + ticket-reply gate live; the bulk-send feature itself doesn't exist yet
-- **Why:** Meta suspends WhatsApp Business API access for un-consented business-initiated messages. Per-channel consent tracking (`contact_channel_consent`) and the ticket-reply opt-out gate shipped 2026-07-12.
-- **Detail:** When bulk/marketing sends are built, they must call `getChannelConsent()` (`packages/api/src/lib/consent.ts`) and only send where it returns `true` — for marketing, "no record" = NO send (stricter than ticket replies, where the customer choosing the channel is itself the opt-in).
-
-### 14c. Dead super_admin references in route-level role checks
-- **Verdict:** Post-launch — cosmetic only
-- **Status:** Deprioritised by decision 2026-07-12
-- **Detail:** ~12+ unreachable `super_admin` mentions in `requireRole()`/inline role arrays across `tickets.ts`, `contacts.ts`, `analytics.ts`, `voice-bot.ts`, `connectors.ts`. The middleware wall (commit b854929) blocks super_admin before any of these are evaluated — zero functional/security impact. Clean up only as part of a broader tech-debt pass.
-
 ## 🔵 P4 — Low (Post-launch / on-request)
 
 ### 15. Pitch deck — embed Vivid Solutions logo image
@@ -173,11 +135,6 @@ _All ideas, pending work, and deferred items. Prioritised against enterprise rea
 
 ## ✅ Completed (moved from backlog)
 
-- Per-channel consent tracking (WhatsApp/SMS/Email) + Consent tab + reply-dispatch opt-out gate — DONE 2026-07-12
-- Sector auto-provisioning: sector choice now seeds default modules/features at tenant creation — DONE 2026-07-12
-- Webhook delivery pipeline RLS fix (Test button + background worker + dead-letter replay) — DONE 2026-07-12
-- Routing & SLA settings opened to managers (operational config, benchmarked) — DONE 2026-07-12
-- SMS-failure admin alert column mismatch (`message` → `body`) — DONE 2026-07-12
 - Email deliverability — sender changed to noreply@vividsns.com — DONE 2026-06-24 (DNS records pending owner action)
 - Holiday SLA engine — deadlines now skip holidays, weekends, non-working hours — DONE 2026-06-24
 - CSAT Survey — full end-to-end flow (public page, auto-send, ticket panel, API) — DONE 2026-06-24
