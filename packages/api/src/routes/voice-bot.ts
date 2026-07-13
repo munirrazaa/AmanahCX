@@ -784,6 +784,7 @@ export function voiceBotRoutes(db: DatabaseClient, eventBus: EventBus) {
 
       // LiveKit ("Nadia") self-hosted agent — Retell-style behaviour knobs.
       // Ignored (but harmless) for vapi/retell/bland, which have their own dashboards.
+      botName:                 z.string().min(1).max(60).optional(),
       tone:                    z.enum(['professional', 'friendly', 'empathetic', 'formal']).optional(),
       speakingRate:            z.number().min(0.5).max(2.0).optional(),
       sttProvider:             z.enum(['whisper']).optional(),
@@ -809,9 +810,9 @@ export function voiceBotRoutes(db: DatabaseClient, eventBus: EventBus) {
                sip_uri, ivr_menu, self_service_intents,
                tone, speaking_rate, stt_provider, stt_language_hint, tts_provider,
                llm_model, interruption_sensitivity, max_call_duration_sec, end_call_phrases,
-               sip_trunk_provider, sip_trunk_number)
+               sip_trunk_provider, sip_trunk_number, bot_name)
             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,
-                    $17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27)
+                    $17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28)
             ON CONFLICT (tenant_id, provider) DO UPDATE SET
               is_active             = EXCLUDED.is_active,
               assistant_id          = EXCLUDED.assistant_id,
@@ -838,6 +839,7 @@ export function voiceBotRoutes(db: DatabaseClient, eventBus: EventBus) {
               end_call_phrases      = EXCLUDED.end_call_phrases,
               sip_trunk_provider    = EXCLUDED.sip_trunk_provider,
               sip_trunk_number      = EXCLUDED.sip_trunk_number,
+              bot_name              = EXCLUDED.bot_name,
               updated_at            = NOW()
             RETURNING *`,
            [
@@ -868,6 +870,7 @@ export function voiceBotRoutes(db: DatabaseClient, eventBus: EventBus) {
              body.endCallPhrases ?? ['اللہ حافظ', 'خدا حافظ', 'شکریہ، اللہ حافظ'],
              body.sipTrunkProvider        ?? null,
              body.sipTrunkNumber          ?? null,
+             body.botName                 ?? 'Nadia',
            ],
         );
         return r.rows;

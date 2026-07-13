@@ -50,8 +50,14 @@ interface BotConfig {
   keyword_urgency: string[];
   self_service_intents: string[];
   queue_name?: string;
-  ivr_menu?: { option: number; label: string; action: string }[];
+  ivr_menu?: { option: number; label: string; intent?: string; ticketType?: string; queueId?: string | null; action?: string }[];
   sip_uri?: string;
+  // Self-hosted (livekit) provider only
+  bot_name?: string;
+  tone?: string;
+  speaking_rate?: number;
+  sip_trunk_provider?: string;
+  sip_trunk_number?: string;
 }
 
 interface TicketQueue { id: string; name: string; }
@@ -125,6 +131,30 @@ const PROVIDERS = [
       'Copy the Webhook URL below and set it in Bland → Settings → Webhooks',
     ],
   },
+  {
+    id: 'livekit',
+    name: 'Self-Hosted Voice Bot',
+    tagline: 'Your own AI agent — no per-minute vendor fees',
+    description: 'Runs on your own infrastructure with Urdu-first speech (Uplift AI voices). Ideal for Pakistani-market call volumes. Configure name, voice, tone and speed below.',
+    logo: '🎙️',
+    color: '#2BB8CC',
+    docsUrl: 'https://docs.upliftai.org/orator_voices',
+    dashboardUrl: 'https://platform.upliftai.org/studio/home',
+    setupSteps: [
+      'The voice agent service runs on your own server (services/nadia-voice-agent) — no third-party dashboard needed',
+      'Configure the bot below: name, voice, tone, speaking speed, greeting and behaviour instructions',
+      'The agent reads this configuration at the start of every call',
+      'Tickets are created directly in this CRM when a call concludes — no webhook setup required',
+      'Once your SIP trunk (e.g. Telecard) is connected, point your helpline number at the agent',
+    ],
+  },
+];
+
+// Uplift AI voices available to the self-hosted bot. Browse samples at
+// docs.upliftai.org/orator_voices; add entries here as more are approved.
+const LIVEKIT_VOICES = [
+  { id: 'helpdesk-agent',    label: 'Helpdesk Agent — warm female, patient & empathetic' },
+  { id: 'broadband-support', label: 'Broadband Support — polished male, methodical & formal' },
 ];
 
 // ── Reusable input style ──────────────────────────────────────────────────
@@ -221,6 +251,12 @@ export function VoiceBotConfig() {
         ivrMenu:             body.ivr_menu,
         sipUri:              body.sip_uri,
         selfServiceIntents:  body.self_service_intents ?? [],
+        // Self-hosted (livekit) knobs — ignored by hosted providers
+        botName:             body.bot_name,
+        tone:                body.tone,
+        speakingRate:        body.speaking_rate != null ? Number(body.speaking_rate) : undefined,
+        sipTrunkProvider:    body.sip_trunk_provider,
+        sipTrunkNumber:      body.sip_trunk_number,
       });
       return r.data;
     },
@@ -251,14 +287,21 @@ export function VoiceBotConfig() {
   const activeConfig = configs?.find(c => c.provider === selectedProvider);
 
   const startEdit = (cfg?: BotConfig) => {
+    const isSelfHosted = selectedProvider === 'livekit';
     setFormState(cfg ?? {
       provider: selectedProvider ?? 'vapi',
       is_active: true,
-      language: 'en-US',
+      language: isSelfHosted ? 'ur-PK' : 'en-US',
       auto_create_ticket: true,
       default_priority: 'medium',
       keyword_urgency: ['urgent','emergency','critical','asap','immediately'],
       self_service_intents: [],
+      ...(isSelfHosted ? {
+        bot_name: 'Nadia',
+        voice_id: 'helpdesk-agent',
+        tone: 'empathetic',
+        speaking_rate: 0.9,
+      } : {}),
     });
     setEditMode(true);
   };
@@ -318,7 +361,7 @@ export function VoiceBotConfig() {
         <p className="text-xs text-gray-500 font-semibold uppercase tracking-widest mb-3">
           Select your AI voice provider
         </p>
-        <div className="grid grid-cols-3 gap-4 mb-6">
+        <div className="grid grid-cols-4 gap-4 mb-6">
           {PROVIDERS.map(p => {
             const hasConfig = configs?.some(c => c.provider === p.id && c.is_active);
             const isSelected = selectedProvider === p.id;
@@ -360,7 +403,8 @@ export function VoiceBotConfig() {
           return (
             <div className="space-y-5">
 
-              {/* Webhook URL */}
+              {/* Webhook URL — not applicable to the self-hosted bot (it talks to the CRM directly) */}
+              {selectedProvider !== 'livekit' && (
               <div className="rounded-2xl border border-white/10 p-5"
                    style={{ background: 'rgba(255,255,255,0.03)' }}>
                 <div className="flex items-center gap-2 mb-4">
@@ -378,6 +422,7 @@ export function VoiceBotConfig() {
                   )}
                 </div>
               </div>
+              )}
 
               {/* Setup guide */}
               <div className="rounded-2xl border border-white/10 overflow-hidden"
@@ -442,15 +487,26 @@ export function VoiceBotConfig() {
                     </div>
 
                     <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-xs text-gray-500 mb-1">
-                          {selectedProvider === 'vapi' ? 'Assistant ID' : selectedProvider === 'retell' ? 'Agent ID' : 'Pathway ID'} *
-                        </label>
-                        <input type="text" placeholder="From provider dashboard"
-                          value={formState.assistant_id ?? ''}
-                          onChange={e => setFormState(f => ({ ...f, assistant_id: e.target.value }))}
-                          className={inputCls} />
-                      </div>
+                      {selectedProvider === 'livekit' ? (
+                        <div>
+                          <label className="block text-xs text-gray-500 mb-1">Bot Name *</label>
+                          <input type="text" placeholder="Nadia"
+                            value={formState.bot_name ?? ''}
+                            onChange={e => setFormState(f => ({ ...f, bot_name: e.target.value }))}
+                            className={inputCls} />
+                          <p className="text-xs text-gray-600 mt-1">Spoken in the greeting — "I am [name] speaking…"</p>
+                        </div>
+                      ) : (
+                        <div>
+                          <label className="block text-xs text-gray-500 mb-1">
+                            {selectedProvider === 'vapi' ? 'Assistant ID' : selectedProvider === 'retell' ? 'Agent ID' : 'Pathway ID'} *
+                          </label>
+                          <input type="text" placeholder="From provider dashboard"
+                            value={formState.assistant_id ?? ''}
+                            onChange={e => setFormState(f => ({ ...f, assistant_id: e.target.value }))}
+                            className={inputCls} />
+                        </div>
+                      )}
                       <div>
                         <label className="block text-xs text-gray-500 mb-1">Helpline Phone Number</label>
                         <input type="text" placeholder="+923001234567"
@@ -474,14 +530,53 @@ export function VoiceBotConfig() {
                           ].map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                         </select>
                       </div>
-                      <div>
-                        <label className="block text-xs text-gray-500 mb-1">Voice ID (optional)</label>
-                        <input type="text" placeholder="Provider-specific voice ID"
-                          value={formState.voice_id ?? ''}
-                          onChange={e => setFormState(f => ({ ...f, voice_id: e.target.value }))}
-                          className={inputCls} />
-                      </div>
+                      {selectedProvider === 'livekit' ? (
+                        <div>
+                          <label className="block text-xs text-gray-500 mb-1">Voice</label>
+                          <select value={formState.voice_id ?? 'helpdesk-agent'}
+                            onChange={e => setFormState(f => ({ ...f, voice_id: e.target.value }))}
+                            className={`${inputCls} appearance-none`}>
+                            {LIVEKIT_VOICES.map(v => <option key={v.id} value={v.id}>{v.label}</option>)}
+                          </select>
+                        </div>
+                      ) : (
+                        <div>
+                          <label className="block text-xs text-gray-500 mb-1">Voice ID (optional)</label>
+                          <input type="text" placeholder="Provider-specific voice ID"
+                            value={formState.voice_id ?? ''}
+                            onChange={e => setFormState(f => ({ ...f, voice_id: e.target.value }))}
+                            className={inputCls} />
+                        </div>
+                      )}
                     </div>
+
+                    {selectedProvider === 'livekit' && (
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs text-gray-500 mb-1">Tone / Personality</label>
+                          <select value={formState.tone ?? 'empathetic'}
+                            onChange={e => setFormState(f => ({ ...f, tone: e.target.value }))}
+                            className={`${inputCls} appearance-none`}>
+                            <option value="empathetic">Empathetic — gentle, patient (recommended for complaints)</option>
+                            <option value="professional">Professional — polished, efficient</option>
+                            <option value="friendly">Friendly — warm, casual</option>
+                            <option value="formal">Formal — respectful, no slang</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-xs text-gray-500 mb-1">
+                            Speaking Speed — {Number(formState.speaking_rate ?? 0.9).toFixed(2)}×
+                          </label>
+                          <input type="range" min={0.5} max={1.5} step={0.05}
+                            value={formState.speaking_rate ?? 0.9}
+                            onChange={e => setFormState(f => ({ ...f, speaking_rate: Number(e.target.value) }))}
+                            className="w-full mt-2.5 accent-brand-400" />
+                          <div className="flex justify-between text-[10px] text-gray-600">
+                            <span>Slower (0.5×)</span><span>Normal (1×)</span><span>Faster (1.5×)</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
 
                     <div>
                       <label className="block text-xs text-gray-500 mb-1">Greeting Message</label>
@@ -711,7 +806,14 @@ export function VoiceBotConfig() {
                   /* Read-only summary */
                   <div className="space-y-3">
                     {[
-                      { label: 'Assistant / Agent ID', value: activeConfig.assistant_id ?? '—' },
+                      ...(selectedProvider === 'livekit' ? [
+                        { label: 'Bot Name',       value: activeConfig.bot_name ?? 'Nadia' },
+                        { label: 'Voice',          value: LIVEKIT_VOICES.find(v => v.id === activeConfig.voice_id)?.label ?? activeConfig.voice_id ?? '—' },
+                        { label: 'Tone',           value: activeConfig.tone ?? 'empathetic' },
+                        { label: 'Speaking speed', value: `${Number(activeConfig.speaking_rate ?? 0.9).toFixed(2)}×` },
+                      ] : [
+                        { label: 'Assistant / Agent ID', value: activeConfig.assistant_id ?? '—' },
+                      ]),
                       { label: 'Helpline Number',      value: activeConfig.phone_number  ?? '—' },
                       { label: 'Language',             value: activeConfig.language },
                       { label: 'Auto-create ticket',   value: activeConfig.auto_create_ticket ? 'Yes' : 'No' },
@@ -729,10 +831,12 @@ export function VoiceBotConfig() {
                   <div className="flex flex-col items-center py-8 gap-3">
                     <AlertCircle className="w-8 h-8 text-gray-600" />
                     <p className="text-gray-500 text-sm">Not configured yet</p>
-                    <p className="text-gray-600 text-xs text-center max-w-xs">
-                      Also make sure to add your {PROVIDERS.find(p => p.id === selectedProvider)?.name} API key in
-                      the <a href="/integrations" className="text-brand-400 hover:underline">Integrations page</a>
-                    </p>
+                    {selectedProvider !== 'livekit' && (
+                      <p className="text-gray-600 text-xs text-center max-w-xs">
+                        Also make sure to add your {PROVIDERS.find(p => p.id === selectedProvider)?.name} API key in
+                        the <a href="/integrations" className="text-brand-400 hover:underline">Integrations page</a>
+                      </p>
+                    )}
                     <button onClick={() => startEdit()}
                       className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-white"
                       style={{ background: 'linear-gradient(135deg, #29ABE2 0%, #1a8cbf 100%)' }}>
@@ -748,8 +852,8 @@ export function VoiceBotConfig() {
                 )}
               </div>
 
-              {/* Test call */}
-              {activeConfig && (
+              {/* Test call — outbound test API only supports hosted providers */}
+              {activeConfig && selectedProvider !== 'livekit' && (
                 <div className="rounded-2xl border border-white/10 p-5"
                      style={{ background: 'rgba(255,255,255,0.03)' }}>
                   <div className="flex items-center gap-2 mb-4">

@@ -15,6 +15,7 @@ from prompts import HBL_MFB_SYSTEM_PROMPT
 
 @dataclass
 class AgentSettings:
+    bot_name: str = "Nadia"                  # spoken in greetings; editable on the Voice Bot admin screen
     language: str = "ur-PK"                 # BCP-47-ish tag; 'ur-PK' = Urdu (Pakistan)
     tone: str = "professional"               # professional | friendly | empathetic | formal
     speaking_rate: float = 1.0               # TEMPORARY: reverted from 0.85 to isolate a reported
@@ -63,6 +64,7 @@ async def load_settings(tenant_id: str) -> AgentSettings:
         return AgentSettings()
 
     return AgentSettings(
+        bot_name=cfg.get("bot_name") or "Nadia",
         language=cfg.get("language") or "ur-PK",
         tone=cfg.get("tone") or "professional",
         speaking_rate=float(cfg.get("speaking_rate") or 0.85),
@@ -89,7 +91,7 @@ TONE_INSTRUCTIONS = {
 
 def build_system_prompt(settings: AgentSettings) -> str:
     tone_line = TONE_INSTRUCTIONS.get(settings.tone, TONE_INSTRUCTIONS["professional"])
-    base = f"""You are Nadia, a voice assistant for a Pakistani business's helpline.
+    base = f"""You are {settings.bot_name}, a voice assistant for a Pakistani business's helpline.
 
 ## Understanding the caller (input)
 Customers speak Urdu, Roman Urdu, English, or a mix of all three ("Minglish") —
@@ -123,4 +125,9 @@ Always extract structured fields (reporter_name, reporter_phone, category, prior
 subject, description) so they can be logged as a support ticket — do this silently,
 don't read field names aloud to the caller."""
 
-    return f"{base}\n\n{settings.system_prompt}" if settings.system_prompt else base
+    if not settings.system_prompt:
+        return base
+    # .replace() rather than .format() — tenant-authored prompts may contain
+    # literal braces that would crash str.format().
+    extra = settings.system_prompt.replace("{bot_name}", settings.bot_name)
+    return f"{base}\n\n{extra}"

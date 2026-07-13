@@ -22,7 +22,19 @@ api.interceptors.response.use(
   (res) => res,
   async (error) => {
     const original = error.config;
-    if (error.response?.status !== 401 || original._retry) {
+    // Never run the refresh flow for auth endpoints themselves:
+    // a 401 from /auth/login means "wrong credentials" (surface it to the
+    // form), and a 401 from /auth/refresh inside this interceptor would be
+    // queued behind its own in-flight refresh — a deadlock that left the
+    // login button spinning forever (root cause of the long-standing
+    // "spinner never stops" login reports, found 2026-07-13).
+    const reqUrl: string = original?.url ?? '';
+    if (
+      error.response?.status !== 401 ||
+      original._retry ||
+      reqUrl.includes('/auth/login') ||
+      reqUrl.includes('/auth/refresh')
+    ) {
       return Promise.reject(error);
     }
 
