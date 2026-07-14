@@ -72,7 +72,16 @@ class NadiaAgent(Agent):
         self.settings = settings
         self.tenant_id = tenant_id
         self.call_id = call_id
-        self.whisper = WhisperSTT(language_hint=settings.stt_language_hint)
+        # STT_PROVIDER=openai → hosted transcription via the session-level
+        # openai.STT (fast, ~$0.006/min) — required on small CPU hosts like
+        # Railway, where local Whisper maxes the CPU and the job process gets
+        # OOM-killed mid-call (seen live 2026-07-14: exit -9, load 0.98,
+        # VAD 4.4s behind realtime). STT_PROVIDER=whisper (default) → free
+        # self-hosted Whisper, for when this runs on real hardware (the
+        # Telecard GPU box).
+        self.stt_provider = os.environ.get("STT_PROVIDER", "whisper").lower()
+        if self.stt_provider == "whisper":
+            self.whisper = WhisperSTT(language_hint=settings.stt_language_hint)
         # min_silence_duration default is 0.55s — how long the caller must
         # be quiet before we decide they're done talking and start
         # responding. Lowered to reduce the reply pause; if this starts
@@ -87,6 +96,14 @@ class NadiaAgent(Agent):
     # NOTE: does not delegate to Agent.default.stt_node — see module
     # docstring for why that would crash with no session-level STT.
     async def stt_node(self, audio, model_settings: ModelSettings):
+        if self.stt_provider == "openai":
+            # Delegate to the default pipeline, which uses the session-level
+            # openai.STT — safe here because entrypoint always passes stt=.
+            dbg("stt_node: delegating to hosted openai STT")
+            async for ev in Agent.default.stt_node(self, audio, model_settings):
+                yield ev
+            return
+
         dbg("stt_node started")
         vad_stream = self._vad.stream()
         frame_count = 0
