@@ -93,24 +93,26 @@ This is what you asked for — the same knobs Retell AI's dashboard exposes
 
 ## SIP wiring (Telecard, once the trunk arrives)
 
-1. **Inbound trunk** — register the trunk in LiveKit (`CreateSIPInboundTrunk`
-   API or `lk sip inbound create`) using the SIP credentials Telecard gives
-   you (host/IP, port, auth username+password, or IP-based auth — ask them
-   which). Restrict by their signalling IP if they can provide one.
-2. **Dispatch rule** — tells LiveKit which room a call lands in. Use a
-   per-tenant room-naming convention (e.g. `tenant-<tenantId>-<callId>`)
-   and pass `tenant_id` through as room/participant metadata — `agent.py`
-   reads it from `ctx.job.metadata` to load that tenant's config.
-3. **Agent dispatch** — this worker's entrypoint is registered via
-   `WorkerOptions(entrypoint_fnc=entrypoint)`; your dispatch rule (or an
-   explicit `CreateSIPParticipant` call) routes the call into a room this
-   worker is subscribed to.
-4. Ask Telecard for: the DID (the published Pakistani number customers
-   dial), the trunk's SIP signalling details, and whether they need you to
-   register with them (residential/IP-auth) or they'll push calls to your
-   LiveKit SIP URI directly. Since they're also hosting, confirm the
-   server your LiveKit instance runs on has a public IP/domain they can
-   reach.
+**Automated:** `src/setup_sip.py` creates both the inbound trunk and the
+dispatch rule in one shot, and — critically — wires the dispatch rule to
+dispatch the **named** `nadia` agent into every inbound call room with the
+tenant id as metadata (the agent reads it via `_extract_tenant_id`). Because
+the worker registers with `agent_name="nadia"` (named agents don't auto-join),
+this dispatch rule is the piece that actually connects a real phone call to
+Nadia. Run once creds arrive:
+
+```bash
+python src/setup_sip.py --number "+92XXXXXXXXXX" \
+    --allowed-ip "<telecard signalling IP>" \
+    --auth-user "<user>" --auth-pass "<pass>"   # only if they use registration auth
+# prints the sip: endpoint to hand back to Telecard
+```
+
+**Ask Telecard for:** the DID (the published Pakistani number customers dial),
+the trunk's SIP signalling details, their signalling IP (for `--allowed-ip`),
+and whether they push calls to our LiveKit SIP URI directly (IP-auth) or need
+us to register (username/password). Since they're also hosting, confirm the
+box our LiveKit endpoint runs on has a public IP/domain they can reach.
 
 Exact CLI/API syntax: `docs.livekit.io/sip` — verify at setup time.
 

@@ -277,18 +277,39 @@ async def entrypoint(ctx: agents.JobContext) -> None:
     async def _report_call_ended() -> None:
         base_url = os.environ["CRM_API_BASE_URL"]
         secret = os.environ.get("LIVEKIT_INGEST_SECRET", "")
-        async with httpx.AsyncClient(timeout=10) as client:
-            await client.post(
-                f"{base_url}/api/v1/voice-bot/livekit/call-ended",
-                params={"tenantId": tenant_id},
-                headers={"Authorization": f"Bearer {secret}"} if secret else {},
-                json={
-                    "voiceCallId": call_id,
-                    "transcript": "\n".join(transcript_parts),
-                },
-            )
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                await client.post(
+                    f"{base_url}/api/v1/voice-bot/livekit/call-ended",
+                    params={"tenantId": tenant_id},
+                    headers={"Authorization": f"Bearer {secret}"} if secret else {},
+                    json={
+                        "voiceCallId": call_id,
+                        "transcript": "\n".join(transcript_parts),
+                    },
+                )
+            dbg("call-ended report sent")
+        except Exception as e:
+            dbg(f"call-ended report FAILED: {type(e).__name__}: {e}")
 
-    ctx.add_shutdown_callback(lambda: asyncio.create_task(_report_call_ended()))
+    # Register the coroutine itself (not a fire-and-forget task) so LiveKit
+    # awaits it during shutdown — otherwise the final transcript can be lost
+    # when the process exits before the request finishes.
+    ctx.add_shutdown_callback(_report_call_ended)
+
+    # Hard cap on call length. The setting existed but nothing enforced it —
+    # on a real phone line a silent/stuck caller would otherwise run forever,
+    # burning LLM + TTS + telco minutes. Browser tests never hit this (you
+    # just close the tab), which is why it went unnoticed.
+    async def _enforce_max_duration() -> None:
+        try:
+            await asyncio.sleep(max(30, settings.max_call_duration_sec))
+            dbg(f"max call duration {settings.max_call_duration_sec}s reached — ending call")
+            ctx.shutdown(reason="max_call_duration_reached")
+        except asyncio.CancelledError:
+            pass
+
+    duration_guard = asyncio.create_task(_enforce_max_duration())
 
     try:
         await session.start(
@@ -297,6 +318,17 @@ async def entrypoint(ctx: agents.JobContext) -> None:
             room_input_options=RoomInputOptions(),
         )
         dbg("session started")
+
+        # On a real inbound SIP call the caller's audio path may not be fully
+        # negotiated the instant the worker starts — greeting immediately means
+        # the caller misses the first line (dead air / "hello? …hello?"). Wait
+        # for the caller to actually be present first. Browser test calls are
+        # already connected, so this returns almost instantly there.
+        try:
+            await asyncio.wait_for(ctx.wait_for_participant(), timeout=20)
+            dbg("caller present — greeting now")
+        except asyncio.TimeoutError:
+            dbg("no caller within 20s — greeting anyway")
 
         if settings.greeting_message:
             await session.generate_reply(instructions=f"Greet the caller with: {settings.greeting_message}")
@@ -308,6 +340,7 @@ async def entrypoint(ctx: agents.JobContext) -> None:
         dbg("greeting dispatched")
     except Exception as e:
         dbg(f"ENTRYPOINT CRASHED: {type(e).__name__}: {e}")
+        duration_guard.cancel()
         raise
 
 
