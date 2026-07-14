@@ -49,6 +49,7 @@ interface BotConfig {
   language: string;
   voice_id?: string;
   auto_create_ticket: boolean;
+  recording_enabled?: boolean;
   default_queue_id?: string;
   default_priority: string;
   keyword_urgency: string[];
@@ -340,6 +341,7 @@ export function VoiceBotConfig() {
         language:         body.language,
         voiceId:          body.voice_id,
         autoCreateTicket:    body.auto_create_ticket,
+        recordingEnabled:    body.recording_enabled,
         defaultQueueId:      body.default_queue_id || null,
         defaultPriority:     body.default_priority,
         keywordUrgency:      body.keyword_urgency,
@@ -818,6 +820,30 @@ export function VoiceBotConfig() {
                           onChange={e => setFormState(f => ({ ...f, guardrails: e.target.value }))}
                           className={`${inputCls} resize-none text-xs font-mono`} />
                         <p className="text-xs text-gray-500 mt-1">Kept separate from the System Prompt so the bot treats these as strict boundaries, not general guidance.</p>
+                      </div>
+                    )}
+
+                    {selectedProvider === 'livekit' && (
+                      <div className="border-t border-gray-100 pt-4">
+                        <div className="flex items-center justify-between">
+                          <div className="pr-4">
+                            <p className="text-sm text-gray-900 font-medium">Record calls (audio)</p>
+                            <p className="text-xs text-gray-500 mt-0.5">
+                              Saves each call's audio to storage, searchable on the Bot Calls page next to the transcript.
+                            </p>
+                          </div>
+                          <button type="button" onClick={() => setFormState(f => ({ ...f, recording_enabled: !f.recording_enabled }))}>
+                            {formState.recording_enabled
+                              ? <ToggleRight className="w-8 h-8 text-brand-500" />
+                              : <ToggleLeft  className="w-8 h-8 text-gray-300"  />}
+                          </button>
+                        </div>
+                        {formState.recording_enabled && (
+                          <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2 mt-2">
+                            When on, the bot automatically plays an audible consent notice at the start of every call
+                            ("this call is being recorded…") before greeting — required for recorded calls in Pakistan.
+                          </p>
+                        )}
                       </div>
                     )}
 

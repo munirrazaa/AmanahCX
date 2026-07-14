@@ -42,6 +42,7 @@ class AgentSettings:
     guardrails: str | None = None                        # hard behavioral limits, kept separate from
                                                           # system_prompt so the LLM treats it as a
                                                           # strict boundary, not general guidance
+    recording_enabled: bool = False                      # record call audio to storage + play consent
     default_queue_id: str | None = None
     default_priority: str = "medium"
 
@@ -82,6 +83,7 @@ async def load_settings(tenant_id: str) -> AgentSettings:
         greeting_message=cfg.get("greeting_message"),
         system_prompt=cfg.get("system_prompt") or HBL_MFB_SYSTEM_PROMPT,
         guardrails=cfg.get("guardrails"),
+        recording_enabled=bool(cfg.get("recording_enabled")),
         default_queue_id=cfg.get("default_queue_id"),
         default_priority=cfg.get("default_priority") or "medium",
     )

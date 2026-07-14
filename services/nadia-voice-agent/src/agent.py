@@ -50,6 +50,7 @@ from livekit.plugins import openai, silero, upliftai
 from audio_speed import time_stretch
 from config import AgentSettings, build_system_prompt, load_settings
 from stt_whisper import WhisperSTT
+from recording import start_recording, CONSENT_LINE_UR
 
 load_dotenv()
 
@@ -311,19 +312,25 @@ async def entrypoint(ctx: agents.JobContext) -> None:
     def _on_error(ev) -> None:
         dbg(f"SESSION ERROR: {getattr(ev, 'error', ev)}")
 
+    # Filled in below if call recording is enabled + storage is configured.
+    recording = {"url": None}
+
     async def _report_call_ended() -> None:
         base_url = os.environ["CRM_API_BASE_URL"]
         secret = os.environ.get("LIVEKIT_INGEST_SECRET", "")
+        payload = {
+            "voiceCallId": call_id,
+            "transcript": "\n".join(transcript_parts),
+        }
+        if recording["url"]:
+            payload["recordingUrl"] = recording["url"]
         try:
             async with httpx.AsyncClient(timeout=10) as client:
                 await client.post(
                     f"{base_url}/api/v1/voice-bot/livekit/call-ended",
                     params={"tenantId": tenant_id},
                     headers={"Authorization": f"Bearer {secret}"} if secret else {},
-                    json={
-                        "voiceCallId": call_id,
-                        "transcript": "\n".join(transcript_parts),
-                    },
+                    json=payload,
                 )
             dbg("call-ended report sent")
         except Exception as e:
@@ -366,6 +373,23 @@ async def entrypoint(ctx: agents.JobContext) -> None:
             dbg("caller present — greeting now")
         except asyncio.TimeoutError:
             dbg("no caller within 20s — greeting anyway")
+
+        # If recording is enabled AND storage is configured, start the audio
+        # egress first (so the consent notice itself is captured), then say the
+        # consent line before greeting. If storage isn't set up, start_recording
+        # returns (None, None) and we skip both — a missing bucket must never
+        # break a live call, and we never claim to record when we aren't.
+        if settings.recording_enabled:
+            try:
+                egress_id, rec_url = await start_recording(call_id, tenant_id)
+                if egress_id:
+                    recording["url"] = rec_url
+                    dbg(f"recording started egress={egress_id} url={rec_url}")
+                    await session.say(CONSENT_LINE_UR)
+                else:
+                    dbg("recording enabled but storage not configured — skipping")
+            except Exception as e:
+                dbg(f"recording start FAILED (continuing call): {type(e).__name__}: {e}")
 
         if settings.greeting_message:
             await session.generate_reply(instructions=f"Greet the caller with: {settings.greeting_message}")

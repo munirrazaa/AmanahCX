@@ -814,6 +814,7 @@ export function voiceBotRoutes(db: DatabaseClient, eventBus: EventBus) {
       maxCallDurationSec:      z.number().int().min(30).max(3600).optional(),
       endCallPhrases:          z.array(z.string()).optional(),
       guardrails:              z.string().max(4000).optional(),
+      recordingEnabled:        z.boolean().optional(),
       sipTrunkProvider:        z.string().optional(),
       sipTrunkNumber:          z.string().optional(),
       sipTrunkUsername:        z.string().optional(),
@@ -836,9 +837,9 @@ export function voiceBotRoutes(db: DatabaseClient, eventBus: EventBus) {
                llm_model, interruption_sensitivity, max_call_duration_sec, end_call_phrases,
                sip_trunk_provider, sip_trunk_number, bot_name,
                sip_trunk_username, sip_trunk_password, sip_trunk_nickname, outbound_transport,
-               guardrails)
+               guardrails, recording_enabled)
             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,
-                    $17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33)
+                    $17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34)
             ON CONFLICT (tenant_id, provider) DO UPDATE SET
               is_active             = EXCLUDED.is_active,
               assistant_id          = EXCLUDED.assistant_id,
@@ -871,6 +872,7 @@ export function voiceBotRoutes(db: DatabaseClient, eventBus: EventBus) {
               sip_trunk_nickname    = EXCLUDED.sip_trunk_nickname,
               outbound_transport    = EXCLUDED.outbound_transport,
               guardrails            = EXCLUDED.guardrails,
+              recording_enabled     = EXCLUDED.recording_enabled,
               updated_at            = NOW()
             RETURNING *`,
            [
@@ -907,6 +909,7 @@ export function voiceBotRoutes(db: DatabaseClient, eventBus: EventBus) {
              body.sipTrunkNickname        ?? null,
              body.outboundTransport       ?? 'TCP',
              body.guardrails              ?? null,
+             body.recordingEnabled        ?? false,
            ],
         );
         return r.rows;
@@ -1486,15 +1489,27 @@ export function voiceBotRoutes(db: DatabaseClient, eventBus: EventBus) {
       };
       if (!b.voiceCallId) return reply.code(400).send({ error: 'voiceCallId required' });
 
+      // b.voiceCallId is the LiveKit room name, which the agent also stored as
+      // provider_call_id when it raised a ticket mid-call — so match on that,
+      // NOT the internal row id (they're different; matching by id silently
+      // updated nothing, losing the full transcript + recording URL). Upsert
+      // so calls that produced NO ticket (no row yet) still get their
+      // transcript/recording saved and show up on the Bot Calls page.
       await db.withSuperAdmin(async (c) => {
         await c.query(
-          `UPDATE voice_bot_calls
-             SET transcript=COALESCE($2,transcript), summary=COALESCE($3,summary),
-                 recording_url=COALESCE($4,recording_url), duration_seconds=COALESCE($5,duration_seconds),
-                 sentiment=COALESCE($6,sentiment), ended_at=NOW()
-           WHERE id=$1 AND tenant_id=$7`,
-          [b.voiceCallId, b.transcript ?? null, b.summary ?? null, b.recordingUrl ?? null,
-           b.durationSeconds ?? null, b.sentiment ?? null, tenantId],
+          `INSERT INTO voice_bot_calls
+             (tenant_id, provider, provider_call_id, status, transcript, summary,
+              recording_url, duration_seconds, sentiment, started_at, ended_at)
+           VALUES ($1,'livekit',$2,'completed',$3,$4,$5,$6,$7,NOW(),NOW())
+           ON CONFLICT (provider, provider_call_id) DO UPDATE SET
+             transcript       = COALESCE(EXCLUDED.transcript,       voice_bot_calls.transcript),
+             summary          = COALESCE(EXCLUDED.summary,          voice_bot_calls.summary),
+             recording_url    = COALESCE(EXCLUDED.recording_url,    voice_bot_calls.recording_url),
+             duration_seconds = COALESCE(EXCLUDED.duration_seconds, voice_bot_calls.duration_seconds),
+             sentiment        = COALESCE(EXCLUDED.sentiment,        voice_bot_calls.sentiment),
+             ended_at         = NOW()`,
+          [tenantId, b.voiceCallId, b.transcript ?? null, b.summary ?? null,
+           b.recordingUrl ?? null, b.durationSeconds ?? null, b.sentiment ?? null],
         );
       });
       return reply.send({ success: true });
