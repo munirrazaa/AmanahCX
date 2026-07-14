@@ -248,10 +248,18 @@ async def entrypoint(ctx: agents.JobContext) -> None:
         output_format=os.environ.get("UPLIFT_OUTPUT_FORMAT", "MP3_22050_128"),
     )
 
+    # How long the caller can be silent before Nadia checks if they're still
+    # there. Default 8s — 3s (as first suggested) fires during normal thinking
+    # pauses and interrupts real callers, so it's a tunable env var.
+    silence_sec = float(os.environ.get("SILENCE_NUDGE_SEC", "8"))
+
     session = AgentSession(
         llm=openai.LLM(model=settings.llm_model),
         tts=tts,
         vad=silero.VAD.load(min_silence_duration=0.3),
+        # After this many seconds with no caller speech, the session fires a
+        # user_state_changed → "away" event, which drives the nudge sequence.
+        user_away_timeout=silence_sec,
         # AgentActivity only wires up a custom stt_node override when
         # `self.stt` is truthy (agent_activity.py: `stt=self._agent.stt_node
         # if self.stt else None`) — confirmed by tracing a live session where
@@ -260,6 +268,35 @@ async def entrypoint(ctx: agents.JobContext) -> None:
         # behavior); it only needs to exist to pass that truthy check.
         stt=openai.STT(model="gpt-4o-mini-transcribe"),
     )
+
+    # ── Silence handling ──────────────────────────────────────────────────
+    # If the caller goes quiet, Nadia asks twice whether they're still on the
+    # line, then politely ends the call — instead of holding an open line to
+    # silence until the hard max-duration cutoff.
+    NUDGE_LINE = "کیا آپ لائن پر موجود ہیں؟"
+    SILENCE_BYE = "میں اب کال ختم کر رہی ہوں، اللہ حافظ۔"
+    nudge_task: dict[str, object] = {"t": None}
+
+    async def _silence_sequence() -> None:
+        try:
+            for _ in range(2):  # ask twice
+                await session.say(NUDGE_LINE)
+                await asyncio.sleep(silence_sec)  # cancelled if caller speaks
+            # Still silent after two prompts — say goodbye and end the call.
+            await session.say(SILENCE_BYE)
+            dbg("caller silent after 2 nudges — ending call")
+            ctx.shutdown(reason="caller_silent")
+        except asyncio.CancelledError:
+            dbg("caller responded — silence sequence cancelled")
+
+    @session.on("user_state_changed")
+    def _on_user_state(ev) -> None:
+        new_state = getattr(ev, "new_state", None)
+        t = nudge_task["t"]
+        if new_state == "away" and (t is None or t.done()):
+            nudge_task["t"] = asyncio.create_task(_silence_sequence())
+        elif new_state == "speaking" and t is not None and not t.done():
+            t.cancel()  # caller came back — stop nudging
 
     transcript_parts: list[str] = []
 
