@@ -501,7 +501,7 @@ async function createComplaintFromStructured(
     // sequentially that was 5 of the 7 total round-trips in this function,
     // the dominant cost in the ~5s+ ticket-creation delay reported live
     // 2026-07-13. Cuts this function from 7 sequential round-trips to 3.
-    const [[contact], [{ next_val }], [queueRow], [slaRow], [botCall]] = await Promise.all([
+    const [[contact], [{ next_val }], [queueRow], [slaRow], [botCall], [config]] = await Promise.all([
       db.withSuperAdmin(async (c) => {
         if (!s.reporterPhone) return [];
         const r = await c.query(
@@ -532,8 +532,29 @@ async function createComplaintFromStructured(
            s.reporterName ?? null, s.reporterEmail ?? null,
            JSON.stringify({ category: s.category, fraudAmount: s.fraudAmount })],
         )).rows),
+      db.withSuperAdmin(async (c) =>
+        (await c.query(`SELECT default_queue_id, ivr_menu FROM voice_bot_configs WHERE tenant_id=$1 AND provider='livekit'`, [tenantId])).rows),
     ]);
     const ticketNumber = `TKT-${String(Number(next_val) - 1).padStart(5, '0')}`;
+
+    // Route by department/intent, same as the other bot providers — a fraud or
+    // sales-flagged call should not just land in whatever queue is "default".
+    const ivrMenu = config?.ivr_menu ?? DEFAULT_IVR_MENU;
+    const text = ((s.category ?? '') + ' ' + (s.subject ?? '') + ' ' + (s.description ?? '') + ' ' + (s.transcript ?? '')).toLowerCase();
+    let ticketType = 'complaint';
+    if (text.includes('sales') || text.includes('buy') || text.includes('purchase') || text.includes('price') || text.includes('offer')) {
+      ticketType = 'sales';
+    } else if (text.includes('inquiry') || text.includes('enquiry') || text.includes('information') || text.includes('product') || text.includes('service')) {
+      ticketType = 'inquiry';
+    }
+    const ivrOption = ivrMenu.find((m: any) => m.ticketType === ticketType || m.intent === ticketType);
+    let resolvedQueueId = ivrOption?.queueId ?? queueRow?.id ?? null;
+    if (ivrOption?.queueId) {
+      // Confirm the IVR-configured queue still belongs to this tenant before trusting it.
+      const [ivrQueue] = await db.withSuperAdmin(async (c) =>
+        (await c.query(`SELECT id FROM ticket_queues WHERE id=$1 AND tenant_id=$2`, [ivrOption.queueId, tenantId])).rows);
+      resolvedQueueId = ivrQueue?.id ?? queueRow?.id ?? null;
+    }
 
     const [ticket] = await db.withSuperAdmin(async (c) =>
       (await c.query(
@@ -544,7 +565,7 @@ async function createComplaintFromStructured(
          VALUES ($1,$2,$3,$4,'open',$5,'voice_bot',$6,$7,$8,$9,$10,$11,'complaint',$12,$13::jsonb)
          RETURNING id`,
         [tenantId, ticketNumber, subject, description, priority,
-         queueRow?.id ?? null, slaRow?.id ?? null, contact?.id ?? null,
+         resolvedQueueId, slaRow?.id ?? null, contact?.id ?? null,
          s.reporterPhone ?? null, s.reporterName ?? null, s.reporterEmail ?? null,
          [s.category ?? 'other'],
          JSON.stringify({ category: s.category, fraud_amount: s.fraudAmount, agent: 'nadia' })],
@@ -553,6 +574,37 @@ async function createComplaintFromStructured(
     await db.withSuperAdmin(async (c) => {
       await c.query(`UPDATE voice_bot_calls SET ticket_id=$1 WHERE id=$2`, [ticket.id, botCall.id]);
     });
+
+    // Push routing — auto-assign if queue is configured for push
+    if (resolvedQueueId) {
+      try {
+        const [qCfg] = await db.withSuperAdmin(async (c) => {
+          const r = await c.query(`SELECT routing_method FROM ticket_queues WHERE id = $1`, [resolvedQueueId]);
+          return r.rows;
+        });
+        if (qCfg?.routing_method === 'push_random' || qCfg?.routing_method === 'push_criteria') {
+          const agents = await db.withSuperAdmin(async (c) => {
+            const r = await c.query(
+              `SELECT u.id FROM queue_members qm
+               JOIN users u ON u.id = qm.user_id
+               WHERE qm.queue_id=$1 AND u.tenant_id=$2 AND u.is_active=true AND u.role IN ('agent','manager')
+               ORDER BY u.id`,
+              [resolvedQueueId, tenantId],
+            );
+            return r.rows.map((u: any) => u.id as string);
+          });
+          if (agents.length > 0) {
+            const chosen = agents[Math.floor(Math.random() * agents.length)];
+            await db.withSuperAdmin(async (c) => {
+              await c.query(`UPDATE tickets SET assignee_id=$1, status='assigned' WHERE id=$2`, [chosen, ticket.id]);
+            });
+          }
+        }
+      } catch (routingErr: any) {
+        // A routing failure must never undo an already-created ticket.
+        console.error('[LiveKit→Ticket] routing failed (ticket still created)', routingErr.message);
+      }
+    }
 
     await eventBus.publish(tenantId, CRM_EVENTS.TICKET_CREATED, {
       source: 'livekit', ticketId: ticket.id, ticketType: 'complaint',
