@@ -12,6 +12,7 @@
  */
 
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Phone, Clock, Ticket, AlertCircle, CheckCircle2, Mic,
@@ -299,9 +300,9 @@ function CallPanel({ callId, onClose }: { callId: string; onClose: () => void })
                   <Ticket className="w-4 h-4 text-brand-600" />
                   <span className="text-sm text-gray-900 font-semibold">{data.ticket_number}</span>
                 </div>
-                <a href="/tickets" className="text-xs text-brand-600 hover:text-brand-700 flex items-center gap-1">
+                <Link to="/tickets" className="text-xs text-brand-600 hover:text-brand-700 flex items-center gap-1">
                   View <ExternalLink className="w-3 h-3" />
-                </a>
+                </Link>
               </div>
               {data.ticket_subject && (
                 <p className="text-xs text-gray-500 mb-2">{data.ticket_subject}</p>
@@ -431,10 +432,10 @@ export function VoiceBotCalls() {
               <p className="text-gray-500 text-xs">{total} inbound call{total !== 1 ? 's' : ''} from AI voice bot</p>
             </div>
           </div>
-          <a href="/voice-bot"
+          <Link to="/voice-bot"
             className="flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs text-brand-600 border border-brand-200 hover:bg-brand-50 transition-colors">
             Bot Settings
-          </a>
+          </Link>
         </div>
 
         {/* KPI strip */}
@@ -507,11 +508,11 @@ export function VoiceBotCalls() {
                 </p>
               </div>
               {!search && !provider && !sentiment && !hasTicket && (
-                <a href="/voice-bot"
+                <Link to="/voice-bot"
                   className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-white"
                   style={{ background: 'linear-gradient(135deg, #29ABE2 0%, #1a8cbf 100%)' }}>
                   Configure Voice Bot
-                </a>
+                </Link>
               )}
             </div>
           ) : (

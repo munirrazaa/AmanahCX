@@ -21,6 +21,7 @@ import {
   Settings2, Ticket, Zap, AlertCircle, Loader2, PhoneCall,
   Info, ToggleLeft, ToggleRight, ChevronDown, List,
 } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { api } from '../services/api';
 import { useIsSuperAdmin } from '../hooks/useRole';
 import { TestCallNadiaButton } from '../components/TestCallNadiaButton';
@@ -421,10 +422,10 @@ export function VoiceBotConfig() {
               <p className="text-gray-500 text-xs">Phase 1 — Third-party AI provider integration via SIP</p>
             </div>
           </div>
-          <a href="/voice-bot/calls"
+          <Link to="/voice-bot/calls"
             className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm text-brand-600 border border-brand-200 hover:bg-brand-50 transition-colors">
             <List className="w-4 h-4" />View Bot Calls
-          </a>
+          </Link>
         </div>
 
         {/* Stats strip */}
@@ -1083,7 +1084,7 @@ export function VoiceBotConfig() {
                     {selectedProvider !== 'livekit' && (
                       <p className="text-gray-500 text-xs text-center max-w-xs">
                         Also make sure to add your {PROVIDERS.find(p => p.id === selectedProvider)?.name} API key in
-                        the <a href="/integrations" className="text-brand-400 hover:underline">Integrations page</a>
+                        the <Link to="/integrations" className="text-brand-400 hover:underline">Integrations page</Link>
                       </p>
                     )}
                     <button onClick={() => startEdit()}
