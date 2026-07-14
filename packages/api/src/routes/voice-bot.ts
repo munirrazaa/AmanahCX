@@ -1219,13 +1219,13 @@ export function voiceBotRoutes(db: DatabaseClient, eventBus: EventBus) {
         const r = await c.query(
           `SELECT vbc.*,
              t.ticket_number, t.status AS ticket_status, t.subject AS ticket_subject,
-             t.priority AS ticket_priority, t.assigned_to,
+             t.priority AS ticket_priority, t.assignee_id AS assigned_to,
              u.name AS assignee_name,
              con.first_name || ' ' || COALESCE(con.last_name,'') AS contact_name,
              con.email AS contact_email
            FROM voice_bot_calls vbc
            LEFT JOIN tickets  t   ON vbc.ticket_id  = t.id
-           LEFT JOIN users    u   ON t.assigned_to  = u.id
+           LEFT JOIN users    u   ON t.assignee_id  = u.id
            LEFT JOIN contacts con ON vbc.contact_id = con.id
            WHERE vbc.id = $1`,
           [id],
