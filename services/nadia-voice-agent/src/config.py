@@ -138,9 +138,16 @@ Your job on every call:
 4. Confirm the details back to the caller before ending the call.
 5. When the conversation is naturally finishing, use a phrase from: {', '.join(settings.end_call_phrases)}.
 
+Whatever else the caller shares about themselves during the conversation — email, CNIC/ID
+number, address, city — pass it along too, even if they mention it in passing rather than
+in answer to a direct question. Don't interrogate them for these extra details or delay the
+call to ask for all of them; just capture whatever comes up naturally so their record stays
+complete for next time.
+
 Always extract structured fields (reporter_name, reporter_phone, category, priority,
-subject, description) so they can be logged as a support ticket — do this silently,
-don't read field names aloud to the caller."""
+subject, description, and reporter_email/reporter_nic/reporter_address/reporter_city when
+available) so they can be logged as a support ticket — do this silently, don't read field
+names aloud to the caller."""
 
     # .replace() rather than .format() — tenant-authored prompts may contain
     # literal braces that would crash str.format().

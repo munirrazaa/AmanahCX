@@ -322,7 +322,7 @@ async function createTicketFromBotCall(
              (tenant_id, first_name, last_name, phone, email, source, tags, custom_fields)
            VALUES ($1, $2, $3, $4, $5, 'voice_bot', $6, '{}')
            RETURNING id`,
-          [tenantId, firstName, lastName, call.fromNumber ?? null, call.extractedEmail ?? null, JSON.stringify(tags)],
+          [tenantId, firstName, lastName, call.fromNumber ?? null, call.extractedEmail ?? null, tags],
         );
         return r.rows;
       });
@@ -475,6 +475,9 @@ interface StructuredComplaint {
   reporterName?: string;
   reporterPhone?: string;
   reporterEmail?: string;
+  reporterNic?: string;
+  reporterAddress?: string;
+  reporterCity?: string;
   category?: string;   // loan_issue | account_issue | staff_complaint | digital_banking | fraud | branch_service | other
   priority?: string;   // P1..P4 or urgent..low
   subject?: string;
@@ -503,12 +506,54 @@ async function createComplaintFromStructured(
     // 2026-07-13. Cuts this function from 7 sequential round-trips to 3.
     const [[contact], [{ next_val }], [queueRow], [slaRow], [botCall], [config]] = await Promise.all([
       db.withSuperAdmin(async (c) => {
-        if (!s.reporterPhone) return [];
-        const r = await c.query(
-          `SELECT id FROM contacts WHERE tenant_id=$1 AND phone ILIKE $2 LIMIT 1`,
-          [tenantId, `%${s.reporterPhone.replace(/\D/g, '').slice(-10)}%`],
+        const normalised = s.reporterPhone?.replace(/\D/g, '').slice(-10) ?? null;
+        const addressFields = s.reporterAddress || s.reporterCity
+          ? { address: s.reporterAddress ?? null, city: s.reporterCity ?? null }
+          : null;
+
+        if (normalised) {
+          const r = await c.query(
+            `SELECT id, email, nic_number, custom_fields FROM contacts
+             WHERE tenant_id=$1 AND (phone ILIKE $2 OR mobile ILIKE $2) LIMIT 1`,
+            [tenantId, `%${normalised}%`],
+          );
+          if (r.rows.length) {
+            // Existing caller — fill in any details we didn't have before,
+            // never overwrite something already on file.
+            const existing = r.rows[0];
+            const mergedCustomFields = addressFields
+              ? { ...addressFields, ...existing.custom_fields }
+              : existing.custom_fields;
+            await c.query(
+              `UPDATE contacts SET
+                 email = COALESCE(email, $2),
+                 nic_number = COALESCE(nic_number, $3),
+                 custom_fields = $4::jsonb
+               WHERE id = $1`,
+              [existing.id, s.reporterEmail ?? null, s.reporterNic ?? null, JSON.stringify(mergedCustomFields ?? {})],
+            );
+            return [{ id: existing.id }];
+          }
+        }
+        // New caller — create a contact so this call/ticket shows up on a
+        // unified Contact 360 timeline, same as every other channel does.
+        let firstName = 'Caller';
+        let lastName: string | null = null;
+        if (s.reporterName) {
+          const parts = s.reporterName.trim().split(/\s+/);
+          firstName = parts[0] ?? 'Caller';
+          lastName = parts.slice(1).join(' ') || null;
+        }
+        const tags = s.reporterName ? ['voice_bot'] : ['voice_bot', 'anonymous'];
+        const created = await c.query(
+          `INSERT INTO contacts
+             (tenant_id, first_name, last_name, phone, email, nic_number, source, tags, custom_fields)
+           VALUES ($1, $2, $3, $4, $5, $6, 'voice_bot', $7, $8::jsonb)
+           RETURNING id`,
+          [tenantId, firstName, lastName, s.reporterPhone ?? null, s.reporterEmail ?? null,
+           s.reporterNic ?? null, tags, JSON.stringify(addressFields ?? {})],
         );
-        return r.rows;
+        return created.rows;
       }),
       db.withSuperAdmin(async (c) =>
         (await c.query(

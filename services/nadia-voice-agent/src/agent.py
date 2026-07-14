@@ -169,6 +169,10 @@ class NadiaAgent(Agent):
         subject: str,
         description: str,
         fraud_amount: str | None = None,
+        reporter_email: str | None = None,
+        reporter_nic: str | None = None,
+        reporter_address: str | None = None,
+        reporter_city: str | None = None,
     ) -> str:
         """Create a support ticket in the CRM once the caller's complaint
         details have been collected. Call this exactly once per complaint
@@ -176,6 +180,10 @@ class NadiaAgent(Agent):
         same call), as soon as you have name, phone, category, priority, and
         a subject. Read back the real ticket number this returns — never
         invent one yourself.
+
+        Whatever contact details the caller shares during the conversation —
+        even in passing, not just when directly asked — should be passed
+        through here so their CRM record stays complete for next time.
 
         Args:
             reporter_name: Caller's full name.
@@ -187,6 +195,10 @@ class NadiaAgent(Agent):
             description: Fuller description of what the caller reported.
             fraud_amount: Amount involved, only for category=fraud. Omit
                 otherwise.
+            reporter_email: Caller's email address, if they gave one.
+            reporter_nic: Caller's CNIC / National ID number, if they gave one.
+            reporter_address: Caller's street/house address, if they gave one.
+            reporter_city: Caller's city, if they gave one.
         """
         base_url = os.environ["CRM_API_BASE_URL"]
         secret = os.environ.get("LIVEKIT_INGEST_SECRET", "")
@@ -203,6 +215,10 @@ class NadiaAgent(Agent):
                     "subject": subject,
                     "description": description,
                     "fraudAmount": fraud_amount,
+                    "reporterEmail": reporter_email,
+                    "reporterNic": reporter_nic,
+                    "reporterAddress": reporter_address,
+                    "reporterCity": reporter_city,
                     "callId": self.call_id,
                 },
             )
@@ -302,11 +318,15 @@ async def entrypoint(ctx: agents.JobContext) -> None:
     transcript_parts: list[str] = []
 
     @session.on("conversation_item_added")
-    def _on_item(item) -> None:
-        text = getattr(item, "text_content", None) or getattr(item, "text", None)
+    def _on_item(ev) -> None:
+        # ev is a ConversationItemAddedEvent; the actual ChatMessage is ev.item.
+        item = getattr(ev, "item", None)
+        text = getattr(item, "text_content", None) if item else None
         if text:
-            transcript_parts.append(text)
-            dbg(f"conversation item: {str(text)[:80]}")
+            role = getattr(item, "role", "") or ""
+            speaker = "Caller" if role == "user" else "Nadia" if role == "assistant" else role
+            transcript_parts.append(f"{speaker}: {text}" if speaker else text)
+            dbg(f"conversation item [{role}]: {str(text)[:80]}")
 
     @session.on("error")
     def _on_error(ev) -> None:
