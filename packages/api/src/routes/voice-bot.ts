@@ -33,6 +33,8 @@ import type { DatabaseClient, EventBus } from '@crm/core';
 import { CRM_EVENTS } from '@crm/core';
 import { requireScope, requireRole, requireEntitlement } from '../middlewares/auth.middleware';
 import { AccessToken, AgentDispatchClient } from 'livekit-server-sdk';
+import pdfParse from 'pdf-parse';
+import mammoth from 'mammoth';
 
 // ── Default IVR menu ─────────────────────────────────────────────────────
 const DEFAULT_IVR_MENU = [
@@ -1099,6 +1101,208 @@ export function voiceBotRoutes(db: DatabaseClient, eventBus: EventBus) {
         await c.query(`DELETE FROM voice_bot_custom_intents WHERE id = $1 AND tenant_id = $2`, [id, req.tenant.id]);
       });
       return reply.send({ success: true });
+    });
+
+    // ── Knowledge base (Nadia admin portal item 6) ────────────────────────
+    // Tenant admins add reference material three ways: typed text, an
+    // uploaded PDF/DOCX (text extracted at upload time), or a URL (HTML
+    // fetched and stripped to plain text at import time). At call time
+    // Nadia matches the caller's question against `keywords` and gets the
+    // matching entry's `content` injected into that turn's context — plain
+    // keyword matching, no embeddings/vector store needed for this volume.
+
+    fastify.get('/knowledge-base', { preHandler: requireScope('settings:read') }, async (req, reply) => {
+      const entries = await db.withTenant(req.tenant.id, async (c) => {
+        const r = await c.query(
+          `SELECT id, title, content, keywords, source_type, source_url, source_filename,
+                  is_active, created_at, updated_at
+             FROM voice_bot_knowledge_entries
+            WHERE tenant_id = $1
+            ORDER BY created_at DESC`,
+          [req.tenant.id],
+        );
+        return r.rows;
+      });
+      return reply.send({ success: true, data: entries });
+    });
+
+    // Add a plain-text entry: tenant admin types a title, the answer content,
+    // and a few keywords a caller might say that should trigger this entry.
+    fastify.post('/knowledge-base', { preHandler: requireRole('tenant_admin', 'super_admin') }, async (req, reply) => {
+      const body = z.object({
+        title:    z.string().min(1).max(120),
+        content:  z.string().min(1).max(5000),
+        keywords: z.array(z.string().min(1)).min(1).max(20),
+      }).parse(req.body);
+
+      const [entry] = await db.withTenant(req.tenant.id, async (c) => {
+        const r = await c.query(
+          `INSERT INTO voice_bot_knowledge_entries
+             (tenant_id, title, content, keywords, source_type, created_by)
+           VALUES ($1, $2, $3, $4, 'text', $5)
+           RETURNING *`,
+          [req.tenant.id, body.title, body.content, body.keywords.map(k => k.toLowerCase()), req.user.sub],
+        );
+        return r.rows;
+      });
+      return reply.code(201).send({ success: true, data: entry });
+    });
+
+    // Import from a URL: fetch the page, strip HTML down to plain text,
+    // store the first chunk as content. Caller still sets title + keywords.
+    fastify.post('/knowledge-base/import-url', { preHandler: requireRole('tenant_admin', 'super_admin') }, async (req, reply) => {
+      const body = z.object({
+        title:    z.string().min(1).max(120),
+        url:      z.string().url(),
+        keywords: z.array(z.string().min(1)).min(1).max(20),
+      }).parse(req.body);
+
+      let text: string;
+      try {
+        const res = await fetch(body.url, { signal: AbortSignal.timeout(10_000) });
+        if (!res.ok) return reply.code(400).send({ success: false, error: `Could not fetch that URL (HTTP ${res.status})` });
+        const html = await res.text();
+        text = html
+          .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+          .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+          .replace(/<[^>]+>/g, ' ')
+          .replace(/&nbsp;/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim()
+          .slice(0, 5000);
+      } catch (err: any) {
+        return reply.code(400).send({ success: false, error: `Could not fetch that URL: ${err.message}` });
+      }
+      if (!text) return reply.code(400).send({ success: false, error: 'No readable text found at that URL' });
+
+      const [entry] = await db.withTenant(req.tenant.id, async (c) => {
+        const r = await c.query(
+          `INSERT INTO voice_bot_knowledge_entries
+             (tenant_id, title, content, keywords, source_type, source_url, created_by)
+           VALUES ($1, $2, $3, $4, 'url', $5, $6)
+           RETURNING *`,
+          [req.tenant.id, body.title, text, body.keywords.map(k => k.toLowerCase()), body.url, req.user.sub],
+        );
+        return r.rows;
+      });
+      return reply.code(201).send({ success: true, data: entry });
+    });
+
+    // Upload a PDF or DOCX: extract its text, caller sets title + keywords
+    // as separate multipart fields alongside the file.
+    fastify.post('/knowledge-base/upload', { preHandler: requireRole('tenant_admin', 'super_admin') }, async (req, reply) => {
+      const parts = req.parts();
+      let fileBuffer: Buffer | null = null;
+      let filename = '';
+      let mimetype = '';
+      let title = '';
+      let keywordsRaw = '';
+      for await (const part of parts) {
+        if (part.type === 'file') {
+          fileBuffer = await part.toBuffer();
+          filename = part.filename;
+          mimetype = part.mimetype;
+        } else if (part.fieldname === 'title') {
+          title = String(part.value);
+        } else if (part.fieldname === 'keywords') {
+          keywordsRaw = String(part.value);
+        }
+      }
+      if (!fileBuffer) return reply.code(400).send({ success: false, error: 'No file uploaded' });
+      if (!title.trim()) return reply.code(400).send({ success: false, error: 'Title is required' });
+      const keywords = keywordsRaw.split(',').map(k => k.trim().toLowerCase()).filter(Boolean);
+      if (keywords.length === 0) return reply.code(400).send({ success: false, error: 'At least one keyword is required' });
+
+      let text: string;
+      try {
+        if (mimetype === 'application/pdf' || filename.toLowerCase().endsWith('.pdf')) {
+          text = (await pdfParse(fileBuffer)).text;
+        } else if (
+          mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+          || filename.toLowerCase().endsWith('.docx')
+        ) {
+          text = (await mammoth.extractRawText({ buffer: fileBuffer })).value;
+        } else {
+          return reply.code(400).send({ success: false, error: 'Only PDF or DOCX files are supported' });
+        }
+      } catch (err: any) {
+        return reply.code(400).send({ success: false, error: `Could not read that file: ${err.message}` });
+      }
+      text = text.replace(/\s+/g, ' ').trim().slice(0, 5000);
+      if (!text) return reply.code(400).send({ success: false, error: 'No readable text found in that file' });
+
+      const [entry] = await db.withTenant(req.tenant.id, async (c) => {
+        const r = await c.query(
+          `INSERT INTO voice_bot_knowledge_entries
+             (tenant_id, title, content, keywords, source_type, source_filename, created_by)
+           VALUES ($1, $2, $3, $4, 'file', $5, $6)
+           RETURNING *`,
+          [req.tenant.id, title, text, keywords, filename, req.user.sub],
+        );
+        return r.rows;
+      });
+      return reply.code(201).send({ success: true, data: entry });
+    });
+
+    fastify.put('/knowledge-base/:id', { preHandler: requireRole('tenant_admin', 'super_admin') }, async (req, reply) => {
+      const { id } = req.params as { id: string };
+      const body = z.object({
+        title:     z.string().min(1).max(120).optional(),
+        content:   z.string().min(1).max(5000).optional(),
+        keywords:  z.array(z.string().min(1)).min(1).max(20).optional(),
+        isActive:  z.boolean().optional(),
+      }).parse(req.body);
+
+      const [entry] = await db.withTenant(req.tenant.id, async (c) => {
+        const r = await c.query(
+          `UPDATE voice_bot_knowledge_entries SET
+             title      = COALESCE($3, title),
+             content    = COALESCE($4, content),
+             keywords   = COALESCE($5, keywords),
+             is_active  = COALESCE($6, is_active)
+           WHERE id = $1 AND tenant_id = $2
+           RETURNING *`,
+          [id, req.tenant.id, body.title ?? null, body.content ?? null,
+           body.keywords ? body.keywords.map(k => k.toLowerCase()) : null, body.isActive ?? null],
+        );
+        return r.rows;
+      });
+      if (!entry) return reply.code(404).send({ success: false, error: 'Not found' });
+      return reply.send({ success: true, data: entry });
+    });
+
+    fastify.delete('/knowledge-base/:id', { preHandler: requireRole('tenant_admin', 'super_admin') }, async (req, reply) => {
+      const { id } = req.params as { id: string };
+      await db.withTenant(req.tenant.id, async (c) => {
+        await c.query(`DELETE FROM voice_bot_knowledge_entries WHERE id = $1 AND tenant_id = $2`, [id, req.tenant.id]);
+      });
+      return reply.send({ success: true });
+    });
+
+    // Called by the Nadia agent mid-call (server-side keyword match, not the
+    // caller-facing config UI) — matches the caller's question against every
+    // active entry's keywords, returns the best match's content.
+    fastify.get('/knowledge-base/search', async (req, reply) => {
+      if (!checkSecret(req)) return reply.code(401).send({ error: 'unauthorized' });
+      const { tenantId, q } = req.query as { tenantId?: string; q?: string };
+      if (!tenantId || !q) return reply.code(400).send({ success: false, error: 'tenantId and q are required' });
+
+      const queryWords = q.toLowerCase().split(/\W+/).filter(w => w.length > 2);
+      if (queryWords.length === 0) return reply.send({ success: true, data: null });
+
+      const [best] = await db.withSuperAdmin(async (c) => {
+        const r = await c.query(
+          `SELECT id, title, content, keywords,
+                  cardinality(ARRAY(SELECT unnest(keywords) INTERSECT SELECT unnest($2::text[]))) AS matches
+             FROM voice_bot_knowledge_entries
+            WHERE tenant_id = $1 AND is_active = true
+            ORDER BY matches DESC
+            LIMIT 1`,
+          [tenantId, queryWords],
+        );
+        return r.rows.filter((row: any) => row.matches > 0);
+      });
+      return reply.send({ success: true, data: best ?? null });
     });
 
     // ── Connector secret (stored in tenant.settings so webhooks can read it) ──

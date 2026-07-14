@@ -157,6 +157,37 @@ class NadiaAgent(Agent):
         for f in await time_stretch(frames, rate):
             yield f
 
+    # ── Tool the LLM calls to check the tenant's knowledge base before ──
+    # ── assuming something needs a ticket (e.g. branch hours, policies) ──
+    @function_tool()
+    async def check_knowledge_base(self, context: RunContext, question: str) -> str:
+        """Check the business's own reference material for a direct answer
+        before raising a ticket — e.g. branch hours, standard policies,
+        published timelines. Call this whenever the caller asks something
+        that sounds like a general question rather than their own personal
+        complaint. If this returns no match, proceed normally (collect
+        details and raise a ticket as usual).
+
+        Args:
+            question: The caller's question, in your own words.
+        """
+        base_url = os.environ["CRM_API_BASE_URL"]
+        secret = os.environ.get("LIVEKIT_INGEST_SECRET", "")
+        try:
+            async with httpx.AsyncClient(timeout=5) as client:
+                resp = await client.get(
+                    f"{base_url}/api/v1/voice-bot/knowledge-base/search",
+                    params={"tenantId": self.tenant_id, "q": question},
+                    headers={"Authorization": f"Bearer {secret}"} if secret else {},
+                )
+                resp.raise_for_status()
+                data = resp.json().get("data")
+        except Exception:
+            return "No match found — continue normally."
+        if not data:
+            return "No match found — continue normally."
+        return f"Found in knowledge base: {data['content']}"
+
     # ── Tool the LLM calls once it has enough info to raise a ticket ──
     @function_tool()
     async def raise_ticket(

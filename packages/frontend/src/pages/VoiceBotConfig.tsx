@@ -20,6 +20,7 @@ import {
   Bot, Phone, Copy, CheckCircle2, ChevronRight, ExternalLink,
   Settings2, Ticket, Zap, AlertCircle, Loader2, PhoneCall,
   Info, ToggleLeft, ToggleRight, ChevronDown, List,
+  BookOpen, Trash2, FileText, Link2, Type, Plus,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { api } from '../services/api';
@@ -250,6 +251,188 @@ function MinutesUsageCard({ usage, period, onPeriodChange }: { usage?: Usage; pe
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+// ── Knowledge Base panel ────────────────────────────────────────────────
+// Lets a tenant admin add reference material Nadia can answer from directly
+// (branch hours, standard policies, published timelines) instead of always
+// raising a ticket. Three ways in: typed text, a PDF/DOCX upload, or a URL.
+
+interface KbEntry {
+  id: string;
+  title: string;
+  content: string;
+  keywords: string[];
+  source_type: 'text' | 'file' | 'url';
+  source_url: string | null;
+  source_filename: string | null;
+  is_active: boolean;
+  created_at: string;
+}
+
+function KnowledgeBasePanel() {
+  const qc = useQueryClient();
+  const [mode, setMode] = useState<'text' | 'file' | 'url'>('text');
+  const [title, setTitle] = useState('');
+  const [content, setContent] = useState('');
+  const [url, setUrl] = useState('');
+  const [keywords, setKeywords] = useState('');
+  const [file, setFile] = useState<File | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const { data: entries, isLoading } = useQuery<KbEntry[]>({
+    queryKey: ['voice-bot-kb'],
+    queryFn: async () => { const r = await api.get('/api/v1/voice-bot/knowledge-base'); return r.data.data; },
+  });
+
+  const resetForm = () => { setTitle(''); setContent(''); setUrl(''); setKeywords(''); setFile(null); setError(null); };
+
+  const addTextMut = useMutation({
+    mutationFn: async () => {
+      await api.post('/api/v1/voice-bot/knowledge-base', {
+        title, content, keywords: keywords.split(',').map(k => k.trim()).filter(Boolean),
+      });
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['voice-bot-kb'] }); resetForm(); },
+    onError: (e: any) => setError(e.response?.data?.error ?? 'Could not save that entry'),
+  });
+
+  const importUrlMut = useMutation({
+    mutationFn: async () => {
+      await api.post('/api/v1/voice-bot/knowledge-base/import-url', {
+        title, url, keywords: keywords.split(',').map(k => k.trim()).filter(Boolean),
+      });
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['voice-bot-kb'] }); resetForm(); },
+    onError: (e: any) => setError(e.response?.data?.error ?? 'Could not import that URL'),
+  });
+
+  const uploadMut = useMutation({
+    mutationFn: async () => {
+      if (!file) throw new Error('Choose a file first');
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('title', title);
+      fd.append('keywords', keywords);
+      await api.post('/api/v1/voice-bot/knowledge-base/upload', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['voice-bot-kb'] }); resetForm(); },
+    onError: (e: any) => setError(e.response?.data?.error ?? 'Could not read that file'),
+  });
+
+  const deleteMut = useMutation({
+    mutationFn: async (id: string) => { await api.delete(`/api/v1/voice-bot/knowledge-base/${id}`); },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['voice-bot-kb'] }),
+  });
+
+  const toggleActiveMut = useMutation({
+    mutationFn: async ({ id, isActive }: { id: string; isActive: boolean }) => {
+      await api.put(`/api/v1/voice-bot/knowledge-base/${id}`, { isActive });
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['voice-bot-kb'] }),
+  });
+
+  const submitting = addTextMut.isPending || importUrlMut.isPending || uploadMut.isPending;
+  const submit = () => {
+    setError(null);
+    if (!title.trim()) return setError('Title is required');
+    if (keywords.trim().split(',').filter(Boolean).length === 0) return setError('At least one keyword is required');
+    if (mode === 'text') addTextMut.mutate();
+    else if (mode === 'url') importUrlMut.mutate();
+    else uploadMut.mutate();
+  };
+
+  return (
+    <div className="border-t border-gray-100 pt-4">
+      <div className="flex items-center gap-2 mb-1">
+        <BookOpen className="w-4 h-4 text-brand-400" />
+        <span className="text-sm text-gray-900 font-semibold">Knowledge Base</span>
+      </div>
+      <p className="text-xs text-gray-500 mb-4">
+        Give Nadia reference material for general questions (branch hours, standard policies,
+        published timelines) so she can answer directly instead of raising a ticket.
+      </p>
+
+      {entries && entries.length > 0 && (
+        <div className="mb-4 divide-y divide-gray-100 border border-gray-200 rounded-lg overflow-hidden">
+          {entries.map(e => (
+            <div key={e.id} className="flex items-start justify-between gap-3 p-3 bg-white">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  {e.source_type === 'file' && <FileText className="w-3.5 h-3.5 text-gray-500 shrink-0" />}
+                  {e.source_type === 'url' && <Link2 className="w-3.5 h-3.5 text-gray-500 shrink-0" />}
+                  {e.source_type === 'text' && <Type className="w-3.5 h-3.5 text-gray-500 shrink-0" />}
+                  <p className="text-sm text-gray-900 font-medium truncate">{e.title}</p>
+                </div>
+                <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{e.content}</p>
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {e.keywords.map(k => (
+                    <span key={k} className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">{k}</span>
+                  ))}
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button type="button" onClick={() => toggleActiveMut.mutate({ id: e.id, isActive: !e.is_active })}
+                  title={e.is_active ? 'Active — click to disable' : 'Disabled — click to enable'}>
+                  {e.is_active
+                    ? <ToggleRight className="w-6 h-6 text-brand-400" />
+                    : <ToggleLeft  className="w-6 h-6 text-gray-300"  />}
+                </button>
+                <button type="button" onClick={() => deleteMut.mutate(e.id)} title="Delete">
+                  <Trash2 className="w-4 h-4 text-gray-400 hover:text-red-500" />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      {isLoading && <p className="text-xs text-gray-500 mb-4">Loading…</p>}
+      {!isLoading && (!entries || entries.length === 0) && (
+        <p className="text-xs text-gray-500 mb-4">No entries yet — add one below.</p>
+      )}
+
+      <div className="p-3 rounded-lg bg-gray-50 border border-gray-200">
+        <div className="flex gap-1 mb-3">
+          {(['text', 'file', 'url'] as const).map(m => (
+            <button key={m} type="button" onClick={() => { setMode(m); setError(null); }}
+              className={`text-xs px-3 py-1.5 rounded-lg font-medium ${mode === m ? 'bg-brand-400 text-white' : 'bg-white text-gray-500 border border-gray-200'}`}>
+              {m === 'text' ? 'Type text' : m === 'file' ? 'Upload file' : 'Import URL'}
+            </button>
+          ))}
+        </div>
+
+        <input placeholder="Title (e.g. Branch Hours)" value={title} onChange={e => setTitle(e.target.value)}
+          className="w-full mb-2 bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 outline-none" />
+
+        {mode === 'text' && (
+          <textarea rows={3} placeholder="The answer Nadia should give, in plain language"
+            value={content} onChange={e => setContent(e.target.value)}
+            className="w-full mb-2 bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 outline-none resize-none" />
+        )}
+        {mode === 'url' && (
+          <input placeholder="https://your-site.com/faq" value={url} onChange={e => setUrl(e.target.value)}
+            className="w-full mb-2 bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 outline-none" />
+        )}
+        {mode === 'file' && (
+          <input type="file" accept=".pdf,.docx"
+            onChange={e => setFile(e.target.files?.[0] ?? null)}
+            className="w-full mb-2 text-sm text-gray-500" />
+        )}
+
+        <input placeholder="Keywords, comma separated (e.g. branch, hours, timing, open)"
+          value={keywords} onChange={e => setKeywords(e.target.value)}
+          className="w-full mb-2 bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 outline-none" />
+
+        {error && <p className="text-xs text-red-500 mb-2">{error}</p>}
+
+        <button type="button" onClick={submit} disabled={submitting}
+          className="flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-lg bg-brand-400 text-white disabled:opacity-50">
+          {submitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+          Add entry
+        </button>
+      </div>
     </div>
   );
 }
@@ -846,6 +1029,8 @@ export function VoiceBotConfig() {
                         )}
                       </div>
                     )}
+
+                    {selectedProvider === 'livekit' && <KnowledgeBasePanel />}
 
                     {/* Ticket creation rules */}
                     <div className="border-t border-gray-100 pt-4">
