@@ -44,6 +44,7 @@ interface BotConfig {
   phone_number?: string;
   greeting_message?: string;
   system_prompt?: string;
+  guardrails?: string;
   language: string;
   voice_id?: string;
   auto_create_ticket: boolean;
@@ -354,6 +355,7 @@ export function VoiceBotConfig() {
         sipTrunkPassword:    body.sip_trunk_password,
         sipTrunkNickname:    body.sip_trunk_nickname,
         outboundTransport:   body.outbound_transport,
+        guardrails:          body.guardrails,
       });
       return r.data;
     },
@@ -802,6 +804,21 @@ export function VoiceBotConfig() {
                         onChange={e => setFormState(f => ({ ...f, system_prompt: e.target.value }))}
                         className={`${inputCls} resize-none text-xs font-mono`} />
                     </div>
+
+                    {selectedProvider === 'livekit' && (
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">
+                          Guardrails
+                          <span className="ml-1 text-gray-500">(hard limits — what the bot must NEVER do or say)</span>
+                        </label>
+                        <textarea rows={4}
+                          placeholder={`e.g.\n- Never quote a specific refund amount — always say "a manager will confirm the exact amount"\n- Never discuss competitor products or pricing\n- Never make promises about delivery dates`}
+                          value={formState.guardrails ?? ''}
+                          onChange={e => setFormState(f => ({ ...f, guardrails: e.target.value }))}
+                          className={`${inputCls} resize-none text-xs font-mono`} />
+                        <p className="text-xs text-gray-500 mt-1">Kept separate from the System Prompt so the bot treats these as strict boundaries, not general guidance.</p>
+                      </div>
+                    )}
 
                     {/* Ticket creation rules */}
                     <div className="border-t border-gray-100 pt-4">

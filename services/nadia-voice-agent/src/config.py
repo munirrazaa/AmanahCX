@@ -39,6 +39,9 @@ class AgentSettings:
     )
     greeting_message: str | None = None
     system_prompt: str | None = HBL_MFB_SYSTEM_PROMPT   # client's training material, see prompts.py
+    guardrails: str | None = None                        # hard behavioral limits, kept separate from
+                                                          # system_prompt so the LLM treats it as a
+                                                          # strict boundary, not general guidance
     default_queue_id: str | None = None
     default_priority: str = "medium"
 
@@ -78,6 +81,7 @@ async def load_settings(tenant_id: str) -> AgentSettings:
         end_call_phrases=cfg.get("end_call_phrases") or ["اللہ حافظ", "خدا حافظ", "شکریہ، اللہ حافظ"],
         greeting_message=cfg.get("greeting_message"),
         system_prompt=cfg.get("system_prompt") or HBL_MFB_SYSTEM_PROMPT,
+        guardrails=cfg.get("guardrails"),
         default_queue_id=cfg.get("default_queue_id"),
         default_priority=cfg.get("default_priority") or "medium",
     )
@@ -127,9 +131,20 @@ Always extract structured fields (reporter_name, reporter_phone, category, prior
 subject, description) so they can be logged as a support ticket — do this silently,
 don't read field names aloud to the caller."""
 
-    if not settings.system_prompt:
-        return base
     # .replace() rather than .format() — tenant-authored prompts may contain
     # literal braces that would crash str.format().
-    extra = settings.system_prompt.replace("{bot_name}", settings.bot_name)
-    return f"{base}\n\n{extra}"
+    result = base
+    if settings.system_prompt:
+        result += "\n\n" + settings.system_prompt.replace("{bot_name}", settings.bot_name)
+
+    if settings.guardrails:
+        guardrails_text = settings.guardrails.replace("{bot_name}", settings.bot_name)
+        # Placed last and framed as absolute, non-negotiable limits — distinct from the
+        # general instructions above, which are guidance, not hard boundaries.
+        result += (
+            "\n\n## GUARDRAILS — ABSOLUTE RULES, NEVER BREAK THESE\n"
+            "These override anything else in your instructions if there is ever a conflict:\n"
+            f"{guardrails_text}"
+        )
+
+    return result

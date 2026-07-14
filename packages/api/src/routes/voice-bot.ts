@@ -813,6 +813,7 @@ export function voiceBotRoutes(db: DatabaseClient, eventBus: EventBus) {
       interruptionSensitivity: z.number().min(0).max(1).optional(),
       maxCallDurationSec:      z.number().int().min(30).max(3600).optional(),
       endCallPhrases:          z.array(z.string()).optional(),
+      guardrails:              z.string().max(4000).optional(),
       sipTrunkProvider:        z.string().optional(),
       sipTrunkNumber:          z.string().optional(),
       sipTrunkUsername:        z.string().optional(),
@@ -834,9 +835,10 @@ export function voiceBotRoutes(db: DatabaseClient, eventBus: EventBus) {
                tone, speaking_rate, stt_provider, stt_language_hint, tts_provider,
                llm_model, interruption_sensitivity, max_call_duration_sec, end_call_phrases,
                sip_trunk_provider, sip_trunk_number, bot_name,
-               sip_trunk_username, sip_trunk_password, sip_trunk_nickname, outbound_transport)
+               sip_trunk_username, sip_trunk_password, sip_trunk_nickname, outbound_transport,
+               guardrails)
             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,
-                    $17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32)
+                    $17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33)
             ON CONFLICT (tenant_id, provider) DO UPDATE SET
               is_active             = EXCLUDED.is_active,
               assistant_id          = EXCLUDED.assistant_id,
@@ -868,6 +870,7 @@ export function voiceBotRoutes(db: DatabaseClient, eventBus: EventBus) {
               sip_trunk_password    = EXCLUDED.sip_trunk_password,
               sip_trunk_nickname    = EXCLUDED.sip_trunk_nickname,
               outbound_transport    = EXCLUDED.outbound_transport,
+              guardrails            = EXCLUDED.guardrails,
               updated_at            = NOW()
             RETURNING *`,
            [
@@ -903,6 +906,7 @@ export function voiceBotRoutes(db: DatabaseClient, eventBus: EventBus) {
              body.sipTrunkPassword        ?? null,
              body.sipTrunkNickname        ?? null,
              body.outboundTransport       ?? 'TCP',
+             body.guardrails              ?? null,
            ],
         );
         return r.rows;
