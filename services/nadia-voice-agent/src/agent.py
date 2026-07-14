@@ -30,6 +30,7 @@ Remaining TODOs before a real call:
 """
 
 import asyncio
+import json
 import os
 
 import httpx
@@ -209,11 +210,31 @@ class NadiaAgent(Agent):
         return f"Ticket {data['ticketNumber']} created."
 
 
+def _extract_tenant_id(raw: str) -> str:
+    """Pull the tenant UUID out of the job metadata.
+
+    The metadata arrives one of two ways:
+      • a bare tenant-id string (SIP dispatch rules / CRM_TENANT_ID env), or
+      • a JSON blob like {"tenantId": "...", "startedBy": "...", "source": "..."}
+        (the CRM's browser test-call + web-call endpoints wrap it this way).
+    Treating the whole JSON blob as the tenant id made the CRM return 500 on
+    every ticket create (seen live 2026-07-14) — so parse it defensively.
+    """
+    raw = (raw or "").strip()
+    if raw.startswith("{"):
+        try:
+            obj = json.loads(raw)
+            return str(obj.get("tenantId") or obj.get("tenant_id") or "").strip()
+        except (ValueError, TypeError):
+            return ""
+    return raw
+
+
 async def entrypoint(ctx: agents.JobContext) -> None:
     # Dispatch rules should attach tenant_id in room/participant metadata —
     # see README "SIP wiring" for how the trunk -> dispatch rule -> room
     # naming convention carries this through.
-    tenant_id = (ctx.job.metadata or "") or os.environ.get("CRM_TENANT_ID", "")
+    tenant_id = _extract_tenant_id(ctx.job.metadata or "") or os.environ.get("CRM_TENANT_ID", "")
     call_id = ctx.room.name
     dbg(f"entrypoint start room={call_id} tenant={tenant_id[:8]}")
 
