@@ -449,10 +449,12 @@ export function VoiceBotConfig() {
   const [editMode, setEditMode] = useState(false);
   const [saveMsg, setSaveMsg] = useState('');
 
-  const { data: configs } = useQuery<BotConfig[]>({
+  const { data: configResponse } = useQuery<{ data: BotConfig[]; ownership: 'super_admin' | 'tenant_admin' }>({
     queryKey: ['voice-bot-configs'],
-    queryFn: async () => { const r = await api.get('/api/v1/voice-bot/config'); return r.data.data; },
+    queryFn: async () => { const r = await api.get('/api/v1/voice-bot/config'); return r.data; },
   });
+  const configs = configResponse?.data;
+  const isCentrallyManaged = configResponse?.ownership === 'super_admin';
 
   const { data: webhookUrls } = useQuery<WebhookUrls>({
     queryKey: ['voice-bot-webhook-urls'],
@@ -754,13 +756,22 @@ export function VoiceBotConfig() {
                     <Settings2 className="w-4 h-4 text-brand-400" />
                     <h3 className="text-gray-900 font-semibold text-sm">Bot Configuration</h3>
                   </div>
-                  {!editMode && (
+                  {!editMode && !isCentrallyManaged && (
                     <button onClick={() => startEdit(activeConfig)}
                       className="px-3 py-1.5 rounded-lg text-xs font-semibold text-brand-600 border border-brand-200 hover:bg-brand-50 transition-colors">
                       {activeConfig ? 'Edit' : 'Configure'}
                     </button>
                   )}
                 </div>
+
+                {isCentrallyManaged && (
+                  <div className="mb-4 p-3 rounded-lg bg-gray-50 border border-gray-200 flex items-start gap-2.5">
+                    <Info className="w-4 h-4 text-gray-500 mt-0.5 shrink-0" />
+                    <p className="text-xs text-gray-600">
+                      This bot is centrally managed by your platform provider. You can see its current settings below, but changes must be requested from them.
+                    </p>
+                  </div>
+                )}
 
                 {editMode ? (
                   <div className="space-y-4">

@@ -401,6 +401,13 @@ export function connectorRoutes(db: DatabaseClient) {
 
     // Save / update connector credentials — requires tenant_admin
     fastify.put('/:id', { preHandler: requireRole('tenant_admin', 'super_admin') }, async (req, reply) => {
+      const ownership = (req.tenant.settings as any)?.integration_ownership?.connectors ?? 'tenant_admin';
+      if (ownership === 'super_admin') {
+        return reply.code(403).send({
+          success: false,
+          error: { code: 'CENTRALLY_MANAGED', message: 'Channels & Services are centrally managed by your platform provider. Contact them to request changes.' },
+        });
+      }
       const { id } = req.params as { id: string };
       const def = CONNECTOR_DEFS.find((d) => d.id === id);
       if (!def) return reply.code(404).send({ success: false, error: { code: 'NOT_FOUND', message: 'Connector not found' } });

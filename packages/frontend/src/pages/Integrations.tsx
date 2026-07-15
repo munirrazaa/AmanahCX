@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { api } from '../services/api';
 import { useCan } from '../hooks/useRole';
+import { useAuthStore } from '../store/auth.store';
 
 // ── Category definitions ───────────────────────────────────────────────────
 const SECTIONS = [
@@ -261,6 +262,9 @@ type Tab = 'connectors' | 'webhooks' | 'api-keys';
 export function Integrations() {
   const qc = useQueryClient();
   const can = useCan();
+  const { tenant } = useAuthStore();
+  const ownership: Record<string, string> = (tenant as any)?.settings?.integration_ownership ?? {};
+  const isLocked = (category: 'connectors' | 'webhooks' | 'api_keys') => (ownership[category] ?? 'tenant_admin') === 'super_admin';
   const [tab, setTab] = useState<Tab>('connectors');
   const [activeConnector, setActiveConnector] = useState<any | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
@@ -348,6 +352,11 @@ export function Integrations() {
         {/* ── CONNECTORS TAB ── */}
         {tab === 'connectors' && (
           <div className="max-w-4xl space-y-6">
+            {isLocked('connectors') && (
+              <div className="bg-gray-50 border border-gray-200 rounded-xl p-3 text-xs text-gray-600">
+                Channels & Services are centrally managed by your platform provider. Contact them to request changes.
+              </div>
+            )}
             {isLoading && <div className="flex justify-center py-16"><Loader2 className="w-6 h-6 text-brand-400 animate-spin" /></div>}
 
             {SECTIONS.map((section) => {
@@ -386,7 +395,7 @@ export function Integrations() {
                     {items.map((conn: any) => (
                       <ConnectorCard key={conn.id} conn={conn}
                         onConfigure={() => setActiveConnector(conn)}
-                        canEdit={can.manageWorkspace} />
+                        canEdit={can.manageWorkspace && !isLocked('connectors')} />
                     ))}
                   </div>
                 </div>
@@ -423,9 +432,14 @@ export function Integrations() {
                 For inbound (pushing data into Vivid), use the REST API with an API Key.
               </p>
             </div>
+            {isLocked('webhooks') && (
+              <div className="bg-gray-50 border border-gray-200 rounded-xl p-3 text-xs text-gray-600">
+                Webhooks are centrally managed by your platform provider. Contact them to request changes.
+              </div>
+            )}
             <div className="flex items-center justify-between">
               <p className="text-sm text-gray-500">Subscribed to {webhooks?.length ?? 0} event stream{webhooks?.length !== 1 ? 's' : ''}.</p>
-              {can.manageIntegrations && (
+              {can.manageIntegrations && !isLocked('webhooks') && (
                 <button onClick={() => setShowCreateWebhook(true)}
                   className="flex items-center gap-1.5 px-3 py-2 bg-brand-600 text-white text-sm rounded-lg hover:bg-brand-700">
                   <Plus className="w-4 h-4" /> Add Webhook
@@ -477,9 +491,14 @@ export function Integrations() {
                 All channels (Email / SMS / WhatsApp) respect the ticket's preferred_channel setting regardless of source.
               </p>
             </div>
+            {isLocked('api_keys') && (
+              <div className="bg-gray-50 border border-gray-200 rounded-xl p-3 text-xs text-gray-600">
+                API Keys are centrally managed by your platform provider. Contact them to request changes.
+              </div>
+            )}
             <div className="flex items-center justify-between">
               <p className="text-sm text-gray-500">{apiKeys?.length ?? 0} active key{apiKeys?.length !== 1 ? 's' : ''}.</p>
-              {can.manageIntegrations && (
+              {can.manageIntegrations && !isLocked('api_keys') && (
                 <button onClick={() => setShowCreateKey(true)}
                   className="flex items-center gap-1.5 px-3 py-2 bg-brand-600 text-white text-sm rounded-lg hover:bg-brand-700">
                   <Plus className="w-4 h-4" /> Create Key

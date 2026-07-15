@@ -920,6 +920,7 @@ function TenantActions({ tenant, onClose }: { tenant: any; onClose: () => void }
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [showResetResult, setShowResetResult] = useState(false);
   const [showVoiceBotMinutes, setShowVoiceBotMinutes] = useState(false);
+  const [showOwnership, setShowOwnership] = useState(false);
 
   return (
     // Click-away overlay and the menu are SIBLINGS: the menu anchors to the
@@ -1073,6 +1074,12 @@ function TenantActions({ tenant, onClose }: { tenant: any; onClose: () => void }
           </button>
         )}
 
+        {/* Centralized ownership — who configures Voice Bot / Integrations for this tenant */}
+        <button onClick={() => setShowOwnership(true)}
+          className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-gray-700 hover:bg-gray-50">
+          <Lock className="w-4 h-4 text-gray-400" /> Config Ownership
+        </button>
+
         {/* Status actions */}
         <div className="border-t border-gray-50 mt-1 pt-1">
           {tenant.status !== 'suspended' ? (
@@ -1118,6 +1125,139 @@ function TenantActions({ tenant, onClose }: { tenant: any; onClose: () => void }
       {showVoiceBotMinutes && (
         <VoiceBotMinutesModal tenant={tenant} onClose={() => { setShowVoiceBotMinutes(false); onClose(); }} />
       )}
+      {showOwnership && (
+        <ConfigOwnershipModal tenant={tenant} onClose={() => { setShowOwnership(false); onClose(); }} />
+      )}
+    </div>
+  );
+}
+
+// ── Config Ownership Modal — Phase 1 of the shared hold/push model ─────────
+// Lets a Super Admin decide, per tenant, whether Voice Bot and each of the
+// three Integrations categories are configured by the tenant admin (as
+// always) or held centrally. When held, this same modal is where the
+// Super Admin edits the tenant's Voice Bot directly.
+function ConfigOwnershipModal({ tenant, onClose }: { tenant: any; onClose: () => void }) {
+  const qc = useQueryClient();
+  const [voiceBotOwnership, setVoiceBotOwnership] = useState<string>(tenant.settings?.voice_bot_ownership ?? 'tenant_admin');
+  const [integrationOwnership, setIntegrationOwnership] = useState<{ connectors: string; webhooks: string; api_keys: string }>({
+    connectors: tenant.settings?.integration_ownership?.connectors ?? 'tenant_admin',
+    webhooks:   tenant.settings?.integration_ownership?.webhooks   ?? 'tenant_admin',
+    api_keys:   tenant.settings?.integration_ownership?.api_keys   ?? 'tenant_admin',
+  });
+
+  const { data: botConfig } = useQuery({
+    queryKey: ['sa-voice-bot-config', tenant.id],
+    queryFn: () => api.get(`/super-admin/tenants/${tenant.id}/voice-bot-config`).then(r => r.data.data),
+    enabled: voiceBotOwnership === 'super_admin',
+  });
+  const [botForm, setBotForm] = useState<any>(null);
+  useEffect(() => {
+    if (botConfig) {
+      setBotForm({
+        botName: botConfig.bot_name ?? 'Nadia',
+        greetingMessage: botConfig.greeting_message ?? '',
+        systemPrompt: botConfig.system_prompt ?? '',
+        tone: botConfig.tone ?? 'professional',
+        speakingRate: Number(botConfig.speaking_rate ?? 0.9),
+        guardrails: botConfig.guardrails ?? '',
+        isActive: botConfig.is_active ?? true,
+      });
+    } else if (voiceBotOwnership === 'super_admin' && botForm === null) {
+      setBotForm({ botName: 'Nadia', greetingMessage: '', systemPrompt: '', tone: 'professional', speakingRate: 0.9, guardrails: '', isActive: true });
+    }
+  }, [botConfig, voiceBotOwnership]);
+
+  const saveOwnershipMut = useMutation({
+    mutationFn: async () => {
+      await api.patch(`/super-admin/tenants/${tenant.id}/voice-bot-ownership`, { ownership: voiceBotOwnership });
+      await api.patch(`/super-admin/tenants/${tenant.id}/integration-ownership`, integrationOwnership);
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['sa-tenants'] }),
+  });
+
+  const saveBotConfigMut = useMutation({
+    // Empty-string fields mean "left blank", not "clear this out" — omit them
+    // so the backend's COALESCE keeps whatever was already saved.
+    mutationFn: () => {
+      const payload = Object.fromEntries(
+        Object.entries(botForm).filter(([, v]) => v !== ''),
+      );
+      return api.put(`/super-admin/tenants/${tenant.id}/voice-bot-config`, payload);
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['sa-voice-bot-config', tenant.id] }),
+  });
+
+  const radioRow = (label: string, value: string, onChange: (v: string) => void) => (
+    <div className="flex items-center justify-between py-2">
+      <span className="text-sm text-gray-700">{label}</span>
+      <div className="flex gap-1 bg-gray-100 rounded-lg p-0.5">
+        {(['tenant_admin', 'super_admin'] as const).map(v => (
+          <button key={v} onClick={() => onChange(v)}
+            className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${value === v ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}>
+            {v === 'tenant_admin' ? 'Tenant Admin' : 'Super Admin'}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 flex flex-col" style={{ maxHeight: '90vh' }}>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 shrink-0">
+          <div>
+            <h3 className="text-sm font-semibold text-gray-900">Config Ownership — {tenant.name}</h3>
+            <p className="text-xs text-gray-400">Who configures each area for this workspace</p>
+          </div>
+          <button onClick={onClose}><X className="w-4 h-4 text-gray-400" /></button>
+        </div>
+        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-1">
+          {radioRow('Voice Bot', voiceBotOwnership, setVoiceBotOwnership)}
+          <div className="border-t border-gray-50" />
+          {radioRow('Channels & Services', integrationOwnership.connectors, v => setIntegrationOwnership(o => ({ ...o, connectors: v })))}
+          {radioRow('Webhooks', integrationOwnership.webhooks, v => setIntegrationOwnership(o => ({ ...o, webhooks: v })))}
+          {radioRow('API Keys', integrationOwnership.api_keys, v => setIntegrationOwnership(o => ({ ...o, api_keys: v })))}
+
+          <div className="pt-2">
+            <button onClick={() => saveOwnershipMut.mutate()} disabled={saveOwnershipMut.isPending}
+              className="w-full py-2 text-sm font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50">
+              {saveOwnershipMut.isPending ? 'Saving…' : 'Save Ownership Settings'}
+            </button>
+            {saveOwnershipMut.isSuccess && <p className="text-xs text-green-600 text-center mt-1">Saved.</p>}
+          </div>
+
+          {voiceBotOwnership === 'super_admin' && botForm && (
+            <div className="mt-5 pt-4 border-t border-gray-100">
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Edit Voice Bot Directly</p>
+              <div className="space-y-2.5">
+                <input value={botForm.botName} onChange={e => setBotForm((f: any) => ({ ...f, botName: e.target.value }))}
+                  placeholder="Bot Name" className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm" />
+                <textarea value={botForm.greetingMessage} onChange={e => setBotForm((f: any) => ({ ...f, greetingMessage: e.target.value }))}
+                  placeholder="Greeting message" rows={2} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm resize-none" />
+                <textarea value={botForm.systemPrompt} onChange={e => setBotForm((f: any) => ({ ...f, systemPrompt: e.target.value }))}
+                  placeholder="System prompt / behaviour instructions" rows={3} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm resize-none" />
+                <div className="flex gap-2">
+                  <select value={botForm.tone} onChange={e => setBotForm((f: any) => ({ ...f, tone: e.target.value }))}
+                    className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white">
+                    {['professional', 'friendly', 'empathetic', 'formal'].map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                  <input type="number" step="0.05" min="0.5" max="2" value={botForm.speakingRate}
+                    onChange={e => setBotForm((f: any) => ({ ...f, speakingRate: Number(e.target.value) }))}
+                    className="w-24 px-3 py-2 border border-gray-200 rounded-lg text-sm" />
+                </div>
+                <textarea value={botForm.guardrails} onChange={e => setBotForm((f: any) => ({ ...f, guardrails: e.target.value }))}
+                  placeholder="Guardrails — hard limits" rows={2} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm resize-none" />
+                <button onClick={() => saveBotConfigMut.mutate()} disabled={saveBotConfigMut.isPending}
+                  className="w-full py-2 text-sm font-semibold text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-50">
+                  {saveBotConfigMut.isPending ? 'Saving…' : 'Save Bot Configuration'}
+                </button>
+                {saveBotConfigMut.isSuccess && <p className="text-xs text-green-600 text-center mt-1">Saved.</p>}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

@@ -668,6 +668,105 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
       return reply.send({ success: true, data: quota });
     });
 
+    // ── Centralized config ownership (Phase 1 of the shared hold/push model) ──
+    // "super_admin" = Super Admin (or a delegated sub-admin) configures this
+    // area directly; the tenant admin's own screen for it becomes read-only.
+    // "tenant_admin" = works as it always has — the tenant configures it
+    // themselves. Defaults to tenant_admin for any tenant that's never had
+    // this set, so nothing existing changes behaviour silently.
+    fastify.patch('/tenants/:id/voice-bot-ownership', async (req, reply) => {
+      const { id } = req.params as { id: string };
+      const body = z.object({ ownership: z.enum(['super_admin', 'tenant_admin']) }).parse(req.body);
+      await db.withSuperAdmin(async (client) => {
+        await client.query(
+          `UPDATE tenants SET settings = jsonb_set(COALESCE(settings,'{}'), '{voice_bot_ownership}', to_jsonb($1::text)) WHERE id = $2`,
+          [body.ownership, id],
+        );
+      });
+      // The tenant object (incl. settings) is Redis-cached for 5 minutes by
+      // TenantService — without this, the lock wouldn't take effect until
+      // that TTL expired, even though the DB row is already correct.
+      await tenantService.invalidateCache(id);
+      return reply.send({ success: true });
+    });
+
+    // Super Admin's own view/edit of a specific tenant's Nadia (self-hosted)
+    // config — only meaningful once that tenant is set to "super_admin"
+    // ownership above, but not itself gated on that (a super admin should
+    // always be able to look, even before locking it).
+    fastify.get('/tenants/:id/voice-bot-config', async (req, reply) => {
+      const { id } = req.params as { id: string };
+      const [cfg] = await db.withSuperAdmin(async (client) => {
+        const r = await client.query(
+          `SELECT * FROM voice_bot_configs WHERE tenant_id = $1 AND provider = 'livekit'`,
+          [id],
+        );
+        return r.rows;
+      });
+      return reply.send({ success: true, data: cfg ?? null });
+    });
+
+    const SuperAdminVoiceBotConfigSchema = z.object({
+      botName:              z.string().min(1).max(60).optional(),
+      greetingMessage:      z.string().optional(),
+      systemPrompt:         z.string().optional(),
+      tone:                 z.enum(['professional', 'friendly', 'empathetic', 'formal']).optional(),
+      speakingRate:         z.coerce.number().min(0.5).max(2.0).optional(),
+      voiceId:              z.string().optional(),
+      guardrails:           z.string().max(4000).optional(),
+      isActive:             z.boolean().optional(),
+    });
+
+    fastify.put('/tenants/:id/voice-bot-config', async (req, reply) => {
+      const { id } = req.params as { id: string };
+      const body = SuperAdminVoiceBotConfigSchema.parse(req.body);
+      const [cfg] = await db.withSuperAdmin(async (client) => {
+        const r = await client.query(
+          `INSERT INTO voice_bot_configs (tenant_id, provider, bot_name, greeting_message, system_prompt, tone, speaking_rate, voice_id, guardrails, is_active)
+           VALUES ($1,'livekit',$2,$3,$4,$5,$6,$7,$8,$9)
+           ON CONFLICT (tenant_id, provider) DO UPDATE SET
+             bot_name         = COALESCE(EXCLUDED.bot_name, voice_bot_configs.bot_name),
+             greeting_message = COALESCE(EXCLUDED.greeting_message, voice_bot_configs.greeting_message),
+             system_prompt    = COALESCE(EXCLUDED.system_prompt, voice_bot_configs.system_prompt),
+             tone             = COALESCE(EXCLUDED.tone, voice_bot_configs.tone),
+             speaking_rate    = COALESCE(EXCLUDED.speaking_rate, voice_bot_configs.speaking_rate),
+             voice_id         = COALESCE(EXCLUDED.voice_id, voice_bot_configs.voice_id),
+             guardrails       = COALESCE(EXCLUDED.guardrails, voice_bot_configs.guardrails),
+             is_active        = COALESCE(EXCLUDED.is_active, voice_bot_configs.is_active),
+             updated_at       = NOW()
+           RETURNING *`,
+          [id, body.botName ?? 'Nadia', body.greetingMessage ?? null, body.systemPrompt ?? null,
+           body.tone ?? 'professional', body.speakingRate ?? 0.9, body.voiceId ?? 'helpdesk-agent',
+           body.guardrails ?? null, body.isActive ?? true],
+        );
+        return r.rows;
+      });
+      return reply.send({ success: true, data: cfg });
+    });
+
+    // ── Integrations ownership (Phase 1) ─────────────────────────────────────
+    // Same hold/push idea, applied to the three top-level Integrations tabs.
+    fastify.patch('/tenants/:id/integration-ownership', async (req, reply) => {
+      const { id } = req.params as { id: string };
+      const body = z.object({
+        connectors: z.enum(['super_admin', 'tenant_admin']).optional(),
+        webhooks:   z.enum(['super_admin', 'tenant_admin']).optional(),
+        api_keys:   z.enum(['super_admin', 'tenant_admin']).optional(),
+      }).parse(req.body);
+
+      await db.withSuperAdmin(async (client) => {
+        const [cur] = (await client.query(`SELECT settings FROM tenants WHERE id = $1`, [id])).rows;
+        const existing = cur?.settings?.integration_ownership ?? {};
+        const merged = { ...existing, ...body };
+        await client.query(
+          `UPDATE tenants SET settings = jsonb_set(COALESCE(settings,'{}'), '{integration_ownership}', $1::jsonb) WHERE id = $2`,
+          [JSON.stringify(merged), id],
+        );
+      });
+      await tenantService.invalidateCache(id);
+      return reply.send({ success: true });
+    });
+
     // All-tenants overview (allocated vs consumed) for the super admin dashboard
     fastify.get('/voice-bot-usage', async (_req, reply) => {
       const rows = await db.withSuperAdmin(async (client) => {

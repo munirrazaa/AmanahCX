@@ -43,6 +43,15 @@ export class TenantService {
     return tenant;
   }
 
+  // Bust the 5-minute cache for a tenant immediately after any direct
+  // (non-service-method) write to the tenants row — e.g. super-admin
+  // settings patches — so the change takes effect on the very next
+  // request instead of silently waiting out the TTL.
+  async invalidateCache(id: string, slug?: string): Promise<void> {
+    await this.redis.del(`tenant:${id}`);
+    if (slug) await this.redis.del(`tenant:slug:${slug}`);
+  }
+
   async findById(id: string): Promise<Tenant | null> {
     const cacheKey = `tenant:${id}`;
     const cached = await this.redis.get(cacheKey);

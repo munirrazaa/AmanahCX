@@ -37,6 +37,13 @@ export function apiKeyRoutes(db: DatabaseClient) {
 
     // Create API key — this is the ONLY time the full key is returned
     fastify.post('/', { preHandler: adminOnly }, async (req, reply) => {
+      const ownership = (req.tenant.settings as any)?.integration_ownership?.api_keys ?? 'tenant_admin';
+      if (ownership === 'super_admin') {
+        return reply.code(403).send({
+          success: false,
+          error: { code: 'CENTRALLY_MANAGED', message: 'API Keys are centrally managed by your platform provider. Contact them to request changes.' },
+        });
+      }
       const body = CreateKeySchema.parse(req.body);
 
       // Generate: crm_live_<32 random bytes hex>

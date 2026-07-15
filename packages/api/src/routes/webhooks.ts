@@ -29,6 +29,13 @@ export function webhookRoutes(db: DatabaseClient, _eventBus: EventBus) {
     });
 
     fastify.post('/', { preHandler }, async (req, reply) => {
+      const ownership = (req.tenant.settings as any)?.integration_ownership?.webhooks ?? 'tenant_admin';
+      if (ownership === 'super_admin') {
+        return reply.code(403).send({
+          success: false,
+          error: { code: 'CENTRALLY_MANAGED', message: 'Webhooks are centrally managed by your platform provider. Contact them to request changes.' },
+        });
+      }
       const body = WebhookSchema.parse(req.body);
       const secret = crypto.randomBytes(32).toString('hex');
 

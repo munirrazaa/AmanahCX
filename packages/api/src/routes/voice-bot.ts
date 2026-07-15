@@ -873,7 +873,10 @@ export function voiceBotRoutes(db: DatabaseClient, eventBus: EventBus) {
         );
         return r.rows;
       });
-      return reply.send({ success: true, data: configs });
+      // "super_admin" ownership means this workspace's bot is centrally held —
+      // the tenant admin's screen shows current values but can't save changes.
+      const ownership = (req.tenant.settings as any)?.voice_bot_ownership ?? 'tenant_admin';
+      return reply.send({ success: true, data: configs, ownership });
     });
 
     const ConfigSchema = z.object({
@@ -923,6 +926,13 @@ export function voiceBotRoutes(db: DatabaseClient, eventBus: EventBus) {
     });
 
     fastify.put('/config', { preHandler: requireRole('tenant_admin', 'super_admin') }, async (req, reply) => {
+      const ownership = (req.tenant.settings as any)?.voice_bot_ownership ?? 'tenant_admin';
+      if (ownership === 'super_admin') {
+        return reply.code(403).send({
+          success: false,
+          error: { code: 'CENTRALLY_MANAGED', message: 'This workspace\'s Voice Bot is centrally managed by your platform provider. Contact them to request changes.' },
+        });
+      }
       const body = ConfigSchema.parse(req.body);
 
       const [cfg] = await db.withTenant(req.tenant.id, async (c) => {
