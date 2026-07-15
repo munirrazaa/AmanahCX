@@ -15,6 +15,7 @@ import {
   BarChart2, Receipt, ClipboardList, Edit2, Eye, EyeOff,
   Lock, Calendar, ChevronDown, ChevronRight, Download, ShoppingCart,
   Hourglass, BadgeCheck, XCircle, CheckCircle, Phone,
+  ToggleLeft, ToggleRight,
 } from 'lucide-react';
 import { api } from '../services/api';
 import { useIsSuperAdmin } from '../hooks/useRole';
@@ -1151,7 +1152,18 @@ function ConfigOwnershipModal({ tenant, onClose }: { tenant: any; onClose: () =>
     queryFn: () => api.get(`/super-admin/tenants/${tenant.id}/voice-bot-config`).then(r => r.data.data),
     enabled: voiceBotOwnership === 'super_admin',
   });
+  const { data: voices } = useQuery<Array<{ id: string; voice_id: string; label: string }>>({
+    queryKey: ['sa-voice-bot-voices'],
+    queryFn: () => api.get('/super-admin/voice-bot-voices').then(r => r.data.data),
+    enabled: voiceBotOwnership === 'super_admin',
+  });
   const [botForm, setBotForm] = useState<any>(null);
+  const blankBotForm = {
+    botName: 'Nadia', greetingMessage: '', systemPrompt: '', tone: 'professional', speakingRate: 0.9,
+    voiceId: 'helpdesk-agent', language: 'ur-PK', guardrails: '', isActive: true, recordingEnabled: false,
+    selfServiceIntents: [] as string[], sipTrunkProvider: '', sipTrunkNumber: '', sipUri: '',
+    sipTrunkUsername: '', sipTrunkPassword: '', sipTrunkNickname: '', outboundTransport: 'TCP',
+  };
   useEffect(() => {
     if (botConfig) {
       setBotForm({
@@ -1160,13 +1172,49 @@ function ConfigOwnershipModal({ tenant, onClose }: { tenant: any; onClose: () =>
         systemPrompt: botConfig.system_prompt ?? '',
         tone: botConfig.tone ?? 'professional',
         speakingRate: Number(botConfig.speaking_rate ?? 0.9),
+        voiceId: botConfig.voice_id ?? 'helpdesk-agent',
+        language: botConfig.language ?? 'ur-PK',
         guardrails: botConfig.guardrails ?? '',
         isActive: botConfig.is_active ?? true,
+        recordingEnabled: botConfig.recording_enabled ?? false,
+        selfServiceIntents: botConfig.self_service_intents ?? [],
+        sipTrunkProvider: botConfig.sip_trunk_provider ?? '',
+        sipTrunkNumber: botConfig.sip_trunk_number ?? '',
+        sipUri: botConfig.sip_uri ?? '',
+        sipTrunkUsername: botConfig.sip_trunk_username ?? '',
+        sipTrunkPassword: botConfig.sip_trunk_password ?? '',
+        sipTrunkNickname: botConfig.sip_trunk_nickname ?? '',
+        outboundTransport: botConfig.outbound_transport ?? 'TCP',
       });
     } else if (voiceBotOwnership === 'super_admin' && botForm === null) {
-      setBotForm({ botName: 'Nadia', greetingMessage: '', systemPrompt: '', tone: 'professional', speakingRate: 0.9, guardrails: '', isActive: true });
+      setBotForm(blankBotForm);
     }
   }, [botConfig, voiceBotOwnership]);
+
+  // Knowledge base — same table the tenant page uses, scoped to this tenant
+  const { data: kbEntries } = useQuery<Array<{ id: string; title: string; content: string; keywords: string[]; is_active: boolean }>>({
+    queryKey: ['sa-voice-bot-kb', tenant.id],
+    queryFn: () => api.get(`/super-admin/tenants/${tenant.id}/voice-bot-knowledge-base`).then(r => r.data.data),
+    enabled: voiceBotOwnership === 'super_admin',
+  });
+  const [kbTitle, setKbTitle] = useState('');
+  const [kbContent, setKbContent] = useState('');
+  const [kbKeywords, setKbKeywords] = useState('');
+  const addKbMut = useMutation({
+    mutationFn: () => api.post(`/super-admin/tenants/${tenant.id}/voice-bot-knowledge-base`, {
+      title: kbTitle, content: kbContent, keywords: kbKeywords.split(',').map(k => k.trim()).filter(Boolean),
+    }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['sa-voice-bot-kb', tenant.id] }); setKbTitle(''); setKbContent(''); setKbKeywords(''); },
+  });
+  const toggleKbMut = useMutation({
+    mutationFn: ({ id: entryId, isActive }: { id: string; isActive: boolean }) =>
+      api.put(`/super-admin/tenants/${tenant.id}/voice-bot-knowledge-base/${entryId}`, { isActive }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['sa-voice-bot-kb', tenant.id] }),
+  });
+  const deleteKbMut = useMutation({
+    mutationFn: (entryId: string) => api.delete(`/super-admin/tenants/${tenant.id}/voice-bot-knowledge-base/${entryId}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['sa-voice-bot-kb', tenant.id] }),
+  });
 
   const saveOwnershipMut = useMutation({
     mutationFn: async () => {
@@ -1246,13 +1294,112 @@ function ConfigOwnershipModal({ tenant, onClose }: { tenant: any; onClose: () =>
                     onChange={e => setBotForm((f: any) => ({ ...f, speakingRate: Number(e.target.value) }))}
                     className="w-24 px-3 py-2 border border-gray-200 rounded-lg text-sm" />
                 </div>
+                <div className="flex gap-2">
+                  <select value={botForm.voiceId} onChange={e => setBotForm((f: any) => ({ ...f, voiceId: e.target.value }))}
+                    className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white">
+                    {(voices ?? []).map(v => <option key={v.id} value={v.voice_id}>{v.label}</option>)}
+                    {(voices ?? []).length === 0 && <option value={botForm.voiceId}>{botForm.voiceId}</option>}
+                  </select>
+                  <input value={botForm.language} onChange={e => setBotForm((f: any) => ({ ...f, language: e.target.value }))}
+                    placeholder="Language (e.g. ur-PK)" className="w-32 px-3 py-2 border border-gray-200 rounded-lg text-sm" />
+                </div>
                 <textarea value={botForm.guardrails} onChange={e => setBotForm((f: any) => ({ ...f, guardrails: e.target.value }))}
                   placeholder="Guardrails — hard limits" rows={2} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm resize-none" />
+
+                <div className="flex items-center justify-between py-1">
+                  <span className="text-sm text-gray-600">Record calls (audio)</span>
+                  <button onClick={() => setBotForm((f: any) => ({ ...f, recordingEnabled: !f.recordingEnabled }))}>
+                    {botForm.recordingEnabled
+                      ? <ToggleRight className="w-7 h-7 text-green-500" />
+                      : <ToggleLeft className="w-7 h-7 text-gray-300" />}
+                  </button>
+                </div>
+
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 mb-1.5">Self-Service Intents (No Ticket)</p>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {[
+                      { value: 'balance_inquiry', label: 'Balance / Account' },
+                      { value: 'order_status', label: 'Order Status' },
+                      { value: 'branch_hours', label: 'Branch Hours' },
+                      { value: 'installment_info', label: 'Installment / EMI' },
+                      { value: 'faq', label: 'General FAQ' },
+                    ].map(opt => {
+                      const selected = (botForm.selfServiceIntents ?? []).includes(opt.value);
+                      return (
+                        <label key={opt.value} className="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer">
+                          <input type="checkbox" checked={selected} onChange={() => {
+                            const cur = botForm.selfServiceIntents ?? [];
+                            setBotForm((f: any) => ({ ...f, selfServiceIntents: selected ? cur.filter((i: string) => i !== opt.value) : [...cur, opt.value] }));
+                          }} className="w-3.5 h-3.5" />
+                          {opt.label}
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="pt-2 border-t border-gray-50">
+                  <p className="text-xs font-semibold text-gray-500 mb-1.5">SIP Trunk Connection</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <input value={botForm.sipTrunkProvider} onChange={e => setBotForm((f: any) => ({ ...f, sipTrunkProvider: e.target.value }))}
+                      placeholder="Provider (e.g. Telecard)" className="px-3 py-2 border border-gray-200 rounded-lg text-sm" />
+                    <input value={botForm.sipTrunkNumber} onChange={e => setBotForm((f: any) => ({ ...f, sipTrunkNumber: e.target.value }))}
+                      placeholder="Phone Number" className="px-3 py-2 border border-gray-200 rounded-lg text-sm" />
+                    <input value={botForm.sipUri} onChange={e => setBotForm((f: any) => ({ ...f, sipUri: e.target.value }))}
+                      placeholder="Termination URI" className="col-span-2 px-3 py-2 border border-gray-200 rounded-lg text-sm" />
+                    <input value={botForm.sipTrunkUsername} onChange={e => setBotForm((f: any) => ({ ...f, sipTrunkUsername: e.target.value }))}
+                      placeholder="Username" className="px-3 py-2 border border-gray-200 rounded-lg text-sm" />
+                    <input value={botForm.sipTrunkPassword} onChange={e => setBotForm((f: any) => ({ ...f, sipTrunkPassword: e.target.value }))}
+                      placeholder="Password" type="password" className="px-3 py-2 border border-gray-200 rounded-lg text-sm" />
+                    <input value={botForm.sipTrunkNickname} onChange={e => setBotForm((f: any) => ({ ...f, sipTrunkNickname: e.target.value }))}
+                      placeholder="Nickname" className="px-3 py-2 border border-gray-200 rounded-lg text-sm" />
+                    <select value={botForm.outboundTransport} onChange={e => setBotForm((f: any) => ({ ...f, outboundTransport: e.target.value }))}
+                      className="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white">
+                      {['TCP', 'UDP'].map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                  </div>
+                </div>
+
                 <button onClick={() => saveBotConfigMut.mutate()} disabled={saveBotConfigMut.isPending}
                   className="w-full py-2 text-sm font-semibold text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-50">
                   {saveBotConfigMut.isPending ? 'Saving…' : 'Save Bot Configuration'}
                 </button>
                 {saveBotConfigMut.isSuccess && <p className="text-xs text-green-600 text-center mt-1">Saved.</p>}
+              </div>
+
+              <div className="mt-5 pt-4 border-t border-gray-100">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Knowledge Base</p>
+                {(kbEntries ?? []).length > 0 && (
+                  <div className="space-y-1.5 mb-3">
+                    {kbEntries!.map(e => (
+                      <div key={e.id} className="flex items-start justify-between gap-2 bg-gray-50 rounded-lg px-3 py-2">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-semibold text-gray-800 truncate">{e.title}</p>
+                          <p className="text-[11px] text-gray-500 truncate">{e.content}</p>
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <button onClick={() => toggleKbMut.mutate({ id: e.id, isActive: !e.is_active })}>
+                            {e.is_active ? <ToggleRight className="w-5 h-5 text-green-500" /> : <ToggleLeft className="w-5 h-5 text-gray-300" />}
+                          </button>
+                          <button onClick={() => deleteKbMut.mutate(e.id)}><Trash2 className="w-3.5 h-3.5 text-gray-400 hover:text-red-500" /></button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div className="space-y-1.5">
+                  <input value={kbTitle} onChange={e => setKbTitle(e.target.value)} placeholder="Title (e.g. Branch Hours)"
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm" />
+                  <textarea value={kbContent} onChange={e => setKbContent(e.target.value)} placeholder="Answer Nadia should give" rows={2}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm resize-none" />
+                  <input value={kbKeywords} onChange={e => setKbKeywords(e.target.value)} placeholder="Keywords, comma separated"
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm" />
+                  <button onClick={() => addKbMut.mutate()} disabled={!kbTitle || !kbContent || !kbKeywords || addKbMut.isPending}
+                    className="w-full py-2 text-sm font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50">
+                    {addKbMut.isPending ? 'Adding…' : '+ Add Entry'}
+                  </button>
+                </div>
               </div>
             </div>
           )}

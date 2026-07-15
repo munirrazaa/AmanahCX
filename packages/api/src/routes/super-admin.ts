@@ -713,8 +713,18 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
       tone:                 z.enum(['professional', 'friendly', 'empathetic', 'formal']).optional(),
       speakingRate:         z.coerce.number().min(0.5).max(2.0).optional(),
       voiceId:              z.string().optional(),
+      language:             z.string().optional(),
       guardrails:           z.string().max(4000).optional(),
       isActive:             z.boolean().optional(),
+      recordingEnabled:     z.boolean().optional(),
+      selfServiceIntents:   z.array(z.string()).optional(),
+      sipTrunkProvider:     z.string().optional(),
+      sipTrunkNumber:       z.string().optional(),
+      sipUri:               z.string().optional(),
+      sipTrunkUsername:     z.string().optional(),
+      sipTrunkPassword:     z.string().optional(),
+      sipTrunkNickname:     z.string().optional(),
+      outboundTransport:    z.enum(['TCP', 'UDP']).optional(),
     });
 
     fastify.put('/tenants/:id/voice-bot-config', async (req, reply) => {
@@ -722,26 +732,108 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
       const body = SuperAdminVoiceBotConfigSchema.parse(req.body);
       const [cfg] = await db.withSuperAdmin(async (client) => {
         const r = await client.query(
-          `INSERT INTO voice_bot_configs (tenant_id, provider, bot_name, greeting_message, system_prompt, tone, speaking_rate, voice_id, guardrails, is_active)
-           VALUES ($1,'livekit',$2,$3,$4,$5,$6,$7,$8,$9)
+          `INSERT INTO voice_bot_configs
+             (tenant_id, provider, bot_name, greeting_message, system_prompt, tone, speaking_rate, voice_id,
+              language, guardrails, is_active, recording_enabled, self_service_intents,
+              sip_trunk_provider, sip_trunk_number, sip_uri, sip_trunk_username, sip_trunk_password,
+              sip_trunk_nickname, outbound_transport)
+           VALUES ($1,'livekit',$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
            ON CONFLICT (tenant_id, provider) DO UPDATE SET
-             bot_name         = COALESCE(EXCLUDED.bot_name, voice_bot_configs.bot_name),
-             greeting_message = COALESCE(EXCLUDED.greeting_message, voice_bot_configs.greeting_message),
-             system_prompt    = COALESCE(EXCLUDED.system_prompt, voice_bot_configs.system_prompt),
-             tone             = COALESCE(EXCLUDED.tone, voice_bot_configs.tone),
-             speaking_rate    = COALESCE(EXCLUDED.speaking_rate, voice_bot_configs.speaking_rate),
-             voice_id         = COALESCE(EXCLUDED.voice_id, voice_bot_configs.voice_id),
-             guardrails       = COALESCE(EXCLUDED.guardrails, voice_bot_configs.guardrails),
-             is_active        = COALESCE(EXCLUDED.is_active, voice_bot_configs.is_active),
-             updated_at       = NOW()
+             bot_name            = COALESCE(EXCLUDED.bot_name, voice_bot_configs.bot_name),
+             greeting_message    = COALESCE(EXCLUDED.greeting_message, voice_bot_configs.greeting_message),
+             system_prompt       = COALESCE(EXCLUDED.system_prompt, voice_bot_configs.system_prompt),
+             tone                = COALESCE(EXCLUDED.tone, voice_bot_configs.tone),
+             speaking_rate       = COALESCE(EXCLUDED.speaking_rate, voice_bot_configs.speaking_rate),
+             voice_id            = COALESCE(EXCLUDED.voice_id, voice_bot_configs.voice_id),
+             language            = COALESCE(EXCLUDED.language, voice_bot_configs.language),
+             guardrails          = COALESCE(EXCLUDED.guardrails, voice_bot_configs.guardrails),
+             is_active           = COALESCE(EXCLUDED.is_active, voice_bot_configs.is_active),
+             recording_enabled   = COALESCE(EXCLUDED.recording_enabled, voice_bot_configs.recording_enabled),
+             self_service_intents = COALESCE(EXCLUDED.self_service_intents, voice_bot_configs.self_service_intents),
+             sip_trunk_provider  = COALESCE(EXCLUDED.sip_trunk_provider, voice_bot_configs.sip_trunk_provider),
+             sip_trunk_number    = COALESCE(EXCLUDED.sip_trunk_number, voice_bot_configs.sip_trunk_number),
+             sip_uri             = COALESCE(EXCLUDED.sip_uri, voice_bot_configs.sip_uri),
+             sip_trunk_username  = COALESCE(EXCLUDED.sip_trunk_username, voice_bot_configs.sip_trunk_username),
+             sip_trunk_password  = COALESCE(EXCLUDED.sip_trunk_password, voice_bot_configs.sip_trunk_password),
+             sip_trunk_nickname  = COALESCE(EXCLUDED.sip_trunk_nickname, voice_bot_configs.sip_trunk_nickname),
+             outbound_transport  = COALESCE(EXCLUDED.outbound_transport, voice_bot_configs.outbound_transport),
+             updated_at          = NOW()
            RETURNING *`,
           [id, body.botName ?? 'Nadia', body.greetingMessage ?? null, body.systemPrompt ?? null,
            body.tone ?? 'professional', body.speakingRate ?? 0.9, body.voiceId ?? 'helpdesk-agent',
-           body.guardrails ?? null, body.isActive ?? true],
+           body.language ?? 'ur-PK', body.guardrails ?? null, body.isActive ?? true,
+           body.recordingEnabled ?? false, body.selfServiceIntents ?? [],
+           body.sipTrunkProvider ?? null, body.sipTrunkNumber ?? null, body.sipUri ?? null,
+           body.sipTrunkUsername ?? null, body.sipTrunkPassword ?? null, body.sipTrunkNickname ?? null,
+           body.outboundTransport ?? 'TCP'],
         );
         return r.rows;
       });
       return reply.send({ success: true, data: cfg });
+    });
+
+    // Shared voice catalog (same table the tenant-side page reads) — Super
+    // Admin can't call the tenant-scoped /api/v1/voice-bot/voices route
+    // (blocked entirely from workspace data), so this is its own copy.
+    fastify.get('/voice-bot-voices', async (_req, reply) => {
+      const voices = await db.withSuperAdmin(async (c) => {
+        const r = await c.query(
+          `SELECT id, provider, voice_id, label, description FROM voice_bot_voices WHERE is_active = true ORDER BY created_at ASC`,
+        );
+        return r.rows;
+      });
+      return reply.send({ success: true, data: voices });
+    });
+
+    // Knowledge base — same table as the tenant-side page, scoped by an
+    // explicit :id param instead of req.tenant.id. Text entries only here;
+    // file/URL import stays on the tenant-side page for now.
+    fastify.get('/tenants/:id/voice-bot-knowledge-base', async (req, reply) => {
+      const { id } = req.params as { id: string };
+      const entries = await db.withSuperAdmin(async (c) => {
+        const r = await c.query(
+          `SELECT id, title, content, keywords, source_type, source_url, source_filename, is_active, created_at
+             FROM voice_bot_knowledge_entries WHERE tenant_id = $1 ORDER BY created_at DESC`,
+          [id],
+        );
+        return r.rows;
+      });
+      return reply.send({ success: true, data: entries });
+    });
+
+    fastify.post('/tenants/:id/voice-bot-knowledge-base', async (req, reply) => {
+      const { id } = req.params as { id: string };
+      const body = z.object({
+        title:    z.string().min(1).max(120),
+        content:  z.string().min(1).max(5000),
+        keywords: z.array(z.string().min(1)).min(1).max(20),
+      }).parse(req.body);
+      const [entry] = await db.withSuperAdmin(async (c) => {
+        const r = await c.query(
+          `INSERT INTO voice_bot_knowledge_entries (tenant_id, title, content, keywords, source_type)
+           VALUES ($1, $2, $3, $4, 'text') RETURNING *`,
+          [id, body.title, body.content, body.keywords.map(k => k.toLowerCase())],
+        );
+        return r.rows;
+      });
+      return reply.code(201).send({ success: true, data: entry });
+    });
+
+    fastify.put('/tenants/:id/voice-bot-knowledge-base/:entryId', async (req, reply) => {
+      const { id, entryId } = req.params as { id: string; entryId: string };
+      const body = z.object({ isActive: z.boolean() }).parse(req.body);
+      await db.withSuperAdmin(async (c) => {
+        await c.query(`UPDATE voice_bot_knowledge_entries SET is_active = $1 WHERE id = $2 AND tenant_id = $3`, [body.isActive, entryId, id]);
+      });
+      return reply.send({ success: true });
+    });
+
+    fastify.delete('/tenants/:id/voice-bot-knowledge-base/:entryId', async (req, reply) => {
+      const { id, entryId } = req.params as { id: string; entryId: string };
+      await db.withSuperAdmin(async (c) => {
+        await c.query(`DELETE FROM voice_bot_knowledge_entries WHERE id = $1 AND tenant_id = $2`, [entryId, id]);
+      });
+      return reply.send({ success: true });
     });
 
     // ── Integrations ownership (Phase 1) ─────────────────────────────────────
