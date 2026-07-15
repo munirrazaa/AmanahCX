@@ -21,11 +21,15 @@ const DEPT_TYPE_LABELS: Record<string, { label: string; color: string }> = {
   operations:         { label: 'Operations',        color: '#64748b' },
 };
 
+// Matches the backend's DEPT_TYPES enum (packages/api/src/routes/departments.ts) —
+// keep in sync if that list ever changes.
+const DEPT_TYPE_OPTIONS = Object.keys(DEPT_TYPE_LABELS) as Array<keyof typeof DEPT_TYPE_LABELS>;
+
 export function Departments() {
   const qc = useQueryClient();
   const [adding, setAdding] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
-  const [form, setForm] = useState({ name: '', description: '' });
+  const [form, setForm] = useState({ name: '', description: '', department_type: 'operations' as string });
 
   const { data, isLoading } = useQuery({
     queryKey: ['departments'],
@@ -36,12 +40,12 @@ export function Departments() {
   });
 
   const createMut = useMutation({
-    mutationFn: (body: { name: string; description: string }) => api.post('/api/v1/departments', body),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['departments'] }); setAdding(false); setForm({ name: '', description: '' }); },
+    mutationFn: (body: { name: string; description: string; department_type: string }) => api.post('/api/v1/departments', body),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['departments'] }); setAdding(false); setForm({ name: '', description: '', department_type: 'operations' }); },
   });
 
   const updateMut = useMutation({
-    mutationFn: ({ id, ...body }: { id: string; name: string; description: string }) => api.patch(`/api/v1/departments/${id}`, body),
+    mutationFn: ({ id, ...body }: { id: string; name: string; description: string; department_type: string }) => api.patch(`/api/v1/departments/${id}`, body),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['departments'] }); setEditId(null); },
   });
 
@@ -87,6 +91,19 @@ export function Departments() {
                 placeholder="Description (optional)"
                 className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
               />
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Department Type</label>
+                <select
+                  value={form.department_type}
+                  onChange={e => setForm(f => ({ ...f, department_type: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-200"
+                >
+                  {DEPT_TYPE_OPTIONS.map(t => (
+                    <option key={t} value={t}>{DEPT_TYPE_LABELS[t].label}</option>
+                  ))}
+                </select>
+                <p className="text-[11px] text-gray-400 mt-1">Controls default permissions for people assigned to this department.</p>
+              </div>
               <div className="flex gap-2 justify-end">
                 <button onClick={() => setAdding(false)} className="px-3 py-1.5 text-sm text-gray-500 hover:text-gray-700">Cancel</button>
                 <button
@@ -130,6 +147,15 @@ export function Departments() {
                       placeholder="Description"
                       className="flex-1 px-2 py-1 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-blue-200"
                     />
+                    <select
+                      value={form.department_type}
+                      onChange={e => setForm(f => ({ ...f, department_type: e.target.value }))}
+                      className="px-2 py-1 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-1 focus:ring-blue-200"
+                    >
+                      {DEPT_TYPE_OPTIONS.map(t => (
+                        <option key={t} value={t}>{DEPT_TYPE_LABELS[t].label}</option>
+                      ))}
+                    </select>
                     <button onClick={() => updateMut.mutate({ id: dept.id, ...form })} className="p-1.5 text-green-600 hover:text-green-700"><Check className="w-4 h-4" /></button>
                     <button onClick={() => setEditId(null)} className="p-1.5 text-gray-400 hover:text-gray-600"><X className="w-4 h-4" /></button>
                   </div>
@@ -162,7 +188,7 @@ export function Departments() {
                     )}
                     <div className="flex gap-1 shrink-0">
                       <button
-                        onClick={() => { setEditId(dept.id); setForm({ name: dept.name, description: dept.description ?? '' }); }}
+                        onClick={() => { setEditId(dept.id); setForm({ name: dept.name, description: dept.description ?? '', department_type: dept.department_type ?? 'operations' }); }}
                         className="p-1.5 text-gray-300 hover:text-gray-600 rounded-lg hover:bg-gray-50"
                         title="Rename"
                       ><Pencil className="w-3.5 h-3.5" /></button>

@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   UserPlus, Search, MoreVertical, UserCheck, UserX, Shield,
-  Mail, Trash2, RefreshCw, ChevronDown, X, Check, AlertTriangle,
+  Mail, Trash2, RefreshCw, ChevronDown, X, Check, AlertTriangle, KeyRound,
 } from 'lucide-react';
 import { api } from '../../services/api';
 
@@ -15,6 +15,9 @@ interface Member {
   role_color?: string;
   custom_role_id?: string;
   department?: string;
+  department_type?: string;
+  manager_id?: string;
+  manager_name?: string;
   is_active: boolean;
   last_login_at?: string;
   created_at: string;
@@ -285,13 +288,54 @@ function EditRoleModal({ member, roles, onClose, onSuccess }: {
   const [roleKey, setRoleKey] = useState(initialKey);
   const [error, setError] = useState('');
 
+  const { data: departments = [] } = useQuery<Department[]>({
+    queryKey: ['departments'],
+    queryFn: async () => (await api.get('/api/v1/departments')).data.data,
+  });
+  const { data: allMembers = [] } = useQuery<Member[]>({
+    queryKey: ['admin-users'],
+    queryFn: async () => (await api.get('/api/v1/settings/team')).data.data,
+  });
+
+  const [departmentId, setDepartmentId] = useState('');
+  const [managerId, setManagerId] = useState(member.manager_id ?? '');
+
+  // departments loads asynchronously — set the dropdown once it's ready
+  // rather than only at the initial (still-empty) render.
+  useEffect(() => {
+    if (!departmentId && departments.length > 0) {
+      const currentDept = departments.find(d => d.name?.toLowerCase() === member.department?.toLowerCase());
+      if (currentDept) setDepartmentId(currentDept.id);
+    }
+  }, [departments]);
+
   const systemRoles = roles.filter((r: any) => r.is_system && r.base_role !== 'tenant_admin');
   const customRoles = roles.filter((r: any) => !r.is_system);
+  const isPolicyAdminRole = roleKey === 'system:policy_admin';
+
+  const selectedDept = departments.find(d => d.id === departmentId);
+  const isEditingAgent = roleKey === 'system:agent';
+  const isEditingManager = roleKey === 'system:manager';
+  const deptManagers = allMembers.filter((m: any) => {
+    if (m.id === member.id) return false;
+    if (m.role !== 'manager') return false;
+    if (departmentId && selectedDept && m.department?.toLowerCase() !== selectedDept.name?.toLowerCase()) return false;
+    if (isEditingAgent) return !!m.manager_id;
+    if (isEditingManager) return !m.manager_id;
+    return true;
+  });
+  const managerLabel = isEditingAgent ? 'Line Manager' : isEditingManager ? 'Department Manager' : 'Manager';
 
   const mut = useMutation({
     mutationFn: () => {
       const { role, custom_role_id } = parseRoleKey(roleKey, roles);
-      return api.patch(`/api/v1/settings/team/${member.id}`, { role, custom_role_id: custom_role_id ?? null });
+      return api.patch(`/api/v1/settings/team/${member.id}`, {
+        role,
+        custom_role_id: custom_role_id ?? null,
+        department: isPolicyAdminRole ? undefined : (selectedDept?.name ?? null),
+        departmentType: isPolicyAdminRole ? undefined : (selectedDept?.department_type ?? null),
+        manager_id: isPolicyAdminRole ? null : (managerId || null),
+      });
     },
     onSuccess: () => { onSuccess(); onClose(); },
     onError: (e: any) => setError(e.response?.data?.error?.message ?? 'Failed to update'),
@@ -302,7 +346,7 @@ function EditRoleModal({ member, roles, onClose, onSuccess }: {
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm">
         <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100">
           <div>
-            <h2 className="text-base font-bold text-gray-900">Change Role</h2>
+            <h2 className="text-base font-bold text-gray-900">Change Role &amp; Assignment</h2>
             <p className="text-xs text-gray-400 mt-0.5">{member.name}</p>
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
@@ -312,7 +356,7 @@ function EditRoleModal({ member, roles, onClose, onSuccess }: {
             <label className="block text-xs font-semibold text-gray-600 mb-1.5 uppercase tracking-wide">Role</label>
             <select
               value={roleKey}
-              onChange={e => setRoleKey(e.target.value)}
+              onChange={e => { setRoleKey(e.target.value); setManagerId(''); }}
               className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-200"
             >
               {systemRoles.map(r => (
@@ -327,6 +371,39 @@ function EditRoleModal({ member, roles, onClose, onSuccess }: {
               )}
             </select>
           </div>
+          {!isPolicyAdminRole && (
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1.5 uppercase tracking-wide">Department</label>
+              <select
+                value={departmentId}
+                onChange={e => { setDepartmentId(e.target.value); setManagerId(''); }}
+                className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-200"
+              >
+                <option value="">— Select department —</option>
+                {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+              </select>
+            </div>
+          )}
+          {!isPolicyAdminRole && (
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1.5 uppercase tracking-wide">
+                {managerLabel} <span className="text-gray-400 font-normal normal-case">(optional)</span>
+              </label>
+              <select
+                value={managerId}
+                onChange={e => setManagerId(e.target.value)}
+                className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-200"
+              >
+                <option value="">— Select {managerLabel} —</option>
+                {deptManagers.map((m: any) => (
+                  <option key={m.id} value={m.id}>{m.name}</option>
+                ))}
+              </select>
+              {departmentId && deptManagers.length === 0 && (
+                <p className="text-[11px] text-amber-600 mt-1">No {managerLabel.toLowerCase()} found for this department yet.</p>
+              )}
+            </div>
+          )}
           {error && <p className="text-sm text-red-600">{error}</p>}
         </div>
         <div className="flex gap-3 px-6 pb-5">
@@ -346,11 +423,12 @@ function EditRoleModal({ member, roles, onClose, onSuccess }: {
 }
 
 // ── Row Actions Menu ──────────────────────────────────────────────────────────
-function RowMenu({ member, onEdit, onToggleActive, onDelete }: {
+function RowMenu({ member, onEdit, onToggleActive, onDelete, onResetPassword }: {
   member: Member;
   onEdit: () => void;
   onToggleActive: () => void;
   onDelete: () => void;
+  onResetPassword: () => void;
 }) {
   const [open, setOpen] = useState(false);
   return (
@@ -364,12 +442,18 @@ function RowMenu({ member, onEdit, onToggleActive, onDelete }: {
       {open && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 top-8 z-20 bg-white rounded-xl shadow-lg border border-gray-100 py-1 w-44">
+          <div className="absolute right-0 top-8 z-20 bg-white rounded-xl shadow-lg border border-gray-100 py-1 w-48">
             <button
               onClick={() => { setOpen(false); onEdit(); }}
               className="w-full flex items-center gap-2.5 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
             >
               <Shield className="w-3.5 h-3.5 text-blue-500" /> Change Role
+            </button>
+            <button
+              onClick={() => { setOpen(false); onResetPassword(); }}
+              className="w-full flex items-center gap-2.5 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+            >
+              <KeyRound className="w-3.5 h-3.5 text-indigo-500" /> Reset Password
             </button>
             <button
               onClick={() => { setOpen(false); onToggleActive(); }}
@@ -393,6 +477,57 @@ function RowMenu({ member, onEdit, onToggleActive, onDelete }: {
   );
 }
 
+// ── Reset Password Result Modal ────────────────────────────────────────────────
+// Shows the reset link regardless of whether the email actually sent — the
+// admin can copy/share it manually if email delivery isn't working.
+function ResetPasswordResultModal({ member, resetUrl, emailSent, onClose }: {
+  member: Member; resetUrl: string; emailSent: boolean; onClose: () => void;
+}) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+        <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100">
+          <div>
+            <h2 className="text-base font-bold text-gray-900">Password Reset Link</h2>
+            <p className="text-xs text-gray-400 mt-0.5">{member.name}</p>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
+        </div>
+        <div className="px-6 py-5 space-y-4">
+          {emailSent ? (
+            <div className="flex items-center gap-2 px-3 py-2.5 bg-green-50 text-green-700 rounded-xl text-sm border border-green-100">
+              <Check className="w-4 h-4 shrink-0" /> Email sent to {member.email}
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 px-3 py-2.5 bg-amber-50 text-amber-700 rounded-xl text-sm border border-amber-100">
+              <AlertTriangle className="w-4 h-4 shrink-0" /> Email could not be sent — share this link with them directly.
+            </div>
+          )}
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5 uppercase tracking-wide">Reset Link <span className="text-gray-400 font-normal normal-case">(valid 24 hours)</span></label>
+            <div className="flex gap-2">
+              <input readOnly value={resetUrl} className="flex-1 px-3 py-2.5 border border-gray-200 rounded-xl text-xs text-gray-600 bg-gray-50" />
+              <button
+                onClick={() => { navigator.clipboard.writeText(resetUrl); setCopied(true); setTimeout(() => setCopied(false), 2000); }}
+                className="px-3 py-2.5 text-sm font-medium rounded-xl border border-gray-200 hover:bg-gray-50 shrink-0"
+              >
+                {copied ? 'Copied!' : 'Copy'}
+              </button>
+            </div>
+          </div>
+        </div>
+        <div className="flex px-6 pb-5">
+          <button onClick={onClose} className="flex-1 px-4 py-2.5 text-sm font-semibold text-white rounded-xl"
+            style={{ background: 'linear-gradient(135deg, #29ABE2 0%, #1a8cbf 100%)' }}>
+            Done
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export function AdminUsers() {
   const qc = useQueryClient();
@@ -400,6 +535,7 @@ export function AdminUsers() {
   const [filter, setFilter] = useState<'all' | 'active' | 'inactive'>('all');
   const [showInvite, setShowInvite] = useState(false);
   const [editMember, setEditMember] = useState<Member | null>(null);
+  const [resetResult, setResetResult] = useState<{ member: Member; resetUrl: string; emailSent: boolean } | null>(null);
 
   const { data: members = [], isLoading } = useQuery<Member[]>({
     queryKey: ['admin-users'],
@@ -420,6 +556,12 @@ export function AdminUsers() {
   const deleteMut = useMutation({
     mutationFn: (id: string) => api.delete(`/api/v1/settings/team/${id}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-users'] }),
+  });
+
+  const resetPasswordMut = useMutation({
+    mutationFn: (member: Member) => api.post(`/api/v1/settings/team/${member.id}/reset-password`, {}),
+    onSuccess: (res, member) => setResetResult({ member, resetUrl: res.data.reset_url, emailSent: res.data.email_sent }),
+    onError: (e: any) => alert(e.response?.data?.error?.message ?? 'Failed to reset password'),
   });
 
   const filtered = members.filter(m => {
@@ -537,6 +679,7 @@ export function AdminUsers() {
                         member={m}
                         onEdit={() => setEditMember(m)}
                         onToggleActive={() => toggleActive.mutate({ id: m.id, is_active: !m.is_active })}
+                        onResetPassword={() => resetPasswordMut.mutate(m)}
                         onDelete={() => {
                           if (confirm(`Remove ${m.name} from this workspace?`)) deleteMut.mutate(m.id);
                         }}
@@ -568,6 +711,14 @@ export function AdminUsers() {
           roles={roles}
           onClose={() => setEditMember(null)}
           onSuccess={() => qc.invalidateQueries({ queryKey: ['admin-users'] })}
+        />
+      )}
+      {resetResult && (
+        <ResetPasswordResultModal
+          member={resetResult.member}
+          resetUrl={resetResult.resetUrl}
+          emailSent={resetResult.emailSent}
+          onClose={() => setResetResult(null)}
         />
       )}
     </div>

@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Getting Started — AmanahCX Tenant Admin Manual</title>
+<style>
+  body { font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif; background:#f7f9fb; color:#1f2937; margin:0; line-height:1.6; }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 40px 24px 80px; }
+  .breadcrumb { font-size: 13px; margin-bottom: 20px; }
+  .breadcrumb a { color:#2BB8CC; text-decoration:none; }
+  h1 { font-size: 26px; margin-bottom: 6px; }
+  h2 { font-size: 19px; margin-top: 40px; border-bottom:2px solid #eef2f5; padding-bottom:8px; }
+  p { color:#374151; }
+  .step { display:flex; gap:16px; margin: 20px 0; }
+  .step-num { width:28px; height:28px; border-radius:50%; background:#2BB8CC; color:#fff; display:flex; align-items:center; justify-content:center; font-weight:600; font-size:13px; flex-shrink:0; }
+  .step-body { flex:1; }
+  .step-body strong { display:block; margin-bottom:2px; }
+  figure { margin: 18px 0 28px; text-align:center; }
+  figure img { max-width:100%; border:1px solid #e5e7eb; border-radius:10px; box-shadow:0 1px 4px rgba(0,0,0,.05); }
+  figcaption { font-size:13px; color:#6b7280; margin-top:8px; }
+  .note { background:#f0fbfd; border:1px solid #cdeef4; border-left:4px solid #2BB8CC; border-radius:6px; padding:12px 16px; font-size:14px; margin:16px 0; }
+  .issues { background:#fff5f5; border:1px solid #fecaca; border-radius:10px; padding:16px 20px; margin-top:40px; }
+  .issues h2 { border:none; margin-top:0; color:#b91c1c; }
+  .issue { margin-bottom:14px; }
+  .issue .status { font-size:12px; font-weight:700; padding:2px 8px; border-radius:12px; }
+  .issue .status.fixed { background:#dcfce7; color:#15803d; }
+  .footnav { margin-top:48px; font-size:14px; }
+  .footnav a { color:#2BB8CC; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="breadcrumb"><a href="index.html">← Manual Index</a></div>
+  <h1>Getting Started — From Invite Email to First Login</h1>
+  <p>Before a new team member can use AmanahCX, a Tenant Admin invites them. This section covers exactly what happens from the moment an admin sends an invite to the moment the new user is logged in.</p>
+
+  <h2>Step 1 — Admin invites a user</h2>
+  <div class="step">
+    <div class="step-num">1</div>
+    <div class="step-body">
+      <strong>Go to Users → Invite User</strong>
+      Fill in the person's full name, email address, department, role, and (optionally) their line manager.
+    </div>
+  </div>
+  <figure>
+    <img src="images/00_invite_user_modal.png" alt="Invite Team Member modal">
+    <figcaption>The Invite Team Member form — Full Name, Email, Department, Role, and Manager.</figcaption>
+  </figure>
+
+  <div class="note">
+    The form clearly states: <em>"An invitation email will be sent with a password-setup link (valid 7 days)."</em>
+    Both the department and role fields are required — the admin must decide these upfront, not the new user.
+  </div>
+
+  <h2>Step 2 — New user receives the email</h2>
+  <p>The person invited receives an email containing a one-time password-setup link. This link is only valid for <strong>7 days</strong> — if it's not used in time, the admin needs to resend the invite.</p>
+
+  <h2>Step 3 — New user sets their password</h2>
+  <p>Clicking the link opens the password-setup page. The new user chooses a password (minimum 8 characters) and confirms it.</p>
+  <figure>
+    <img src="images/00_set_password_page.png" alt="Set new password page">
+    <figcaption>The "Set new password" page a new (or reset) user lands on from their emailed link.</figcaption>
+  </figure>
+
+  <h2>Step 4 — First login</h2>
+  <p>Once the password is set, the user signs in from the login page using three things: their <strong>workspace name</strong> (e.g. <code>haier-electronics</code>), their <strong>email address</strong>, and the password they just created.</p>
+  <figure>
+    <img src="images/00_login_page.png" alt="AmanahCX login page">
+    <figcaption>The sign-in page — workspace, email, and password.</figcaption>
+  </figure>
+  <p>After signing in, the user lands on the page appropriate to their role — a Tenant Admin lands on the <a href="01-dashboard.html">Admin Dashboard</a> (covered next).</p>
+
+  <div class="issues">
+    <h2>Issues found while testing this section</h2>
+    <div class="issue">
+      <span class="status fixed">FIXED — same day</span>
+      <p><strong>"Invite User" button on the Admin Dashboard didn't work.</strong> Clicking it tried to open a page that doesn't exist in the app, which — instead of showing an error — silently logged the admin back out to the sign-in screen. The real Invite User screen already existed and worked correctly on the Users page; the Dashboard button just pointed to the wrong place. Fixed by pointing it to the correct page. Verified: clicking "Invite User" from the Dashboard now correctly opens the Users page with the invite form.</p>
+    </div>
+  </div>
+
+  <div class="footnav"><a href="index.html">← Back to Manual Index</a> &nbsp;|&nbsp; <a href="01-dashboard.html">Next: Dashboard →</a></div>
+</div>
+</body>
+</html>

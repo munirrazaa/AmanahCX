@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>AmanahCX — Tenant Admin Manual</title>
+<style>
+  :root { --teal:#2BB8CC; --green:#4C9A4C; --gold:#E8C025; --ink:#1f2937; --muted:#6b7280; }
+  body { font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif; background:#f7f9fb; color:var(--ink); margin:0; }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 48px 24px 80px; }
+  h1 { font-size: 28px; margin-bottom: 4px; }
+  .sub { color: var(--muted); margin-top:0; margin-bottom: 32px; }
+  .status-note { background:#fff8e1; border:1px solid #f1dfa0; border-radius:10px; padding:14px 18px; font-size:14px; margin-bottom:32px; }
+  .card { background:#fff; border:1px solid #e5e7eb; border-radius:14px; padding: 8px 0; }
+  a.section-link { display:flex; align-items:center; justify-content:space-between; padding: 16px 20px; text-decoration:none; color:var(--ink); border-bottom:1px solid #f0f1f3; }
+  a.section-link:last-child { border-bottom:none; }
+  a.section-link:hover { background:#f7fdfe; }
+  .num { color:#fff; background:var(--teal); width:26px; height:26px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; font-size:13px; font-weight:600; margin-right:14px; flex-shrink:0; }
+  .label { display:flex; align-items:center; font-size:15px; font-weight:500; }
+  .tag { font-size:11px; font-weight:600; padding:3px 9px; border-radius:20px; }
+  .tag.done { background:#e6f7e9; color:var(--green); }
+  .tag.pending { background:#f1f1f1; color:var(--muted); }
+  footer { color:var(--muted); font-size:13px; margin-top: 40px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>AmanahCX — Tenant Admin Operational Manual</h1>
+  <p class="sub">Step-by-step guide for the Tenant Admin role, with real screenshots from the live system.</p>
+
+  <div class="status-note">
+    <strong>Status:</strong> Built one section at a time. Sections marked <span class="tag done">done</span> are ready to review; the rest are not written yet.
+    A running list of any bugs found while testing lives at the bottom of each finished section, and a combined list will appear on this index once more sections are done.
+  </div>
+
+  <div class="card">
+    <a class="section-link" href="00-getting-started.html">
+      <span class="label"><span class="num">•</span>Getting Started — From Invite Email to First Login</span>
+      <span class="tag done">done</span>
+    </a>
+    <a class="section-link" href="01-dashboard.html">
+      <span class="label"><span class="num">1</span>Dashboard — top buttons, quick actions, system status, licensed modules</span>
+      <span class="tag done">done</span>
+    </a>
+    <a class="section-link" href="02-users.html">
+      <span class="label"><span class="num">2</span>Users — inviting, roles, departments, line managers</span>
+      <span class="tag done">done</span>
+    </a>
+    <a class="section-link" href="03-roles-permissions.html">
+      <span class="label"><span class="num">3</span>Roles &amp; Permissions</span>
+      <span class="tag done">done</span>
+    </a>
+    <a class="section-link" href="04-departments.html">
+      <span class="label"><span class="num">4</span>Departments</span>
+      <span class="tag done">done</span>
+    </a>
+    <a class="section-link" href="#">
+      <span class="label"><span class="num">5</span>Modules — licensed vs. not licensed</span>
+      <span class="tag pending">not started</span>
+    </a>
+    <a class="section-link" href="#">
+      <span class="label"><span class="num">6</span>Integrations — email, SMS, telephony/voice bot, payments, external CRM</span>
+      <span class="tag pending">not started</span>
+    </a>
+    <a class="section-link" href="#">
+      <span class="label"><span class="num">7</span>Voice Bot — configuration, knowledge base, tonality</span>
+      <span class="tag pending">not started</span>
+    </a>
+    <a class="section-link" href="#">
+      <span class="label"><span class="num">8</span>General Settings</span>
+      <span class="tag pending">not started</span>
+    </a>
+    <a class="section-link" href="#">
+      <span class="label"><span class="num">9</span>Routing &amp; SLA</span>
+      <span class="tag pending">not started</span>
+    </a>
+    <a class="section-link" href="#">
+      <span class="label"><span class="num">10</span>Data &amp; Privacy Policy</span>
+      <span class="tag pending">not started</span>
+    </a>
+    <a class="section-link" href="#">
+      <span class="label"><span class="num">11</span>Orders &amp; Upgrades</span>
+      <span class="tag pending">not started</span>
+    </a>
+    <a class="section-link" href="#">
+      <span class="label"><span class="num">12</span>Security &amp; Password</span>
+      <span class="tag pending">not started</span>
+    </a>
+    <a class="section-link" href="#">
+      <span class="label"><span class="num">13</span>Notification Configuration</span>
+      <span class="tag pending">not started</span>
+    </a>
+    <a class="section-link" href="#">
+      <span class="label"><span class="num">14</span>Messaging — usage, allocation, activation/deactivation, blocking</span>
+      <span class="tag pending">not started</span>
+    </a>
+    <a class="section-link" href="#">
+      <span class="label"><span class="num">15</span>SLA Policies</span>
+      <span class="tag pending">not started</span>
+    </a>
+  </div>
+
+  <footer>AmanahCX Tenant Admin Manual — draft, built section by section. Last updated 2026-07-14.</footer>
+</div>
+</body>
+</html>

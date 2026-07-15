@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>4. Departments — AmanahCX Tenant Admin Manual</title>
+<style>
+  body { font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif; background:#f7f9fb; color:#1f2937; margin:0; line-height:1.6; }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 40px 24px 80px; }
+  .breadcrumb { font-size: 13px; margin-bottom: 20px; }
+  .breadcrumb a { color:#2BB8CC; text-decoration:none; }
+  h1 { font-size: 26px; margin-bottom: 6px; }
+  h2 { font-size: 19px; margin-top: 40px; border-bottom:2px solid #eef2f5; padding-bottom:8px; }
+  p, li { color:#374151; }
+  figure { margin: 18px 0 28px; text-align:center; }
+  figure img { max-width:100%; border:1px solid #e5e7eb; border-radius:10px; box-shadow:0 1px 4px rgba(0,0,0,.05); }
+  figcaption { font-size:13px; color:#6b7280; margin-top:8px; }
+  .note { background:#f0fbfd; border:1px solid #cdeef4; border-left:4px solid #2BB8CC; border-radius:6px; padding:12px 16px; font-size:14px; margin:16px 0; }
+  .issues { background:#fff5f5; border:1px solid #fecaca; border-radius:10px; padding:16px 20px; margin-top:40px; }
+  .issues h2 { border:none; margin-top:0; color:#b91c1c; }
+  .issue { margin-bottom:14px; }
+  .issue .status { font-size:12px; font-weight:700; padding:2px 8px; border-radius:12px; }
+  .issue .status.open { background:#fef3c7; color:#92400e; }
+  .footnav { margin-top:48px; font-size:14px; }
+  .footnav a { color:#2BB8CC; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="breadcrumb"><a href="index.html">← Manual Index</a></div>
+  <h1>4. Departments</h1>
+  <p>Departments (Workspace → Departments, just below Roles &amp; Permissions in the People section) are how you organise your team into groups — Sales, Support, Complaints, or whatever structure fits your business.</p>
+
+  <figure>
+    <img src="images/04_departments_list.png" alt="Departments list page">
+    <figcaption>Every department, its type badge (where set), and how many members currently belong to it.</figcaption>
+  </figure>
+
+  <h2>Creating a department</h2>
+  <p>Click <strong>+ Add Department</strong>, give it a name, an optional description, and a <strong>Department Type</strong>, then <strong>Create</strong>.</p>
+  <figure>
+    <img src="images/05_add_with_type.png" alt="Add Department form with Department Type dropdown">
+    <figcaption>Name, description, and type — type controls default permissions for anyone assigned to this department.</figcaption>
+  </figure>
+  <figure>
+    <img src="images/05_created_with_type.png" alt="Newly created department showing its type badge">
+    <figcaption>The new department correctly shows its type badge (Sales, in this example) right away.</figcaption>
+  </figure>
+
+  <h2>Editing a department</h2>
+  <p>Click the pencil icon on any department to rename it, change its description, or change its type inline, then confirm with the checkmark.</p>
+  <figure>
+    <img src="images/04_edit_department_modal.png" alt="Inline department editing">
+    <figcaption>Editing happens right in the list — no separate page or modal.</figcaption>
+  </figure>
+  <figure>
+    <img src="images/05_type_changed_result.png" alt="Department type changed from Sales to Technical">
+    <figcaption>Type changed from Sales to Technical and saved correctly.</figcaption>
+  </figure>
+
+  <div class="note">
+    The six department types (Sales, Support, Compliance, Finance, Technical, Operations) match what the system already uses behind the scenes to work out default permissions — pick whichever fits best; "Operations" is a safe default for anything that doesn't fit a more specific category.
+  </div>
+
+  <h2>Assigning users to a department</h2>
+  <p>There's no "add member" button on this page itself — department membership is set from the <a href="02-users.html">Users</a> page instead: invite a new user with that department selected, or use <strong>Change Role &amp; Assignment</strong> on an existing user to move them into a different department. The member count shown here always reflects that.</p>
+
+  <div class="note">
+    Deleting a department doesn't delete its members — it clears their department field, so they become "unassigned" rather than being removed from the workspace. Reassign them to a department afterward if needed.
+  </div>
+
+  <div class="issues">
+    <h2>Issues found while testing this section</h2>
+    <div class="issue">
+      <span class="status ok">FIXED — same day</span>
+      <p><strong>A department's "type" (the colour-coded Support / Sales badge) couldn't be set anywhere in the interface.</strong> Existing departments like "Customer Support" and "Sales" already had a type behind the scenes, and that type quietly affects things elsewhere — it feeds into what default permissions a new team member in that department gets. But the Add Department and Edit forms only ever asked for a name and description.</p>
+      <p>Fixed by adding a <strong>Department Type</strong> dropdown to both the create and edit forms, defaulting new departments to "Operations" rather than leaving type unset. Verified live: created a department with type "Sales" and confirmed the badge appeared correctly, then edited it to "Technical" and confirmed the change saved.</p>
+    </div>
+  </div>
+
+  <div class="footnav"><a href="03-roles-permissions.html">← Roles & Permissions</a> &nbsp;|&nbsp; <a href="index.html">Manual Index</a></div>
+</div>
+</body>
+</html>

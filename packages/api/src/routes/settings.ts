@@ -635,6 +635,72 @@ export function settingsRoutes(db: DatabaseClient, redis: RedisClient) {
       return reply.code(204).send();
     });
 
+    // Tenant admin triggers a password reset for another user — generates the
+    // same kind of link the user's own "Forgot password" flow would, and
+    // returns it directly so the admin can share it manually (WhatsApp, in
+    // person, etc.) if the outgoing email doesn't arrive — see the invite
+    // flow above, which has the same fallback need.
+    fastify.post('/team/:userId/reset-password', { preHandler: requireRole('super_admin', 'tenant_admin') }, async (req, reply) => {
+      const { userId } = req.params as { userId: string };
+
+      const [user] = await db.withTenant(req.tenant.id, async (client) => {
+        const r = await client.query('SELECT id, name, email FROM users WHERE id = $1 AND tenant_id = $2', [userId, req.tenant.id]);
+        return r.rows;
+      });
+      if (!user) return reply.code(404).send({ success: false, error: { code: 'NOT_FOUND', message: 'User not found' } });
+
+      const rawToken  = crypto.randomBytes(32).toString('hex');
+      const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours — long enough for an admin to relay it
+
+      await db.withSuperAdmin(async (client) => {
+        await client.query(
+          `INSERT INTO password_reset_tokens (user_id, token_hash, expires_at)
+           VALUES ($1, $2, $3)
+           ON CONFLICT (user_id) DO UPDATE SET token_hash = $2, expires_at = $3, used = false`,
+          [user.id, tokenHash, expiresAt],
+        );
+      });
+
+      const appUrl   = process.env.APP_URL ?? 'http://localhost:5173';
+      const resetUrl = `${appUrl}/reset-password?token=${rawToken}&tenant=${req.tenant.slug}`;
+
+      // Cap how long the request waits on the email provider — a slow or
+      // misconfigured provider (e.g. SendGrid sender not verified yet)
+      // must never make the admin sit and wait; reset_url below always
+      // works as a manual fallback regardless of email outcome.
+      let emailSent = false;
+      try {
+        await Promise.race([
+          emailSvc.send(req.tenant.id, {
+            to:      user.email,
+            toName:  user.name,
+            subject: 'Your password has been reset',
+            bodyHtml: `
+              <div style="font-family:sans-serif;max-width:480px;margin:0 auto;">
+                <h2 style="color:#0f172a;">Set a new password</h2>
+                <p>Hi ${user.name},</p>
+                <p>Your workspace admin has requested a password reset for your account.
+                   Click the button below to choose a new password. This link expires in <strong>24 hours</strong>.</p>
+                <a href="${resetUrl}"
+                   style="display:inline-block;margin:16px 0;padding:12px 24px;background:#29ABE2;color:white;border-radius:8px;text-decoration:none;font-weight:600;">
+                  Set New Password
+                </a>
+                <p style="color:#64748b;font-size:13px;">If you didn't expect this, contact your workspace admin.</p>
+              </div>
+            `,
+            bodyText: `Set a new password: ${resetUrl}\n\nThis link expires in 24 hours.`,
+          }),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('email timeout')), 2000)),
+        ]);
+        emailSent = true;
+      } catch {
+        // Best-effort — the admin still gets reset_url back below to share manually.
+      }
+
+      return reply.send({ success: true, reset_url: resetUrl, email_sent: emailSent });
+    });
+
     // Update team member role and/or permissions
     fastify.patch('/team/:userId', { preHandler: requireRole('super_admin', 'tenant_admin') }, async (req, reply) => {
       const { userId } = req.params as { userId: string };

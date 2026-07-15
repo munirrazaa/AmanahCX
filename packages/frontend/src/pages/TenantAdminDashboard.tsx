@@ -132,7 +132,7 @@ export function TenantAdminDashboard() {
             </span>
             {activeModules.includes('voice_bot') && <TestCallNadiaButton compact />}
             <button
-              onClick={() => navigate('/settings/team')}
+              onClick={() => navigate('/admin/users')}
               className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white rounded-xl transition-all hover:opacity-90"
               style={{ background: 'linear-gradient(135deg, #29ABE2 0%, #1a8cbf 100%)' }}
             >
@@ -147,17 +147,17 @@ export function TenantAdminDashboard() {
 
         {/* Stats row */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatCard icon={Users}     label="Total Users"    value={members.length}    sub={`${active.length} active`}      color="#29ABE2" onClick={() => navigate('/settings?tab=team')} />
-          <StatCard icon={UserCheck} label="Active Users"   value={active.length}     sub="currently enabled"              color="#57A93C" onClick={() => navigate('/settings?tab=team')} />
+          <StatCard icon={Users}     label="Total Users"    value={members.length}    sub={`${active.length} active`}      color="#29ABE2" onClick={() => navigate('/admin/users')} />
+          <StatCard icon={UserCheck} label="Active Users"   value={active.length}     sub="currently enabled"              color="#57A93C" onClick={() => navigate('/admin/users')} />
           <StatCard icon={Shield}    label="Roles"          value={roles.length}      sub="permission groups"              color="#8b5cf6" onClick={() => navigate('/roles')} />
           <StatCard icon={Building2} label="Departments"    value={depts.length}      sub="organisational units"           color="#f59e0b" onClick={() => navigate('/departments')} />
         </div>
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatCard icon={Layers}    label="Active Modules" value={activeModules.length}  sub="licensed & enabled"         color="#06b6d4" onClick={() => navigate('/settings?tab=modules')} />
+          <StatCard icon={Layers}    label="Active Modules" value={activeModules.length}  sub="licensed & enabled"         color="#06b6d4" onClick={() => navigate('/admin/modules')} />
           <StatCard icon={Zap}       label="Integrations"   value={connectedCount}        sub={`of ${connectors.length} connected`} color="#29ABE2" onClick={() => navigate('/integrations')} />
-          <StatCard icon={UserX}     label="Inactive Users" value={inactive.length}       sub="access suspended"           color="#ef4444" onClick={() => navigate('/settings?tab=team')} />
-          <StatCard icon={Key}       label="Features"       value={entitledFeatures.length} sub="licensed features"        color="#57A93C" onClick={() => navigate('/settings?tab=modules')} />
+          <StatCard icon={UserX}     label="Inactive Users" value={inactive.length}       sub="access suspended"           color="#ef4444" onClick={() => navigate('/admin/users')} />
+          <StatCard icon={Key}       label="Features"       value={entitledFeatures.length} sub="licensed features"        color="#57A93C" onClick={() => navigate('/admin/modules')} />
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -166,13 +166,13 @@ export function TenantAdminDashboard() {
           <div className="lg:col-span-2 bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
             <h2 className="text-sm font-bold text-gray-700 uppercase tracking-wider mb-4">Quick Actions</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <QuickAction icon={UserPlus}   label="Invite Team Member"     desc="Add a user & assign their role"         color="#29ABE2" onClick={() => navigate('/settings?tab=team')} />
+              <QuickAction icon={UserPlus}   label="Invite Team Member"     desc="Add a user & assign their role"         color="#29ABE2" onClick={() => navigate('/admin/users')} />
               <QuickAction icon={Shield}     label="Manage Roles"           desc="Create roles & set permissions"         color="#8b5cf6" onClick={() => navigate('/roles')} />
               <QuickAction icon={Building2}  label="Manage Departments"     desc="Create & assign department heads"       color="#f59e0b" onClick={() => navigate('/departments')} />
-              <QuickAction icon={Layers}     label="Enable Modules"         desc="Turn features on or off"                color="#06b6d4" onClick={() => navigate('/settings?tab=modules')} />
+              <QuickAction icon={Layers}     label="Enable Modules"         desc="Turn features on or off"                color="#06b6d4" onClick={() => navigate('/admin/modules')} />
               <QuickAction icon={Zap}        label="Connect Integrations"   desc="Email, SMS, payments, APIs"             color="#29ABE2" onClick={() => navigate('/integrations')} />
               <QuickAction icon={Mail}       label="Email Configuration"    desc="SMTP, SendGrid, Microsoft 365"          color="#57A93C" onClick={() => navigate('/integrations')} />
-              <QuickAction icon={Clock}      label="Routing & SLA"          desc="Ticket assignment & SLA policies"       color="#f59e0b" onClick={() => navigate('/settings?tab=routing')} />
+              <QuickAction icon={Clock}      label="Routing & SLA"          desc="Ticket assignment & SLA policies"       color="#f59e0b" onClick={() => navigate('/admin/routing')} />
               <QuickAction icon={Settings}   label="Workspace Settings"     desc="Name, timezone, locale, branding"       color="#6b7280" onClick={() => navigate('/settings')} />
             </div>
           </div>
@@ -209,7 +209,7 @@ export function TenantAdminDashboard() {
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-sm font-bold text-gray-700 uppercase tracking-wider">Team Members</h2>
-              <button onClick={() => navigate('/settings?tab=team')} className="text-xs text-blue-600 hover:underline flex items-center gap-1">
+              <button onClick={() => navigate('/admin/users')} className="text-xs text-blue-600 hover:underline flex items-center gap-1">
                 View all <ArrowRight className="w-3 h-3" />
               </button>
             </div>
