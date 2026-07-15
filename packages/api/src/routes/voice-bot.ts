@@ -489,6 +489,74 @@ interface StructuredComplaint {
   callId?: string;
 }
 
+// Checks a tenant's Voice Bot minute usage against 70/90/100% of its
+// allocation and fires a one-time notification (both to the tenant's own
+// admins and to the platform's Super Admin) the first time each threshold
+// is crossed. Safe to call after every completed call — `notified_*`
+// flags on voice_bot_quotas make it a no-op once a threshold has already
+// fired, and a top-up resets them so the next cycle can notify again.
+async function checkVoiceBotUsageThresholds(db: DatabaseClient, tenantId: string): Promise<void> {
+  await db.withSuperAdmin(async (c) => {
+    const [quota] = (await c.query(
+      `SELECT minutes_allocated, notified_70, notified_90, notified_100 FROM voice_bot_quotas WHERE tenant_id = $1`,
+      [tenantId],
+    )).rows;
+    if (!quota || !quota.minutes_allocated) return; // no allocation set — nothing to threshold against
+
+    const [consumed] = (await c.query(
+      `SELECT COALESCE(SUM(duration_seconds), 0) AS total_seconds FROM voice_bot_calls WHERE tenant_id = $1`,
+      [tenantId],
+    )).rows;
+    const allocated = Number(quota.minutes_allocated);
+    const consumedMinutes = Number(consumed.total_seconds) / 60;
+    const pct = (consumedMinutes / allocated) * 100;
+
+    // Fire EVERY crossed-but-not-yet-notified threshold, ascending — a
+    // single long call can jump straight past 70% to 100%, and skipping
+    // the 90% notice in that case would be a real gap, not just a nicety.
+    const thresholds: Array<{ level: 70 | 90 | 100; notified: boolean; col: string }> = [
+      { level: 70,  notified: quota.notified_70,  col: 'notified_70'  },
+      { level: 90,  notified: quota.notified_90,  col: 'notified_90'  },
+      { level: 100, notified: quota.notified_100, col: 'notified_100' },
+    ];
+    const toFire = thresholds.filter(t => pct >= t.level && !t.notified);
+    if (toFire.length === 0) return;
+
+    const [tenantRow] = (await c.query(`SELECT name FROM tenants WHERE id = $1`, [tenantId])).rows;
+    const tenantName = tenantRow?.name ?? 'A workspace';
+    const admins = (await c.query(
+      `SELECT id FROM users WHERE tenant_id = $1 AND role = 'tenant_admin' AND is_active = true`,
+      [tenantId],
+    )).rows;
+
+    for (const t of toFire) {
+      const title = t.level === 100
+        ? `${tenantName}: Voice Bot minutes exhausted`
+        : `${tenantName}: Voice Bot at ${t.level}% of allocated minutes`;
+      const body = t.level === 100
+        ? `All allocated voice bot minutes have been used. New calls will no longer be answered by the bot until more minutes are added.`
+        : `${consumedMinutes.toFixed(0)} of ${allocated.toFixed(0)} minutes used (${pct.toFixed(0)}%).`;
+
+      // Notify every tenant_admin in this tenant, via the same
+      // notifications table/bell every other in-app notification uses.
+      for (const admin of admins) {
+        await c.query(
+          `INSERT INTO notifications (tenant_id, user_id, type, title, body, entity_type, entity_id)
+           VALUES ($1, $2, 'voice_bot_minutes_threshold', $3, $4, 'voice_bot_quota', $5)`,
+          [tenantId, admin.id, title, body, tenantId],
+        );
+      }
+      // Notify Super Admin at the platform level (not tenant-scoped).
+      await c.query(
+        `INSERT INTO platform_notifications (type, title, body, tenant_id, entity_type, entity_id)
+         VALUES ('voice_bot_minutes_threshold', $1, $2, $3, 'voice_bot_quota', $3)`,
+        [title, body, tenantId],
+      );
+      await c.query(`UPDATE voice_bot_quotas SET ${t.col} = true WHERE tenant_id = $1`, [tenantId]);
+    }
+  });
+}
+
 async function createComplaintFromStructured(
   db: DatabaseClient,
   eventBus: EventBus,
@@ -1823,7 +1891,102 @@ export function voiceBotRoutes(db: DatabaseClient, eventBus: EventBus) {
            b.recordingUrl ?? null, b.durationSeconds ?? null, b.sentiment ?? null],
         );
       });
+      await checkVoiceBotUsageThresholds(db, tenantId).catch(() => {
+        // Never let a notification failure affect the call-ended response —
+        // the transcript/recording save above already succeeded regardless.
+      });
+      // Free up the concurrency slot this call was holding. Best-effort —
+      // stale rows also self-expire (see the 2-hour cutoff in the
+      // concurrency-status query below), so a failure here never wedges
+      // capacity permanently.
+      await db.withSuperAdmin(async (c) => {
+        await c.query(`DELETE FROM active_voice_calls WHERE call_id = $1`, [b.voiceCallId]);
+      }).catch(() => {});
       return reply.send({ success: true });
+    });
+
+    // Nadia calls this the moment a call starts (before the greeting) to
+    // register itself as "in progress" and find out whether it should
+    // proceed normally or immediately hand off because either this
+    // tenant's own fairness cap, or the whole VPS's hardware capacity,
+    // is already full. Registering + checking in one call keeps this to a
+    // single round trip on the call's critical path.
+    fastify.post('/livekit/call-started', async (req, reply) => {
+      const { tenantId } = req.query as { tenantId?: string };
+      if (!tenantId) return reply.code(400).send({ error: 'tenantId query param required' });
+      if (!checkSecret(req)) return reply.code(401).send({ error: 'unauthorized' });
+      const { callId } = (req.body ?? {}) as { callId?: string };
+      if (!callId) return reply.code(400).send({ error: 'callId required' });
+
+      await db.withSuperAdmin(async (c) => {
+        await c.query(
+          `INSERT INTO active_voice_calls (tenant_id, call_id) VALUES ($1, $2)
+           ON CONFLICT (call_id) DO NOTHING`,
+          [tenantId, callId],
+        );
+      });
+
+      // Crashed worker processes can leave a row behind forever without a
+      // matching call-ended cleanup — anything older than 2 hours can't
+      // possibly still be a live call, so it's excluded from both counts
+      // rather than permanently eating into capacity.
+      const [{ tenant_active }] = await db.withSuperAdmin(async (c) =>
+        (await c.query(
+          `SELECT COUNT(*)::int AS tenant_active FROM active_voice_calls
+           WHERE tenant_id = $1 AND started_at > NOW() - INTERVAL '2 hours'`,
+          [tenantId],
+        )).rows);
+      const [{ global_active }] = await db.withSuperAdmin(async (c) =>
+        (await c.query(
+          `SELECT COUNT(*)::int AS global_active FROM active_voice_calls
+           WHERE started_at > NOW() - INTERVAL '2 hours'`,
+        )).rows);
+      const [config] = await db.withSuperAdmin(async (c) =>
+        (await c.query(`SELECT max_concurrent_calls FROM voice_bot_configs WHERE tenant_id = $1`, [tenantId])).rows);
+
+      const tenantMax = config?.max_concurrent_calls != null ? Number(config.max_concurrent_calls) : null;
+      const globalMax = Number(process.env.NADIA_GLOBAL_MAX_CONCURRENT_CALLS || 15);
+
+      let overCapacity = false;
+      let reason: 'tenant_limit' | 'global_limit' | null = null;
+      if (tenantMax != null && tenant_active > tenantMax) {
+        overCapacity = true;
+        reason = 'tenant_limit';
+      } else if (global_active > globalMax) {
+        overCapacity = true;
+        reason = 'global_limit';
+      }
+
+      return reply.send({
+        success: true, overCapacity, reason,
+        tenantActive: tenant_active, tenantMax,
+        globalActive: global_active, globalMax,
+      });
+    });
+
+    // Nadia calls this at the start of every call to decide whether to
+    // proceed normally or fall back (minutes exhausted). Same public
+    // pattern as the other /livekit/* routes — excluded from the tenant
+    // auth wall, checked via the shared secret instead.
+    fastify.get('/livekit/minutes-status', async (req, reply) => {
+      const { tenantId } = req.query as { tenantId?: string };
+      if (!tenantId) return reply.code(400).send({ error: 'tenantId query param required' });
+      if (!checkSecret(req)) return reply.code(401).send({ error: 'unauthorized' });
+
+      const [quota] = await db.withSuperAdmin(async (c) =>
+        (await c.query(`SELECT minutes_allocated FROM voice_bot_quotas WHERE tenant_id = $1`, [tenantId])).rows);
+      // No quota row at all = no allocation configured yet — treat as
+      // unlimited (matches today's behaviour before this feature existed)
+      // rather than silently blocking every tenant that hasn't been
+      // allocated minutes.
+      if (!quota) return reply.send({ success: true, exhausted: false, remainingMinutes: null });
+
+      const [consumed] = await db.withSuperAdmin(async (c) =>
+        (await c.query(`SELECT COALESCE(SUM(duration_seconds), 0) AS total_seconds FROM voice_bot_calls WHERE tenant_id = $1`, [tenantId])).rows);
+      const allocated = Number(quota.minutes_allocated);
+      const consumedMinutes = Number(consumed.total_seconds) / 60;
+      const remaining = allocated - consumedMinutes;
+      return reply.send({ success: true, exhausted: remaining <= 0, remainingMinutes: Number(remaining.toFixed(1)) });
     });
   };
 }

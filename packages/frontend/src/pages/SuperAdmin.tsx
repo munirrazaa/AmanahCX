@@ -15,7 +15,7 @@ import {
   BarChart2, Receipt, ClipboardList, Edit2, Eye, EyeOff,
   Lock, Calendar, ChevronDown, ChevronRight, Download, ShoppingCart,
   Hourglass, BadgeCheck, XCircle, CheckCircle, Phone,
-  ToggleLeft, ToggleRight,
+  ToggleLeft, ToggleRight, Bell,
 } from 'lucide-react';
 import { api } from '../services/api';
 import { useIsSuperAdmin } from '../hooks/useRole';
@@ -1163,6 +1163,7 @@ function ConfigOwnershipModal({ tenant, onClose }: { tenant: any; onClose: () =>
     voiceId: 'helpdesk-agent', language: 'ur-PK', guardrails: '', isActive: true, recordingEnabled: false,
     selfServiceIntents: [] as string[], sipTrunkProvider: '', sipTrunkNumber: '', sipUri: '',
     sipTrunkUsername: '', sipTrunkPassword: '', sipTrunkNickname: '', outboundTransport: 'TCP',
+    maxConcurrentCalls: '', humanTransferDestination: '',
   };
   useEffect(() => {
     if (botConfig) {
@@ -1185,6 +1186,8 @@ function ConfigOwnershipModal({ tenant, onClose }: { tenant: any; onClose: () =>
         sipTrunkPassword: botConfig.sip_trunk_password ?? '',
         sipTrunkNickname: botConfig.sip_trunk_nickname ?? '',
         outboundTransport: botConfig.outbound_transport ?? 'TCP',
+        maxConcurrentCalls: botConfig.max_concurrent_calls != null ? String(botConfig.max_concurrent_calls) : '',
+        humanTransferDestination: botConfig.human_transfer_destination ?? '',
       });
     } else if (voiceBotOwnership === 'super_admin' && botForm === null) {
       setBotForm(blankBotForm);
@@ -1359,6 +1362,28 @@ function ConfigOwnershipModal({ tenant, onClose }: { tenant: any; onClose: () =>
                       {['TCP', 'UDP'].map(t => <option key={t} value={t}>{t}</option>)}
                     </select>
                   </div>
+                </div>
+
+                <div className="pt-2 border-t border-gray-50">
+                  <p className="text-xs font-semibold text-gray-500 mb-1.5">Capacity</p>
+                  <input value={botForm.maxConcurrentCalls} type="number" min={1}
+                    onChange={e => setBotForm((f: any) => ({ ...f, maxConcurrentCalls: e.target.value }))}
+                    placeholder="Max concurrent calls for this tenant (blank = unlimited)"
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm" />
+                  <p className="text-[11px] text-gray-400 mt-1">
+                    Caps how many calls Nadia will answer for this tenant at once — protects other
+                    tenants sharing the same server from being crowded out during a busy period.
+                  </p>
+                  <input value={botForm.humanTransferDestination}
+                    onChange={e => setBotForm((f: any) => ({ ...f, humanTransferDestination: e.target.value }))}
+                    placeholder="Human transfer destination (e.g. +9221xxxxxxx or sip:queue@host)"
+                    className="w-full mt-2 px-3 py-2 border border-gray-200 rounded-lg text-sm" />
+                  <p className="text-[11px] text-gray-400 mt-1">
+                    Where Nadia hands a call off when she can't take it herself (minutes exhausted
+                    or over capacity). Leave blank until confirmed with the trunk/call-center
+                    provider — a live call is transferred here immediately, so it must be the
+                    call center's own real inbound address, not a random number.
+                  </p>
                 </div>
 
                 <button onClick={() => saveBotConfigMut.mutate()} disabled={saveBotConfigMut.isPending}
@@ -2171,6 +2196,60 @@ function PlatformRoleModal({ role, onClose }: { role?: any; onClose: () => void 
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ── Platform Alerts tab — currently Voice Bot minute-threshold crossings ──
+function PlatformAlertsTab() {
+  const qc = useQueryClient();
+  const { data: alerts, isLoading } = useQuery<Array<{
+    id: string; type: string; title: string; body: string; is_read: boolean; created_at: string; tenant_name: string | null;
+  }>>({
+    queryKey: ['sa-alerts'],
+    queryFn: () => api.get('/super-admin/alerts').then(r => r.data.data),
+    refetchInterval: 60_000,
+  });
+  const markReadMut = useMutation({
+    mutationFn: (id: string) => api.patch(`/super-admin/alerts/${id}/read`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['sa-alerts'] }),
+  });
+  const unreadCount = (alerts ?? []).filter(a => !a.is_read).length;
+
+  return (
+    <div className="bg-white rounded-2xl border border-gray-100 p-6">
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-base font-semibold text-gray-900">Platform Alerts</h2>
+        {unreadCount > 0 && (
+          <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-red-50 text-red-700 border border-red-100">
+            {unreadCount} unread
+          </span>
+        )}
+      </div>
+      {isLoading ? (
+        <div className="flex justify-center py-10"><Loader2 className="w-5 h-5 animate-spin text-gray-400" /></div>
+      ) : (alerts ?? []).length === 0 ? (
+        <p className="text-sm text-gray-400 text-center py-10">No alerts yet.</p>
+      ) : (
+        <div className="space-y-2">
+          {alerts!.map(a => (
+            <div key={a.id} className={`flex items-start justify-between gap-3 rounded-xl px-4 py-3 border ${a.is_read ? 'bg-white border-gray-100' : 'bg-amber-50 border-amber-100'}`}>
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-gray-900">{a.title}</p>
+                {a.body && <p className="text-xs text-gray-500 mt-0.5">{a.body}</p>}
+                <p className="text-[11px] text-gray-400 mt-1">
+                  {a.tenant_name ? `${a.tenant_name} · ` : ''}{new Date(a.created_at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                </p>
+              </div>
+              {!a.is_read && (
+                <button onClick={() => markReadMut.mutate(a.id)} className="text-xs text-brand-600 hover:underline shrink-0 whitespace-nowrap">
+                  Mark read
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -3583,7 +3662,7 @@ export function SuperAdmin() {
   if (!isSuperAdmin) return <Navigate to="/dashboard" replace />;
 
   const qc = useQueryClient();
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'tenants' | 'roles' | 'sub-admins' | 'billing' | 'reports' | 'catalogue' | 'orders' | 'settings'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'tenants' | 'roles' | 'sub-admins' | 'billing' | 'reports' | 'catalogue' | 'orders' | 'settings' | 'alerts'>('dashboard');
   const [search, setSearch] = useState('');
   const [planFilter, setPlanFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -3641,6 +3720,7 @@ export function SuperAdmin() {
             { key: 'roles',      label: 'Sub-Admin Roles',  icon: Shield         },
             { key: 'sub-admins', label: 'Sub-Admins',       icon: Users       },
             { key: 'reports',    label: 'Reports',          icon: BarChart2   },
+            { key: 'alerts',     label: 'Alerts',           icon: Bell        },
             { key: 'settings',   label: 'Settings',         icon: Lock        },
           ] as const).map(({ key, label, icon: Icon }) => (
             <button key={key} onClick={() => setActiveTab(key)}
@@ -3665,6 +3745,7 @@ export function SuperAdmin() {
         {activeTab === 'sub-admins' && <SubAdminsTab />}
         {activeTab === 'reports'    && <SuperAdminReports />}
         {activeTab === 'settings'   && <SuperAdminSettings />}
+        {activeTab === 'alerts'     && <PlatformAlertsTab />}
 
         {/* Filters */}
         {activeTab === 'tenants' && <div className="flex gap-3 flex-wrap">

@@ -45,6 +45,11 @@ class AgentSettings:
     recording_enabled: bool = False                      # record call audio to storage + play consent
     default_queue_id: str | None = None
     default_priority: str = "medium"
+    human_transfer_destination: str | None = None        # SIP URI or number Nadia hands calls
+                                                           # to when she can't take one herself
+                                                           # (minutes exhausted / over capacity).
+                                                           # None = no live transfer configured yet,
+                                                           # fall back to ticket + graceful decline.
 
 
 async def load_settings(tenant_id: str) -> AgentSettings:
@@ -86,6 +91,7 @@ async def load_settings(tenant_id: str) -> AgentSettings:
         recording_enabled=bool(cfg.get("recording_enabled")),
         default_queue_id=cfg.get("default_queue_id"),
         default_priority=cfg.get("default_priority") or "medium",
+        human_transfer_destination=cfg.get("human_transfer_destination"),
     )
 
 

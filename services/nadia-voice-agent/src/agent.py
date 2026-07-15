@@ -419,11 +419,123 @@ async def entrypoint(ctx: agents.JobContext) -> None:
         # the caller misses the first line (dead air / "hello? …hello?"). Wait
         # for the caller to actually be present first. Browser test calls are
         # already connected, so this returns almost instantly there.
+        caller_participant = None
         try:
-            await asyncio.wait_for(ctx.wait_for_participant(), timeout=20)
+            caller_participant = await asyncio.wait_for(ctx.wait_for_participant(), timeout=20)
             dbg("caller present — greeting now")
         except asyncio.TimeoutError:
             dbg("no caller within 20s — greeting anyway")
+
+        async def _handoff_to_human(subject: str, description: str) -> None:
+            """Used when Nadia can't take a call herself (minutes exhausted or
+            over capacity). Always raises an urgent ticket FIRST with the full
+            transcript-so-far and a plain-language reason, so whoever picks up
+            the call already has the caller's context and doesn't have to ask
+            them to repeat themselves — that's the "warm" part. Then, only if
+            this tenant has a confirmed human_transfer_destination configured,
+            actually moves the live call there (a real SIP transfer, so the
+            caller is connected to a person immediately instead of waiting for
+            a callback). If no destination is configured yet, or the transfer
+            itself fails, falls back to the original behaviour: apologise and
+            end the call, relying on the ticket for the follow-up.
+            """
+            try:
+                async with httpx.AsyncClient(timeout=10) as client:
+                    await client.post(
+                        f"{base_url}/api/v1/voice-bot/livekit/complaint",
+                        params={"tenantId": tenant_id},
+                        headers={"Authorization": f"Bearer {secret}"} if secret else {},
+                        json={
+                            "priority": "urgent",
+                            "category": "other",
+                            "subject": subject,
+                            "description": (
+                                description + "\n\nConversation so far:\n" + "\n".join(transcript_parts)
+                                if transcript_parts else description
+                            ),
+                            "callId": call_id,
+                        },
+                    )
+            except Exception as e:
+                dbg(f"handoff ticket creation FAILED: {type(e).__name__}: {e}")
+
+            destination = (settings.human_transfer_destination or "").strip()
+            if destination and caller_participant is not None:
+                await session.say(
+                    "ایک لمحہ رکیں، میں آپ کو ابھی ہماری ٹیم کے نمائندے سے ملا رہی ہوں۔"
+                )
+                try:
+                    await ctx.transfer_sip_participant(caller_participant, destination)
+                    dbg(f"live transfer to {destination} succeeded")
+                    duration_guard.cancel()
+                    ctx.shutdown(reason="transferred_to_human")
+                    return
+                except Exception as e:
+                    dbg(f"live transfer to {destination} FAILED, falling back: {type(e).__name__}: {e}")
+
+            await session.say(
+                "معذرت، اس وقت ہماری وائس لائن دستیاب نہیں ہے۔ "
+                "ہماری ٹیم کا ایک نمائندہ جلد آپ سے رابطہ کرے گا۔ شکریہ، اللہ حافظ۔"
+            )
+            duration_guard.cancel()
+            ctx.shutdown(reason="handoff_fallback")
+
+        # Concurrency gate — register this call and find out, in the same
+        # round trip, whether this tenant's own fairness cap or the whole
+        # VPS's hardware capacity is already full. Checked BEFORE the
+        # minutes gate: if there's no room to run the call at all, there's
+        # no point spending a minutes-status lookup on it.
+        base_url = os.environ["CRM_API_BASE_URL"]
+        secret = os.environ.get("LIVEKIT_INGEST_SECRET", "")
+        try:
+            async with httpx.AsyncClient(timeout=5) as client:
+                resp = await client.post(
+                    f"{base_url}/api/v1/voice-bot/livekit/call-started",
+                    params={"tenantId": tenant_id},
+                    headers={"Authorization": f"Bearer {secret}"} if secret else {},
+                    json={"callId": call_id},
+                )
+                concurrency = resp.json() if resp.status_code == 200 else {"overCapacity": False}
+        except Exception as e:
+            dbg(f"call-started/concurrency check FAILED (continuing call): {type(e).__name__}: {e}")
+            concurrency = {"overCapacity": False}
+
+        if concurrency.get("overCapacity"):
+            dbg(f"over capacity ({concurrency.get('reason')}) — handing off to a human")
+            await _handoff_to_human(
+                subject="Caller could not be served — voice bot at capacity",
+                description="This caller reached the voice line while this workspace (or the shared "
+                            "server) was already at its concurrent-call limit.",
+            )
+            return
+
+        # Minutes gate — checked once per call, right after the caller is
+        # actually connected. If this tenant has used up its allocated
+        # minutes, Nadia does not run her normal flow at all: she explains
+        # a representative will follow up, raises an urgent ticket so a
+        # human actually does, and ends the call. (This is a ticket-based
+        # follow-up, not a live phone transfer — real live transfer to an
+        # available agent is a separate, not-yet-built feature.)
+        try:
+            async with httpx.AsyncClient(timeout=5) as client:
+                resp = await client.get(
+                    f"{base_url}/api/v1/voice-bot/livekit/minutes-status",
+                    params={"tenantId": tenant_id},
+                    headers={"Authorization": f"Bearer {secret}"} if secret else {},
+                )
+                status = resp.json() if resp.status_code == 200 else {"exhausted": False}
+        except Exception as e:
+            dbg(f"minutes-status check FAILED (continuing call): {type(e).__name__}: {e}")
+            status = {"exhausted": False}
+
+        if status.get("exhausted"):
+            dbg("minutes exhausted — handing off to a human")
+            await _handoff_to_human(
+                subject="Caller could not be served — voice bot minutes exhausted",
+                description="This caller reached the voice line after this workspace's allocated "
+                            "Voice Bot minutes ran out.",
+            )
+            return
 
         # If recording is enabled AND storage is configured, start the audio
         # egress first (so the consent notice itself is captured), then say the
@@ -461,4 +573,12 @@ if __name__ == "__main__":
         entrypoint_fnc=entrypoint,
         agent_name=os.environ.get("LIVEKIT_AGENT_NAME", "nadia"),
         initialize_process_timeout=60,
+        # Hardware-based ceiling: LiveKit measures this process's CPU load
+        # and stops accepting new jobs once it crosses this fraction, so a
+        # burst of calls can't pile up past what the box can actually run.
+        # The exact number of calls this maps to depends on the VPS size
+        # (see the hardware sizing table shared with the tenant/ops team);
+        # the deterministic per-call NADIA_GLOBAL_MAX_CONCURRENT_CALLS cap
+        # (enforced in call-started) is the number to tune per box.
+        load_threshold=float(os.environ.get("NADIA_LOAD_THRESHOLD", "0.75")),
     ))

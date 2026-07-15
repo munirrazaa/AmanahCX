@@ -659,6 +659,11 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
            VALUES ($1, $2)
            ON CONFLICT (tenant_id) DO UPDATE SET
              minutes_allocated = voice_bot_quotas.minutes_allocated + EXCLUDED.minutes_allocated,
+             -- A top-up starts a fresh allocation cycle — let the 70/90/100%
+             -- notifications fire again rather than staying silenced forever.
+             notified_70  = false,
+             notified_90  = false,
+             notified_100 = false,
              updated_at = NOW()
            RETURNING *`,
           [id, body.minutesToAdd],
@@ -725,6 +730,8 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
       sipTrunkPassword:     z.string().optional(),
       sipTrunkNickname:     z.string().optional(),
       outboundTransport:    z.enum(['TCP', 'UDP']).optional(),
+      maxConcurrentCalls:   z.coerce.number().int().positive().optional(),
+      humanTransferDestination: z.string().optional(),
     });
 
     fastify.put('/tenants/:id/voice-bot-config', async (req, reply) => {
@@ -736,8 +743,8 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
              (tenant_id, provider, bot_name, greeting_message, system_prompt, tone, speaking_rate, voice_id,
               language, guardrails, is_active, recording_enabled, self_service_intents,
               sip_trunk_provider, sip_trunk_number, sip_uri, sip_trunk_username, sip_trunk_password,
-              sip_trunk_nickname, outbound_transport)
-           VALUES ($1,'livekit',$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
+              sip_trunk_nickname, outbound_transport, max_concurrent_calls, human_transfer_destination)
+           VALUES ($1,'livekit',$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
            ON CONFLICT (tenant_id, provider) DO UPDATE SET
              bot_name            = COALESCE(EXCLUDED.bot_name, voice_bot_configs.bot_name),
              greeting_message    = COALESCE(EXCLUDED.greeting_message, voice_bot_configs.greeting_message),
@@ -757,6 +764,8 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
              sip_trunk_password  = COALESCE(EXCLUDED.sip_trunk_password, voice_bot_configs.sip_trunk_password),
              sip_trunk_nickname  = COALESCE(EXCLUDED.sip_trunk_nickname, voice_bot_configs.sip_trunk_nickname),
              outbound_transport  = COALESCE(EXCLUDED.outbound_transport, voice_bot_configs.outbound_transport),
+             max_concurrent_calls = COALESCE(EXCLUDED.max_concurrent_calls, voice_bot_configs.max_concurrent_calls),
+             human_transfer_destination = COALESCE(EXCLUDED.human_transfer_destination, voice_bot_configs.human_transfer_destination),
              updated_at          = NOW()
            RETURNING *`,
           [id, body.botName ?? 'Nadia', body.greetingMessage ?? null, body.systemPrompt ?? null,
@@ -765,7 +774,8 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
            body.recordingEnabled ?? false, body.selfServiceIntents ?? [],
            body.sipTrunkProvider ?? null, body.sipTrunkNumber ?? null, body.sipUri ?? null,
            body.sipTrunkUsername ?? null, body.sipTrunkPassword ?? null, body.sipTrunkNickname ?? null,
-           body.outboundTransport ?? 'TCP'],
+           body.outboundTransport ?? 'TCP', body.maxConcurrentCalls ?? null,
+           body.humanTransferDestination ?? null],
         );
         return r.rows;
       });
@@ -860,6 +870,32 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
     });
 
     // All-tenants overview (allocated vs consumed) for the super admin dashboard
+    // Platform-level alerts (currently: Voice Bot 70/90/100% threshold
+    // crossings) — Super Admin's own notification feed, separate from the
+    // tenant-scoped `notifications` table since Super Admin has no tenant.
+    fastify.get('/alerts', async (req, reply) => {
+      const { unreadOnly } = req.query as { unreadOnly?: string };
+      const alerts = await db.withSuperAdmin(async (client) => {
+        const r = await client.query(
+          `SELECT n.id, n.type, n.title, n.body, n.is_read, n.created_at, t.name AS tenant_name
+             FROM platform_notifications n
+             LEFT JOIN tenants t ON t.id = n.tenant_id
+            ${unreadOnly === 'true' ? 'WHERE n.is_read = false' : ''}
+            ORDER BY n.created_at DESC LIMIT 100`,
+        );
+        return r.rows;
+      });
+      return reply.send({ success: true, data: alerts });
+    });
+
+    fastify.patch('/alerts/:id/read', async (req, reply) => {
+      const { id } = req.params as { id: string };
+      await db.withSuperAdmin(async (client) => {
+        await client.query(`UPDATE platform_notifications SET is_read = true WHERE id = $1`, [id]);
+      });
+      return reply.send({ success: true });
+    });
+
     fastify.get('/voice-bot-usage', async (_req, reply) => {
       const rows = await db.withSuperAdmin(async (client) => {
         const r = await client.query(
