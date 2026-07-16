@@ -70,7 +70,7 @@ function rowToInvoice(row: Record<string, any>) {
 
   return {
     id: row.id,
-    number: row.invoice_number,
+    number: row.number,
     status,
     billingContactId: row.billing_contact_id,
     contactName: row.contact_name ?? row.client_name,
@@ -83,7 +83,7 @@ function rowToInvoice(row: Record<string, any>) {
     currency: row.currency,
     templateId: row.template_id,
     subtotal: Number(row.subtotal),
-    totalTax: Number(row.tax),
+    totalTax: Number(row.total_tax),
     total,
     amountPaid,
     amountDue: amountDue > 0 ? amountDue : 0,
@@ -121,7 +121,7 @@ export function invoiceRoutes(db: DatabaseClient) {
           `SELECT i.*, bc.name as contact_name, bc.email as contact_email, bc.company as contact_company,
                   bc.billing_address as contact_billing_address, bc.currency as contact_currency,
                   COALESCE(p.total_paid, 0) as amount_paid
-           FROM invoices i
+           FROM sales_invoices i
            LEFT JOIN billing_contacts bc ON bc.id = i.billing_contact_id
            LEFT JOIN (SELECT invoice_id, SUM(amount) as total_paid FROM invoice_payments GROUP BY invoice_id) p ON p.invoice_id = i.id
            WHERE ${where}
@@ -131,7 +131,7 @@ export function invoiceRoutes(db: DatabaseClient) {
         )
       );
       const { rows: [{ count }] } = await db.withTenant(tenantId, (client) =>
-        client.query(`SELECT COUNT(*) FROM invoices i LEFT JOIN billing_contacts bc ON bc.id = i.billing_contact_id WHERE ${where}`, vals)
+        client.query(`SELECT COUNT(*) FROM sales_invoices i LEFT JOIN billing_contacts bc ON bc.id = i.billing_contact_id WHERE ${where}`, vals)
       );
       return reply.send({ success: true, data: rows.map(rowToInvoice), total: Number(count), page: q.page, pageSize: q.pageSize });
     });
@@ -144,7 +144,7 @@ export function invoiceRoutes(db: DatabaseClient) {
         client.query(
           `SELECT i.*, bc.name as contact_name, bc.email as contact_email, bc.company as contact_company,
                   bc.billing_address as contact_billing_address, bc.currency as contact_currency, bc.tax_id as contact_tax_id
-           FROM invoices i LEFT JOIN billing_contacts bc ON bc.id = i.billing_contact_id
+           FROM sales_invoices i LEFT JOIN billing_contacts bc ON bc.id = i.billing_contact_id
            WHERE i.tenant_id=$1 AND i.id=$2`,
           [tenantId, id]
         ).then(r => r.rows)
@@ -209,13 +209,13 @@ export function invoiceRoutes(db: DatabaseClient) {
 
       const [inv] = await db.withTenant(tenantId, async (client) => {
         const insertResult = await client.query(
-          `INSERT INTO invoices (tenant_id, invoice_number, status, billing_contact_id, issue_date, due_at, due_date,
-            currency, po_reference, template_id, subtotal, tax, total, provider, notes, terms)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING *`,
-          [tenantId, invoiceNumber, body.status === 'draft' ? 'open' : body.status,
+          `INSERT INTO sales_invoices (tenant_id, number, status, billing_contact_id, issue_date, due_date,
+            currency, po_reference, template_id, subtotal, total_tax, total, notes, terms)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`,
+          [tenantId, invoiceNumber, body.status === 'draft' ? 'draft' : body.status,
            resolvedContactId,
-           body.issueDate, body.dueDate, body.dueDate, body.currency, body.poReference ?? null,
-           body.templateId, body.subtotal, body.totalTax, body.total, 'manual',
+           body.issueDate, body.dueDate, body.currency, body.poReference ?? null,
+           body.templateId, body.subtotal, body.totalTax, body.total,
            body.notes ?? null, body.terms ?? null]
         );
         const row = insertResult.rows[0];
@@ -255,7 +255,7 @@ export function invoiceRoutes(db: DatabaseClient) {
       if (body.terms !== undefined)      { sets.push(`terms = $${vals.length + 1}`);        vals.push(body.terms); }
       if (!sets.length) return reply.send({ success: true, data: null });
       const [row] = await db.withTenant(tenantId, async (client) => {
-        const result = await client.query(`UPDATE invoices SET ${sets.join(',')} WHERE tenant_id=$1 AND id=$2 RETURNING *`, vals);
+        const result = await client.query(`UPDATE sales_invoices SET ${sets.join(',')} WHERE tenant_id=$1 AND id=$2 RETURNING *`, vals);
         return result.rows;
       });
       return reply.send({ success: true, data: row });
@@ -266,7 +266,7 @@ export function invoiceRoutes(db: DatabaseClient) {
       const { id } = req.params as { id: string };
       const tenantId = req.tenant.id;
       await db.withTenant(tenantId, (client) =>
-        client.query(`DELETE FROM invoices WHERE tenant_id=$1 AND id=$2`, [tenantId, id])
+        client.query(`DELETE FROM sales_invoices WHERE tenant_id=$1 AND id=$2`, [tenantId, id])
       );
       return reply.send({ success: true });
     });
@@ -285,7 +285,7 @@ export function invoiceRoutes(db: DatabaseClient) {
       }).parse(req.body);
 
       const [inv] = await db.withTenant(tenantId, async (client) => {
-        const result = await client.query(`SELECT * FROM invoices WHERE tenant_id=$1 AND id=$2`, [tenantId, id]);
+        const result = await client.query(`SELECT * FROM sales_invoices WHERE tenant_id=$1 AND id=$2`, [tenantId, id]);
         return result.rows;
       });
       if (!inv) return reply.status(404).send({ success: false, error: 'Not found' });
@@ -297,10 +297,16 @@ export function invoiceRoutes(db: DatabaseClient) {
           [tenantId, id, body.amount, body.paymentDate, body.modeName,
            body.bankAccountName ?? null, body.reference ?? null, body.notes ?? null]
         );
-        // Update invoice status to 'paid'
+        // Recompute status from total paid so far — 'paid' only once fully covered,
+        // 'partial' otherwise (previously always jumped straight to 'paid').
+        const [{ total_paid }] = (await client.query(
+          `SELECT COALESCE(SUM(amount),0) AS total_paid FROM invoice_payments WHERE invoice_id=$1`,
+          [id],
+        )).rows;
+        const newStatus = Number(total_paid) >= Number(inv.total) ? 'paid' : 'partial';
         await client.query(
-          `UPDATE invoices SET status='paid' WHERE id=$1`,
-          [id]
+          `UPDATE sales_invoices SET status=$1 WHERE id=$2`,
+          [newStatus, id],
         );
         return result.rows;
       });
@@ -331,7 +337,7 @@ export function invoiceRoutes(db: DatabaseClient) {
                   ws.name   AS workspace_name,
                   ws.email  AS workspace_email,
                   ws.address AS workspace_address
-           FROM invoices i
+           FROM sales_invoices i
            LEFT JOIN billing_contacts bc ON i.billing_contact_id = bc.id
            LEFT JOIN workspace_settings ws ON ws.tenant_id = $1
            WHERE i.tenant_id=$1 AND i.id=$2`,
@@ -352,7 +358,7 @@ export function invoiceRoutes(db: DatabaseClient) {
         });
       }
 
-      const subject = body.subject ?? `Invoice ${inv.invoice_number} from ${inv.workspace_name ?? 'Us'}`;
+      const subject = body.subject ?? `Invoice ${inv.number} from ${inv.workspace_name ?? 'Us'}`;
 
       const formattedTotal  = new Intl.NumberFormat('en-US', { style: 'currency', currency: inv.currency ?? 'USD' }).format(inv.total ?? 0);
       const formattedDue    = inv.due_date ? new Date(inv.due_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A';
@@ -370,7 +376,7 @@ export function invoiceRoutes(db: DatabaseClient) {
     <table style="width:100%;border-collapse:collapse;margin:20px 0;font-size:14px;">
       <tr style="background:#e2e8f0;">
         <td style="padding:10px 14px;font-weight:bold;">Invoice Number</td>
-        <td style="padding:10px 14px;">${inv.invoice_number}</td>
+        <td style="padding:10px 14px;">${inv.number}</td>
       </tr>
       <tr>
         <td style="padding:10px 14px;font-weight:bold;background:#f8fafc;">Issue Date</td>
@@ -396,7 +402,7 @@ export function invoiceRoutes(db: DatabaseClient) {
 </div>`.trim();
 
       const bodyText = [
-        `Invoice ${inv.invoice_number}`,
+        `Invoice ${inv.number}`,
         body.message ?? '',
         `Amount Due: ${formattedTotal}`,
         `Due Date: ${formattedDue}`,
@@ -417,7 +423,7 @@ export function invoiceRoutes(db: DatabaseClient) {
       if (result.status === 'delivered') {
         await db.withTenant(tenantId, (client) =>
           client.query(
-            `UPDATE invoices SET status = CASE WHEN status='draft' THEN 'sent' ELSE status END,
+            `UPDATE sales_invoices SET status = CASE WHEN status='draft' THEN 'sent' ELSE status END,
                                  updated_at = NOW()
              WHERE tenant_id=$1 AND id=$2`,
             [tenantId, id],

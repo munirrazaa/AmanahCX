@@ -15,7 +15,7 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import type { DatabaseClient } from '@crm/core';
-import { requireRole, requireScope } from '../middlewares/auth.middleware';
+import { requireRole, requireScope, requireModule } from '../middlewares/auth.middleware';
 import { EmailService } from '../services/email.service';
 import { SmsService } from '@crm/core/sms.service';
 
@@ -353,7 +353,7 @@ export function connectorRoutes(db: DatabaseClient) {
   return async function (fastify: FastifyInstance) {
 
     // List all connectors with connection status
-    fastify.get('/', async (req, reply) => {
+    fastify.get('/', { preHandler: requireModule('integrations') }, async (req, reply) => {
       const [tenant] = await db.withSuperAdmin(async (client) => {
         const result = await client.query('SELECT settings FROM tenants WHERE id = $1', [req.tenant.id]);
         return result.rows;
@@ -376,7 +376,7 @@ export function connectorRoutes(db: DatabaseClient) {
     });
 
     // Get single connector config (secrets masked)
-    fastify.get('/:id', async (req, reply) => {
+    fastify.get('/:id', { preHandler: requireModule('integrations') }, async (req, reply) => {
       const { id } = req.params as { id: string };
       const def = CONNECTOR_DEFS.find((d) => d.id === id);
       if (!def) return reply.code(404).send({ success: false, error: { code: 'NOT_FOUND', message: 'Connector not found' } });
@@ -400,7 +400,7 @@ export function connectorRoutes(db: DatabaseClient) {
     });
 
     // Save / update connector credentials — requires tenant_admin
-    fastify.put('/:id', { preHandler: requireRole('tenant_admin', 'super_admin') }, async (req, reply) => {
+    fastify.put('/:id', { preHandler: [requireModule('integrations'), requireRole('tenant_admin', 'super_admin')] }, async (req, reply) => {
       const ownership = (req.tenant.settings as any)?.integration_ownership?.connectors ?? 'tenant_admin';
       if (ownership === 'super_admin') {
         return reply.code(403).send({
@@ -482,7 +482,7 @@ export function connectorRoutes(db: DatabaseClient) {
     });
 
     // Disconnect a connector
-    fastify.delete('/:id', { preHandler: requireRole('tenant_admin', 'super_admin') }, async (req, reply) => {
+    fastify.delete('/:id', { preHandler: [requireModule('integrations'), requireRole('tenant_admin', 'super_admin')] }, async (req, reply) => {
       const { id } = req.params as { id: string };
       await db.withSuperAdmin(async (client) => {
         await client.query(
@@ -497,7 +497,7 @@ export function connectorRoutes(db: DatabaseClient) {
     });
 
     // Test connector connection
-    fastify.post('/:id/test', { preHandler: requireRole('tenant_admin', 'super_admin') }, async (req, reply) => {
+    fastify.post('/:id/test', { preHandler: [requireModule('integrations'), requireRole('tenant_admin', 'super_admin')] }, async (req, reply) => {
       const { id } = req.params as { id: string };
       const def = CONNECTOR_DEFS.find((d) => d.id === id);
       if (!def) return reply.code(404).send({ success: false, error: { code: 'NOT_FOUND', message: 'Connector not found' } });

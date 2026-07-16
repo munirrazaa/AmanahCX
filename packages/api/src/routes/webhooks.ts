@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import crypto from 'node:crypto';
 import type { DatabaseClient, EventBus } from '@crm/core';
-import { requireFeature, requireScope } from '../middlewares/auth.middleware';
+import { requireFeature, requireScope, requireModule } from '../middlewares/auth.middleware';
 import { enqueueWebhookDelivery } from '../lib/webhook-worker';
 
 const WebhookSchema = z.object({
@@ -18,7 +18,7 @@ const WebhookSchema = z.object({
 
 export function webhookRoutes(db: DatabaseClient, _eventBus: EventBus) {
   return async function (fastify: FastifyInstance) {
-    const preHandler = [requireFeature('webhooks'), requireScope('webhooks:manage')];
+    const preHandler = [requireModule('integrations'), requireFeature('webhooks'), requireScope('webhooks:manage')];
 
     fastify.get('/', { preHandler }, async (req, reply) => {
       const webhooks = await db.withTenant(req.tenant.id, async (client) => {

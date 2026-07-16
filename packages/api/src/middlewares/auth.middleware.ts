@@ -253,3 +253,21 @@ export function requireFeature(feature: keyof import('@crm/shared').FeatureFlags
     }
   };
 }
+
+// Module licensing guard — checks the authoritative tenants.active_modules array
+// (set by Super Admin), not the settings.features flags above, which can drift
+// out of sync. Use for modules that are opt-in per tenant (e.g. integrations).
+export function requireModule(moduleKey: string) {
+  return async (req: FastifyRequest, reply: FastifyReply): Promise<void> => {
+    const activeModules = ((req.tenant as any)?.active_modules ?? []) as string[];
+    if (!activeModules.includes(moduleKey)) {
+      return reply.code(402).send({
+        success: false,
+        error: {
+          code: 'MODULE_NOT_LICENSED',
+          message: `The '${moduleKey}' module is not enabled for your workspace. Contact your account manager to enable it.`,
+        },
+      });
+    }
+  };
+}

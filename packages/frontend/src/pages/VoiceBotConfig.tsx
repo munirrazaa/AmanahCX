@@ -23,6 +23,7 @@ import {
   BookOpen, Trash2, FileText, Link2, Type, Plus,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { useAuthStore } from '../store/auth.store';
 import { api } from '../services/api';
 import { useIsSuperAdmin } from '../hooks/useRole';
 import { TestCallNadiaButton } from '../components/TestCallNadiaButton';
@@ -441,6 +442,12 @@ function KnowledgeBasePanel() {
 
 export function VoiceBotConfig() {
   const qc = useQueryClient();
+  const { tenant } = useAuthStore();
+  // Licensing the Voice Bot module doesn't automatically grant every provider —
+  // each one must be individually allocated (voice_bot.provider.<id> feature key),
+  // so a tenant only ever sees the provider(s) they were actually given.
+  const entitledFeatures: string[] = (tenant as any)?.entitled_features ?? [];
+  const allowedProviders = PROVIDERS.filter((p) => entitledFeatures.includes(`voice_bot.provider.${p.id}`));
   const [selectedProvider, setSelectedProvider] = useState<string | null>(null);
   const [showGuide, setShowGuide] = useState<string | null>(null);
   const [testNumber, setTestNumber] = useState('');
@@ -651,8 +658,13 @@ export function VoiceBotConfig() {
         <p className="text-xs text-gray-500 font-semibold uppercase tracking-widest mb-3">
           Select your AI voice provider
         </p>
+        {allowedProviders.length === 0 && (
+          <div className="mb-6 p-4 rounded-2xl border border-amber-200 bg-amber-50 text-sm text-amber-800">
+            No voice provider has been allocated to your workspace yet. Contact your account manager to enable one (Build-Your-Own, Vapi, Retell AI, or Bland.ai).
+          </div>
+        )}
         <div className="grid grid-cols-4 gap-4 mb-6">
-          {PROVIDERS.map(p => {
+          {allowedProviders.map(p => {
             const hasConfig = configs?.some(c => c.provider === p.id && c.is_active);
             const isSelected = selectedProvider === p.id;
             return (
@@ -689,7 +701,7 @@ export function VoiceBotConfig() {
         </div>
 
         {selectedProvider && (() => {
-          const pDef = PROVIDERS.find(p => p.id === selectedProvider)!;
+          const pDef = allowedProviders.find(p => p.id === selectedProvider)!;
           return (
             <div className="space-y-5">
 
@@ -1305,14 +1317,14 @@ export function VoiceBotConfig() {
                     <p className="text-gray-500 text-sm">Not configured yet</p>
                     {selectedProvider !== 'livekit' && (
                       <p className="text-gray-500 text-xs text-center max-w-xs">
-                        Also make sure to add your {PROVIDERS.find(p => p.id === selectedProvider)?.name} API key in
+                        Also make sure to add your {allowedProviders.find(p => p.id === selectedProvider)?.name} API key in
                         the <Link to="/integrations" className="text-brand-400 hover:underline">Integrations page</Link>
                       </p>
                     )}
                     <button onClick={() => startEdit()}
                       className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-gray-900"
                       style={{ background: 'linear-gradient(135deg, #29ABE2 0%, #1a8cbf 100%)' }}>
-                      Configure {PROVIDERS.find(p => p.id === selectedProvider)?.name}
+                      Configure {allowedProviders.find(p => p.id === selectedProvider)?.name}
                     </button>
                   </div>
                 )}

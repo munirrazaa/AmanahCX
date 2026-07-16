@@ -220,11 +220,11 @@ export function quotationRoutes(db: DatabaseClient) {
 
       const [inv] = await db.withTenant(tenantId, async (client) => {
         const insertResult = await client.query(
-          `INSERT INTO invoices (tenant_id, invoice_number, status, billing_contact_id, issue_date, due_at, due_date,
-            currency, po_reference, template_id, subtotal, tax, total, provider, notes, terms)
-           VALUES ($1,$2,'draft',$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'manual',$13,$14) RETURNING *`,
+          `INSERT INTO sales_invoices (tenant_id, number, status, billing_contact_id, issue_date, due_date,
+            currency, po_reference, template_id, subtotal, total_tax, total, notes, terms)
+           VALUES ($1,$2,'draft',$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
           [tenantId, invoiceNumber, qt.billing_contact_id, qt.issue_date,
-           dueDateStr, dueDateStr, qt.currency, qt.po_reference, qt.template_id,
+           dueDateStr, qt.currency, qt.po_reference, qt.template_id,
            qt.subtotal, qt.tax, qt.total, qt.notes, qt.terms]
         );
         const inv = insertResult.rows[0];

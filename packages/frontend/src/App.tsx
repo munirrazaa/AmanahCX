@@ -244,10 +244,13 @@ function Sidebar() {
               className={({ isActive }) => `flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm transition-all ${isActive ? 'text-white font-semibold' : 'text-white/60 hover:text-white hover:bg-white/10'}`}
               style={({ isActive }) => isActive ? { background: 'linear-gradient(135deg, rgba(41,171,226,0.25) 0%, rgba(77,139,60,0.15) 100%)', borderLeft: '2px solid #29ABE2' } : {}}
             ><Layers className="w-4 h-4 shrink-0" />Modules</NavLink>
-            <NavLink to="/integrations"
-              className={({ isActive }) => `flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm transition-all ${isActive ? 'text-white font-semibold' : 'text-white/60 hover:text-white hover:bg-white/10'}`}
-              style={({ isActive }) => isActive ? { background: 'linear-gradient(135deg, rgba(41,171,226,0.25) 0%, rgba(77,139,60,0.15) 100%)', borderLeft: '2px solid #29ABE2' } : {}}
-            ><Zap className="w-4 h-4 shrink-0" />Integrations</NavLink>
+            {/* Integrations — optional module; only when the workspace is licensed for it */}
+            {((tenant as any)?.active_modules ?? []).includes('integrations') && (
+              <NavLink to="/integrations"
+                className={({ isActive }) => `flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm transition-all ${isActive ? 'text-white font-semibold' : 'text-white/60 hover:text-white hover:bg-white/10'}`}
+                style={({ isActive }) => isActive ? { background: 'linear-gradient(135deg, rgba(41,171,226,0.25) 0%, rgba(77,139,60,0.15) 100%)', borderLeft: '2px solid #29ABE2' } : {}}
+              ><Zap className="w-4 h-4 shrink-0" />Integrations</NavLink>
+            )}
             {/* Voice Bot — administrative configuration (name, voice, tone,
                 ticket rules); only when the workspace is licensed for it */}
             {((tenant as any)?.active_modules ?? []).includes('voice_bot') && (
@@ -708,7 +711,7 @@ function NotificationsPage() {
 }
 
 function AppLayout() {
-  const { isAuthenticated } = useAuthStore();
+  const { isAuthenticated, tenant } = useAuthStore();
   const isSuperAdmin = useIsSuperAdmin();
   const isTenantAdmin = useIsTenantAdmin();
   const isManager = useHasRole('manager');
@@ -763,8 +766,8 @@ function AppLayout() {
           <Route path="/wallboard"      element={op(<Wallboard />)} />
           <Route path="/reports"        element={op(<Reports />)} />
           <Route path="/billing"     element={op(<Billing />)} />
-          <Route path="/integrations"        element={<Integrations />} />
-          <Route path="/integrations/health" element={<IntegrationHealth />} />
+          <Route path="/integrations"        element={((tenant as any)?.active_modules ?? []).includes('integrations') ? <Integrations /> : <Navigate to="/dashboard" replace />} />
+          <Route path="/integrations/health" element={((tenant as any)?.active_modules ?? []).includes('integrations') ? <IntegrationHealth /> : <Navigate to="/dashboard" replace />} />
           <Route path="/settings"          element={<Settings />} />
           <Route path="/settings/personal" element={<PersonalSettings />} />
           <Route path="/settings/notifications" element={<AdminPageWrapper title="Notifications" subtitle="Control which alerts and emails you receive"><NotificationsPage /></AdminPageWrapper>} />

@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import crypto from 'node:crypto';
 import type { DatabaseClient } from '@crm/core';
-import { requireRole } from '../middlewares/auth.middleware';
+import { requireRole, requireModule } from '../middlewares/auth.middleware';
 import type { ApiScope } from '@crm/shared';
 
 const ALL_SCOPES: ApiScope[] = [
@@ -20,7 +20,7 @@ const CreateKeySchema = z.object({
 
 export function apiKeyRoutes(db: DatabaseClient) {
   return async function (fastify: FastifyInstance) {
-    const adminOnly = requireRole('tenant_admin', 'super_admin');
+    const adminOnly = [requireModule('integrations'), requireRole('tenant_admin', 'super_admin')];
 
     // List API keys (never show full key — only prefix)
     fastify.get('/', { preHandler: adminOnly }, async (req, reply) => {

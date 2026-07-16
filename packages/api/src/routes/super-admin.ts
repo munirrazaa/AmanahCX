@@ -43,6 +43,13 @@ export const MODULE_CATALOG = [
     features: [
       { key: 'voice_bot.calls',    label: 'Inbound Calls & Transcripts' },
       { key: 'voice_bot.config',   label: 'Bot Configuration' },
+      // Per-provider allocation — licensing the voice_bot module alone no longer
+      // exposes every provider; each one must be individually granted so a tenant
+      // only sees/uses the specific provider(s) they were actually given.
+      { key: 'voice_bot.provider.livekit', label: 'Provider: Build-Your-Own (Nadia / LiveKit)' },
+      { key: 'voice_bot.provider.vapi',    label: 'Provider: Vapi' },
+      { key: 'voice_bot.provider.retell',  label: 'Provider: Retell AI' },
+      { key: 'voice_bot.provider.bland',   label: 'Provider: Bland.ai' },
     ] },
   { key: 'sales', label: 'Sales & Invoicing', always: false, included_in_plans: ['professional','enterprise'],
     description: 'Quote-to-cash: invoicing, payments and sales reporting.',

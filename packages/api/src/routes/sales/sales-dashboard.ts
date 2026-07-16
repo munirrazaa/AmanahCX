@@ -20,7 +20,7 @@ export function salesDashboardRoutes(db: DatabaseClient) {
              COUNT(*) FILTER (WHERE i.status = 'paid')      AS paid_count,
              COUNT(*) FILTER (WHERE i.status = 'overdue')   AS overdue_count,
              COUNT(*) FILTER (WHERE i.status = 'cancelled') AS cancelled_count
-           FROM invoices i
+           FROM sales_invoices i
            LEFT JOIN (SELECT invoice_id, SUM(amount) as paid FROM invoice_payments GROUP BY invoice_id) p ON p.invoice_id = i.id
            WHERE i.tenant_id = $1`,
           [tenantId]
@@ -36,7 +36,7 @@ export function salesDashboardRoutes(db: DatabaseClient) {
         ).then(r => r.rows)
       );
 
-      // Aging buckets (open invoices only)
+      // Aging buckets (open sales_invoices only)
       const aging = await db.withTenant(tenantId, (client) =>
         client.query(
           `SELECT
@@ -49,7 +49,7 @@ export function salesDashboardRoutes(db: DatabaseClient) {
              END AS bucket,
              COALESCE(SUM(i.total - COALESCE(p.paid, 0)),0) AS amount,
              COUNT(*) AS count
-           FROM invoices i
+           FROM sales_invoices i
            LEFT JOIN (SELECT invoice_id, SUM(amount) as paid FROM invoice_payments GROUP BY invoice_id) p ON p.invoice_id = i.id
            WHERE i.tenant_id=$1 AND i.status NOT IN ('paid','cancelled') AND (i.total - COALESCE(p.paid, 0)) > 0
            GROUP BY 1`,
@@ -70,7 +70,7 @@ export function salesDashboardRoutes(db: DatabaseClient) {
              COALESCE(SUM(CASE WHEN CURRENT_DATE - i.due_date BETWEEN 180 AND 364 THEN i.total - COALESCE(p.paid,0) ELSE 0 END),0) AS d181_365,
              COALESCE(SUM(CASE WHEN CURRENT_DATE - i.due_date >= 365              THEN i.total - COALESCE(p.paid,0) ELSE 0 END),0) AS gt_365,
              COALESCE(SUM(i.total - COALESCE(p.paid,0)),0) AS row_total
-           FROM invoices i
+           FROM sales_invoices i
            JOIN billing_contacts bc ON bc.id = i.billing_contact_id
            LEFT JOIN (SELECT invoice_id, SUM(amount) as paid FROM invoice_payments GROUP BY invoice_id) p ON p.invoice_id = i.id
            WHERE i.tenant_id=$1 AND i.status NOT IN ('paid','cancelled') AND (i.total - COALESCE(p.paid,0)) > 0
@@ -97,7 +97,7 @@ export function salesDashboardRoutes(db: DatabaseClient) {
       const topCustomers = await db.withTenant(tenantId, (client) =>
         client.query(
           `SELECT bc.id, bc.name, SUM(i.total) AS amount, COUNT(i.id) AS invoice_count
-           FROM invoices i JOIN billing_contacts bc ON bc.id = i.billing_contact_id
+           FROM sales_invoices i JOIN billing_contacts bc ON bc.id = i.billing_contact_id
            WHERE i.tenant_id=$1 AND i.status = 'paid'
            GROUP BY bc.id, bc.name ORDER BY amount DESC LIMIT 5`,
           [tenantId]
@@ -108,7 +108,7 @@ export function salesDashboardRoutes(db: DatabaseClient) {
       const topDefaulters = await db.withTenant(tenantId, (client) =>
         client.query(
           `SELECT bc.id, bc.name, SUM(i.total - COALESCE(p.paid, 0)) AS amount, COUNT(i.id) AS invoice_count
-           FROM invoices i
+           FROM sales_invoices i
            LEFT JOIN (SELECT invoice_id, SUM(amount) as paid FROM invoice_payments GROUP BY invoice_id) p ON p.invoice_id = i.id
            JOIN billing_contacts bc ON bc.id = i.billing_contact_id
            WHERE i.tenant_id=$1 AND i.status IN ('overdue','partial')
@@ -123,7 +123,7 @@ export function salesDashboardRoutes(db: DatabaseClient) {
           `SELECT to_char(date_trunc('month', i.issue_date),'Mon') AS month,
                   COALESCE(SUM(i.total),0) AS invoiced,
                   COALESCE(SUM(COALESCE(p.paid, 0)),0) AS collected
-           FROM invoices i
+           FROM sales_invoices i
            LEFT JOIN (SELECT invoice_id, SUM(amount) as paid FROM invoice_payments GROUP BY invoice_id) p ON p.invoice_id = i.id
            WHERE i.tenant_id=$1 AND i.issue_date >= NOW() - INTERVAL '6 months'
            GROUP BY 1, date_trunc('month', i.issue_date)

@@ -991,6 +991,8 @@ export function voiceBotRoutes(db: DatabaseClient, eventBus: EventBus) {
       sipTrunkPassword:        z.string().optional(),
       sipTrunkNickname:        z.string().optional(),
       outboundTransport:       z.enum(['TCP', 'UDP']).optional(),
+      maxConcurrentCalls:      z.number().int().positive().optional().nullable(),
+      humanTransferDestination: z.string().optional().nullable(),
     });
 
     fastify.put('/config', { preHandler: requireRole('tenant_admin', 'super_admin') }, async (req, reply) => {
@@ -1003,6 +1005,16 @@ export function voiceBotRoutes(db: DatabaseClient, eventBus: EventBus) {
       }
       const body = ConfigSchema.parse(req.body);
 
+      // Licensing the Voice Bot module alone doesn't grant every provider —
+      // each one must be individually allocated to the tenant.
+      const entitledFeatures = ((req.tenant as any)?.entitled_features ?? []) as string[];
+      if (!entitledFeatures.includes(`voice_bot.provider.${body.provider}`)) {
+        return reply.code(402).send({
+          success: false,
+          error: { code: 'PROVIDER_NOT_LICENSED', message: `The '${body.provider}' voice bot provider is not enabled for your workspace. Contact your account manager to enable it.` },
+        });
+      }
+
       const [cfg] = await db.withTenant(req.tenant.id, async (c) => {
         const r = await c.query(
            `INSERT INTO voice_bot_configs
@@ -1014,9 +1026,9 @@ export function voiceBotRoutes(db: DatabaseClient, eventBus: EventBus) {
                llm_model, interruption_sensitivity, max_call_duration_sec, end_call_phrases,
                sip_trunk_provider, sip_trunk_number, bot_name,
                sip_trunk_username, sip_trunk_password, sip_trunk_nickname, outbound_transport,
-               guardrails, recording_enabled)
+               guardrails, recording_enabled, max_concurrent_calls, human_transfer_destination)
             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,
-                    $17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34)
+                    $17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36)
             ON CONFLICT (tenant_id, provider) DO UPDATE SET
               is_active             = EXCLUDED.is_active,
               assistant_id          = EXCLUDED.assistant_id,
@@ -1050,6 +1062,8 @@ export function voiceBotRoutes(db: DatabaseClient, eventBus: EventBus) {
               outbound_transport    = EXCLUDED.outbound_transport,
               guardrails            = EXCLUDED.guardrails,
               recording_enabled     = EXCLUDED.recording_enabled,
+              max_concurrent_calls  = EXCLUDED.max_concurrent_calls,
+              human_transfer_destination = EXCLUDED.human_transfer_destination,
               updated_at            = NOW()
             RETURNING *`,
            [
@@ -1087,6 +1101,8 @@ export function voiceBotRoutes(db: DatabaseClient, eventBus: EventBus) {
              body.outboundTransport       ?? 'TCP',
              body.guardrails              ?? null,
              body.recordingEnabled        ?? false,
+             body.maxConcurrentCalls      ?? null,
+             body.humanTransferDestination ?? null,
            ],
         );
         return r.rows;
