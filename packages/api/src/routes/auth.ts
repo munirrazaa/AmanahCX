@@ -209,6 +209,69 @@ export function authRoutes(db: DatabaseClient, redis: RedisClient) {
       if (!tenantSlug && host.endsWith(`.${platformDomain}`)) {
         tenantSlug = host.replace(`.${platformDomain}`, '');
       }
+
+      // ── Platform-level (Super Admin) login — no workspace ──────────────────
+      // Super Admin has always been blocked from every tenant-scoped route
+      // (tenant.middleware.ts), but until now the only super_admin account
+      // still lived inside a tenant row, requiring a workspace slug as a
+      // workaround. Tried first whenever no workspace was given — falls
+      // through to the normal tenant-required flow below if no match, so a
+      // regular tenant user typing their email with no slug still gets the
+      // ordinary "Workspace slug required" error, not a platform-login attempt.
+      if (!tenantSlug) {
+        const [platformUser] = await db.withSuperAdmin(async (client) => {
+          const r = await client.query(
+            `SELECT * FROM users WHERE tenant_id IS NULL AND email = $1 AND role = 'super_admin' AND is_active = true`,
+            [body.email],
+          );
+          return r.rows;
+        });
+
+        if (platformUser) {
+          const platformLockKey = LOCKOUT_KEY('platform', body.email);
+          const platformLockedUntil = await redis.get(platformLockKey);
+          if (platformLockedUntil) {
+            const remaining = Math.ceil((parseInt(platformLockedUntil, 10) - Date.now()) / 1000 / 60);
+            return reply.code(429).send({
+              success: false,
+              error: { code: 'ACCOUNT_LOCKED', message: `Account locked due to too many failed attempts. Try again in ${remaining} minute${remaining === 1 ? '' : 's'}.` },
+            });
+          }
+
+          const platformFailKey = FAIL_COUNT_KEY('platform', body.email);
+          const valid = await bcrypt.compare(body.password, platformUser.password_hash ?? '');
+
+          if (!valid) {
+            const failCount = await redis.incrby(platformFailKey, 1);
+            await redis.expire(platformFailKey, 30 * 60);
+            if (failCount >= LOGIN_MAX_ATTEMPTS) {
+              const lockBatch = Math.floor(failCount / LOGIN_MAX_ATTEMPTS);
+              const lockDuration = LOCKOUT_DURATION_S * lockBatch;
+              await redis.setex(platformLockKey, lockDuration, String(Date.now() + lockDuration * 1000));
+              return reply.code(429).send({ success: false, error: { code: 'ACCOUNT_LOCKED', message: `Too many failed attempts. Account locked for ${lockDuration / 60} minutes.` } });
+            }
+            return reply.code(401).send({ success: false, error: { code: 'INVALID_CREDENTIALS', message: 'Invalid credentials' } });
+          }
+
+          await redis.del(platformFailKey);
+          await db.withSuperAdmin(async (client) => {
+            await client.query('UPDATE users SET last_login_at = NOW() WHERE id = $1', [platformUser.id]);
+          }).catch((e) => { fastify.log.error({ err: e }, 'Failed to update last_login_at (platform)'); });
+
+          const jti = crypto.randomBytes(16).toString('hex');
+          const token = await reply.jwtSign({
+            sub: platformUser.id, tenantId: null, role: platformUser.role, plan: null,
+            department: null, department_type: null, sector: null,
+            permissions: {}, governed_departments: [], jti,
+          });
+          await recordSession(redis, platformUser.id, jti, req);
+
+          const { password_hash, ...safeUser } = platformUser;
+          return reply.send({ success: true, data: { token, user: { ...safeUser, effectivePermissions: {} }, tenant: null } });
+        }
+        // No matching platform account — fall through to the normal tenant-required flow.
+      }
+
       if (!tenantSlug) {
         return reply.code(400).send({ success: false, error: { code: 'TENANT_REQUIRED', message: 'Workspace slug required' } });
       }

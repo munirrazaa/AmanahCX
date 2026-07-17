@@ -3,7 +3,25 @@
 _Plain-language reference for workspace managers, agents, and admins.
 Updated automatically on every release. Each section covers one feature: who uses it, what it does, and exactly how to operate it._
 
-Last updated: 2026-07-17 (push 2)
+Last updated: 2026-07-17 (push 3)
+
+---
+
+## Super Admin Login — No Workspace Needed (updated — 2026-07-17)
+
+**Who uses it:** Super Admin only.
+
+**What changed:** the login page's Workspace field is no longer required for the Super Admin account — leave it blank and sign in with just email and password. A hint under the field says "Platform admin? Leave this blank." Everyone else (tenant admins, managers, agents, viewers) still needs their workspace name as before.
+
+## Super Admin Navigation — Moved to Sidebar (updated — 2026-07-17)
+
+**Who uses it:** Super Admin only.
+
+**What changed:** the row of section tabs (Dashboard, Tenants, Billing, Module Catalogue, etc.) used to sit at the top of the page and would overflow off-screen. It now lives in the left sidebar instead, same as every other role's navigation.
+
+## Role Testing — All 5 Access Levels Confirmed (2026-07-17)
+
+Every access level — Super Admin, Tenant Admin, Manager, Agent, Viewer — has now been checked across all 8 workspaces. Three backend errors were found and fixed during this pass (team performance reports, and two Super Admin billing reports were crashing) — all now working. A few longer-standing access-design questions remain open for your decision (see the audit report you already have) and are unaffected by this push.
 
 ---
 

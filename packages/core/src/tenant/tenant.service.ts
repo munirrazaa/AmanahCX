@@ -141,7 +141,11 @@ export class TenantService {
     const tenant = await this.findById(tenantId);
     if (!tenant) throw new Error('Tenant not found');
 
-    const limits = tenant.settings.limits as Record<string, number>;
+    // Older tenants (created before per-tenant limits were persisted, or never
+    // through updatePlan()) have no settings.limits — fall back to their plan's
+    // defaults instead of crashing. Root-caused 2026-07-17: 7 of 8 remaining
+    // tenants had no settings.limits, breaking outbound voice calling for all of them.
+    const limits = (tenant.settings.limits as Record<string, number>) ?? PLAN_LIMITS[tenant.plan as Plan] ?? PLAN_LIMITS.free;
     const limit = limits[metric] ?? 0;
     if (limit === -1) return { allowed: true, current: 0, limit: -1 }; // unlimited
 

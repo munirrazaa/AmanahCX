@@ -828,7 +828,7 @@ export function analyticsRoutes(db: DatabaseClient) {
         if (reporteeId) {
           userIds = [reporteeId];
         } else {
-          const hierarchyIds = await getHierarchyUserIds(client, userId, role, tenantId);
+          const hierarchyIds = await getHierarchyUserIds(client, userId, role, req.tenant.id);
           // For non-admins, hierarchyIds only contains reports; add self so they always see own data
           const isAdmin = ['tenant_admin', 'super_admin'].includes(role);
           userIds = isAdmin ? hierarchyIds : [userId, ...hierarchyIds.filter(id => id !== userId)];
@@ -1026,7 +1026,7 @@ export function analyticsRoutes(db: DatabaseClient) {
         if (reporteeId) {
           ids = [reporteeId];
         } else {
-          const hierarchyIds = await getHierarchyUserIds(client, userId, role, tenantId);
+          const hierarchyIds = await getHierarchyUserIds(client, userId, role, req.tenant.id);
           ids = isAdmin ? hierarchyIds : [userId, ...hierarchyIds.filter((id: string) => id !== userId)];
         }
         if (ids.length === 0) return [];

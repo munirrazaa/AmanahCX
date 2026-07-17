@@ -1,10 +1,10 @@
 import React from 'react';
-import { BrowserRouter, Routes, Route, Navigate, NavLink } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, NavLink, Link, useSearchParams } from 'react-router-dom';
 import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
 import {
   LayoutDashboard, Users, Building2, TrendingUp, Phone,
   CheckSquare, BarChart3, Settings as SettingsIcon, Zap, Shield,
-  LogOut, CreditCard, BarChart2, LifeBuoy, List, Clock, Mail, Bot,
+  LogOut, CreditCard, BarChart2, LifeBuoy, List, Clock, Mail, Bot, Package,
   FileText, Layers, MessageCircle, Key, Bell, Lock, ChevronDown, ChevronRight,
   FileSpreadsheet, ShoppingCart, BookOpen, Tag, MapPin,
 } from 'lucide-react';
@@ -165,6 +165,50 @@ function AgentStatusPicker({ isTenantAdmin, isSuperAdmin }: { isTenantAdmin: boo
   );
 }
 
+// ── Super Admin's own section nav — lives in the sidebar (see note above) ──
+// Uses ?tab=<key> on /super-admin rather than separate routes, matching how
+// SuperAdmin.tsx already tracked activeTab (previously local useState, now
+// lifted into the URL so the sidebar and page agree on what's selected).
+const SUPER_ADMIN_NAV = [
+  { key: 'dashboard',  label: 'Dashboard',        icon: BarChart3    },
+  { key: 'tenants',    label: 'Tenants',          icon: Building2    },
+  { key: 'billing',    label: 'Billing',          icon: TrendingUp   },
+  { key: 'catalogue',  label: 'Module Catalogue', icon: Package      },
+  { key: 'orders',     label: 'Tenant Orders',    icon: ShoppingCart },
+  { key: 'roles',      label: 'Sub-Admin Roles',  icon: Shield       },
+  { key: 'sub-admins', label: 'Sub-Admins',       icon: Users        },
+  { key: 'reports',    label: 'Reports',          icon: BarChart2    },
+  { key: 'alerts',     label: 'Alerts',           icon: Bell         },
+  { key: 'settings',   label: 'Settings',         icon: Lock         },
+] as const;
+
+function SuperAdminSidebarNav() {
+  const [searchParams] = useSearchParams();
+  const activeTab = searchParams.get('tab') ?? 'dashboard';
+  return (
+    <div className="space-y-0.5">
+      <p className="px-3 mb-1 text-[10px] font-bold text-brand-300/60 uppercase tracking-widest">Platform</p>
+      {SUPER_ADMIN_NAV.map(({ key, label, icon: Icon }) => {
+        const isActive = activeTab === key;
+        return (
+          <Link key={key} to={`/super-admin?tab=${key}`}
+            className={`flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm transition-all ${
+              isActive ? 'text-white font-semibold' : 'text-white/60 hover:text-white hover:bg-white/10'
+            }`}
+            style={isActive ? {
+              background: 'linear-gradient(135deg, rgba(41,171,226,0.25) 0%, rgba(77,139,60,0.15) 100%)',
+              borderLeft: '2px solid #29ABE2',
+            } : {}}
+          >
+            <Icon className="w-4 h-4 shrink-0" />
+            {label}
+          </Link>
+        );
+      })}
+    </div>
+  );
+}
+
 function Sidebar() {
   const { user, tenant, logout } = useAuthStore();
   const isSuperAdmin  = useIsSuperAdmin();
@@ -316,6 +360,11 @@ function Sidebar() {
           ><LayoutDashboard className="w-4 h-4 shrink-0" />Dashboard</NavLink>
         )}
 
+        {/* ── Super Admin's own sections — was a horizontally-scrolling tab bar
+            crammed into the page header, leaving this entire sidebar empty.
+            Moved here 2026-07-17 so it's actually usable and uses the space. ── */}
+        {isSuperAdmin && <SuperAdminSidebarNav />}
+
         {/* ── Operational staff module nav ─────────────────────────── */}
         {!isTenantAdmin && modules.map((mod) => (
           <div key={mod.id}>
@@ -429,26 +478,6 @@ function Sidebar() {
 
       {/* ── Footer: gated admin links + user chip ─────────────────── */}
       <div className="px-2 py-3 border-t border-white/10 space-y-0.5">
-
-        {/* Super Admin — only for super_admin role */}
-        {isSuperAdmin && (
-          <>
-            <NavLink to="/super-admin"
-              className={({ isActive }) =>
-                `flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm transition-all ${
-                  isActive ? 'text-white font-semibold' : 'text-white/60 hover:text-white hover:bg-white/10'
-                }`
-              }
-              style={({ isActive }) => isActive ? {
-                background: 'rgba(245,197,24,0.15)', borderLeft: '2px solid #F5C518',
-              } : {}}
-            >
-              <Shield className="w-4 h-4" />
-              Super Admin
-            </NavLink>
-          </>
-        )}
-
 
         {/* Roles — admins only (not tenant admin, they have it in their own sidebar; not super admin, they have no workspace) */}
         {isAdmin && !isTenantAdmin && !isSuperAdmin && (

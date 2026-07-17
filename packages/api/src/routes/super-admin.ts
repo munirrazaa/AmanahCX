@@ -1767,7 +1767,8 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
       const rows = await db.withSuperAdmin(async (client) => {
         const r = await client.query(`
           SELECT
-            pi.id, pi.invoice_number, pi.status, pi.amount, pi.amount_paid,
+            pi.id, pi.invoice_number, pi.status, pi.amount,
+            COALESCE(pp_sum.amount_paid, 0) AS amount_paid,
             pi.currency, pi.due_date, pi.period_start, pi.period_end,
             pi.created_at, pi.tenant_id,
             t.name AS tenant_name, t.slug AS tenant_slug,
@@ -1777,12 +1778,17 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
               ELSE 'not_due'
             END AS due_status,
             CASE
-              WHEN COALESCE(pi.amount_paid, 0) = 0 THEN 'unpaid'
-              WHEN pi.amount_paid >= pi.amount THEN 'paid'
+              WHEN COALESCE(pp_sum.amount_paid, 0) = 0 THEN 'unpaid'
+              WHEN pp_sum.amount_paid >= pi.amount THEN 'paid'
               ELSE 'partial'
             END AS payment_status
           FROM platform_invoices pi
           LEFT JOIN tenants t ON t.id = pi.tenant_id
+          LEFT JOIN (
+            SELECT invoice_id, SUM(amount) AS amount_paid
+            FROM platform_payments
+            GROUP BY invoice_id
+          ) pp_sum ON pp_sum.invoice_id = pi.id
           WHERE ($1::date IS NULL OR pi.created_at >= $1::date)
             AND ($2::date IS NULL OR pi.created_at <= $2::date + interval '1 day')
             AND ($3::uuid IS NULL OR pi.tenant_id = $3::uuid)
@@ -1799,7 +1805,7 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
       const rows = await db.withSuperAdmin(async (client) => {
         const r = await client.query(`
           SELECT
-            pp.id, pp.amount, pp.currency, pp.payment_date, pp.payment_method,
+            pp.id, pp.amount, pp.currency, pp.payment_date, pp.method AS payment_method,
             pp.reference, pp.notes, pp.created_at,
             pi.invoice_number, t.name AS tenant_name, t.slug AS tenant_slug
           FROM platform_payments pp
@@ -1816,22 +1822,21 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
 
     // GET /super-admin/reports/audit — cross-tenant audit log
     fastify.get('/reports/audit', async (req, reply) => {
-      const { limit = '200', entity, action } = req.query as Record<string, string>;
+      const { limit = '200', action } = req.query as Record<string, string>;
       const rows = await db.withSuperAdmin(async (client) => {
         const r = await client.query(`
           SELECT
-            tal.id, tal.action, tal.entity_type, tal.entity_id,
+            tal.id, tal.action, tal.ticket_id,
             tal.old_value, tal.new_value, tal.created_at,
             u.name  AS actor_name,  u.email AS actor_email, u.role AS actor_role,
             t.name  AS tenant_name, t.slug  AS tenant_slug
           FROM ticket_audit_log tal
           LEFT JOIN users   u ON u.id = tal.actor_id
           LEFT JOIN tenants t ON t.id = tal.tenant_id
-          WHERE ($1::text IS NULL OR tal.entity_type = $1)
-            AND ($2::text IS NULL OR tal.action = $2)
+          WHERE ($1::text IS NULL OR tal.action = $1)
           ORDER BY tal.created_at DESC
-          LIMIT $3
-        `, [entity || null, action || null, parseInt(limit, 10)]);
+          LIMIT $2
+        `, [action || null, parseInt(limit, 10)]);
         return r.rows;
       });
       return reply.send({ success: true, data: rows });

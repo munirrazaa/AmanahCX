@@ -7,6 +7,7 @@
  */
 
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Shield, Plus, Search, MoreVertical, Users, TrendingUp,
@@ -3737,7 +3738,11 @@ export function SuperAdmin() {
   if (!isSuperAdmin) return <Navigate to="/dashboard" replace />;
 
   const qc = useQueryClient();
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'tenants' | 'roles' | 'sub-admins' | 'billing' | 'reports' | 'catalogue' | 'orders' | 'settings' | 'alerts'>('dashboard');
+  // The tab list itself now lives in the sidebar (App.tsx's SuperAdminSidebarNav) —
+  // reading it from the URL instead of local state keeps the two in sync.
+  const [searchParams] = useSearchParams();
+  const activeTab = (searchParams.get('tab') ?? 'dashboard') as
+    'dashboard' | 'tenants' | 'roles' | 'sub-admins' | 'billing' | 'reports' | 'catalogue' | 'orders' | 'settings' | 'alerts';
   const [search, setSearch] = useState('');
   const [planFilter, setPlanFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -3784,31 +3789,9 @@ export function SuperAdmin() {
             </div>
           )}
         </div>
-        {/* Tabs */}
-        <div className="flex gap-1">
-          {([
-            { key: 'dashboard',  label: 'Dashboard',        icon: BarChart3   },
-            { key: 'tenants',    label: 'Tenants',          icon: Building2   },
-            { key: 'billing',    label: 'Billing',          icon: TrendingUp  },
-            { key: 'catalogue',  label: 'Module Catalogue', icon: Package        },
-            { key: 'orders',     label: 'Tenant Orders',    icon: ShoppingCart   },
-            { key: 'roles',      label: 'Sub-Admin Roles',  icon: Shield         },
-            { key: 'sub-admins', label: 'Sub-Admins',       icon: Users       },
-            { key: 'reports',    label: 'Reports',          icon: BarChart2   },
-            { key: 'alerts',     label: 'Alerts',           icon: Bell        },
-            { key: 'settings',   label: 'Settings',         icon: Lock        },
-          ] as const).map(({ key, label, icon: Icon }) => (
-            <button key={key} onClick={() => setActiveTab(key)}
-              className={`flex items-center gap-1.5 px-4 py-2 text-sm rounded-lg transition-colors ${
-                activeTab === key
-                  ? 'bg-brand-50 text-brand-700 font-semibold'
-                  : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
-              }`}>
-              <Icon className="w-4 h-4" />
-              {label}
-            </button>
-          ))}
-        </div>
+        {/* Section tabs used to live here as a horizontally-scrolling bar that
+            overflowed off-screen — moved to the sidebar (App.tsx's
+            SuperAdminSidebarNav), which was otherwise sitting empty. 2026-07-17. */}
       </div>
 
       <div className="flex-1 overflow-y-auto p-6 space-y-6">

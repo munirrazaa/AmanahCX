@@ -3,6 +3,42 @@ _Most recent at top. Treated as the primary record for development tracking._
 
 ---
 
+## Change Log - 2026-07-17 (Push 3) — Full 5-role audit across all 8 tenants; 4 crash fixes; Super Admin sidebar nav
+
+### Context
+Full-feature audit extended to cover all 5 role levels (super_admin, tenant_admin, manager, agent, viewer) across all 8 tenants, not just `demo`. No `viewer` account existed anywhere — created one temporarily on `demo`, tested it, then deleted it. Also temporarily created one manager + one agent account on each of the 6 single-admin tenants to confirm role-based access works tenant-wide, then deleted all 12 afterward. No test data left behind.
+
+### Fixed
+
+**`/analytics/team-summary` and `/analytics/team-export` crashed for every role**
+- Referenced an undefined `tenantId` variable instead of `req.tenant.id` whenever called without a `reporteeId` param — a plain `ReferenceError`, not a permission issue. Affected all 5 roles identically. Fixed and re-verified live with both a viewer and a manager account. File: `packages/api/src/routes/analytics.ts`.
+
+**`/super-admin/reports/audit` crashed (`column tal.entity_type does not exist`)**
+- The query assumed `ticket_audit_log` had generic `entity_type`/`entity_id` columns; the table is ticket-scoped only (`ticket_id`). Rewrote the query to use the real columns. File: `packages/api/src/routes/super-admin.ts`.
+
+**`/super-admin/reports/payments` and `/super-admin/reports/invoices` crashed (wrong column names)**
+- `platform_payments.method` was queried as `payment_method`; `platform_invoices` has no `amount_paid` column at all (only `paid_at`/`status`). Fixed to aggregate paid amounts from `platform_payments`, matching the pattern the working invoice-list endpoint already used. File: `packages/api/src/routes/super-admin.ts`.
+
+**Outbound voice calling crashed for 7 of 8 tenants (`Cannot read properties of undefined (reading 'voiceMinutesPerMonth')`)**
+- `checkLimit()` read `tenant.settings.limits[metric]` with no fallback when `settings.limits` was missing from the tenant row — true for 7 of 8 tenants. Now falls back to the tenant's plan defaults (`PLAN_LIMITS[tenant.plan]`). File: `packages/core/src/tenant/tenant.service.ts`.
+
+### Added
+
+**Super Admin platform-level login (workspace-blank)**
+- The one `super_admin` account no longer needs a workspace slug typed in — it's now a real platform-level account (`tenant_id = NULL`), not a row inside the `demo` tenant. Migration `071_super_admin_no_tenant.sql`. Login page now shows "Platform admin? Leave this blank." hint instead of requiring a workspace.
+
+**Super Admin sidebar navigation**
+- Super Admin's section tabs (Dashboard, Tenants, Billing, Module Catalogue, etc.) were a horizontally-scrolling bar crammed into the page header that overflowed off-screen. Moved into the sidebar (previously empty for this role), driven by a `?tab=` URL param so the sidebar and page stay in sync. Files: `packages/frontend/src/App.tsx`, `packages/frontend/src/pages/SuperAdmin.tsx`.
+
+### Flagged — needs a decision, not fixed
+
+- **Invoices unreachable by any role**: no base role has `invoices:read: true` except `tenant_admin`, which is separately blocked from all operational data by design (`ADMIN_NO_OPERATIONS`).
+- **Contact deletion unreachable by any role**: same overlapping-restriction pattern — a hardcoded `requireRole('super_admin','tenant_admin')` gate on the DELETE route, combined with `ADMIN_NO_OPERATIONS` blocking tenant_admin on the same route.
+- **Legacy vs. current permission-schema drift**: some older seeded accounts (e.g. Haier's `amir.agent@haier-electronics.com`) store `permissions` as string-enum values (`{"tickets":"none"}`) instead of the current boolean-flag format (`{"tickets:read": true}`), causing inconsistent effective access depending on when the account was created.
+- **Viewer's permission map vs. actual access mismatch**: a viewer account's JWT reports `analytics: "view"`, but the backend blocks all analytics access by role rank (viewer is below the minimum role for `analytics:read`) — the permission map overpromises what the role can actually do.
+
+---
+
 ## Change Log - 2026-07-17 (Push 2) — Shared SMS gateway, entitlement-check fix, voice bot cost tracking, Nadia hold-message
 
 ### Fixed

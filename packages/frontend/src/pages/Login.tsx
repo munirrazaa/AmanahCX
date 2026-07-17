@@ -17,7 +17,10 @@ export function LoginPage() {
   const [form, setForm] = useState({
     email: remembered?.email ?? '',
     password: '',
-    tenantSlug: remembered?.tenantSlug ?? 'vextria',
+    // No hardcoded default — a blank workspace is a valid state now (platform
+    // admin login). Previously defaulted to 'vextria', forcing every platform
+    // admin to clear it manually before every login.
+    tenantSlug: remembered?.tenantSlug ?? '',
   });
   const [remember, setRemember] = useState(!!remembered);
   const [showPw, setShowPw] = useState(false);
@@ -147,7 +150,6 @@ export function LoginPage() {
                       value={form.tenantSlug}
                       onChange={(e) => setForm({ ...form, tenantSlug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '') })}
                       className="flex-1 px-3 py-2.5 text-sm bg-transparent text-white placeholder-white/25 outline-none"
-                      required
                     />
                     <span
                       className="px-3 flex items-center text-xs border-l"
@@ -156,6 +158,9 @@ export function LoginPage() {
                       .vivid.app
                     </span>
                   </div>
+                  {/* Platform admins have no workspace of their own — leaving this
+                      blank routes the login to a platform-level account instead. */}
+                  <p className="text-[11px] text-white/30 mt-1.5">Platform admin? Leave this blank.</p>
                 </div>
               ) : (
                 <div

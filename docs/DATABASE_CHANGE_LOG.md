@@ -3,6 +3,12 @@ _Most recent at top. Tracks structural and security-relevant changes to the live
 
 ---
 
+## 2026-07-17 (4) — users.tenant_id nullable + platform-email uniqueness (migration 071)
+
+- **Column constraint change.** `ALTER TABLE users ALTER COLUMN tenant_id DROP NOT NULL`. The one `super_admin` account was previously a row inside the `demo` tenant, requiring a workspace slug as a login workaround despite being a platform-level role by design (blocked from every tenant-scoped route already). Its `tenant_id` is now `NULL`, making it a real platform account.
+- **New index.** `CREATE UNIQUE INDEX users_platform_email_uniq ON users(email) WHERE tenant_id IS NULL` — standard SQL treats each `NULL` as distinct, so the existing `UNIQUE(tenant_id, email)` no longer guards against duplicate platform-admin emails once `tenant_id` can be `NULL`; this partial index restores that guarantee for tenantless users.
+- Confirmed safe before applying: exactly 1 `super_admin` row existed; the `demo` tenant's other 8 operational users were untouched.
+
 ## 2026-07-17 (3) — voice_bot_quotas.cost_per_minute (migration 070)
 
 - **New column.** `ALTER TABLE voice_bot_quotas ADD COLUMN cost_per_minute NUMERIC(10,4) NOT NULL DEFAULT 0`. Backs the new Super Admin monthly voice-bot cost report — cost is computed live from `voice_bot_calls.duration_seconds × cost_per_minute`, never stored as a running total, matching the same pattern migration 059 established for minutes. Applied via the `postgres` connection; no ownership transfer needed since `voice_bot_quotas` was already owned by `postgres` with `crm_app` holding table-level grants from when it was originally created (confirmed the app's own runtime connection can read/write the new column without any GRANT changes).
