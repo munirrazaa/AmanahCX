@@ -33,7 +33,6 @@ import asyncio
 import json
 import os
 
-import httpx
 from dotenv import load_dotenv
 from livekit import agents, rtc
 from livekit.agents import (
@@ -49,6 +48,7 @@ from livekit.plugins import openai, silero, upliftai
 
 from audio_speed import time_stretch
 from config import AgentSettings, build_system_prompt, load_settings
+from crm_client import get_client
 from stt_whisper import WhisperSTT
 from recording import start_recording, CONSENT_LINE_UR
 
@@ -177,19 +177,7 @@ class NadiaAgent(Agent):
         Args:
             question: The caller's question, in your own words.
         """
-        base_url = os.environ["CRM_API_BASE_URL"]
-        secret = os.environ.get("LIVEKIT_INGEST_SECRET", "")
-        try:
-            async with httpx.AsyncClient(timeout=5) as client:
-                resp = await client.get(
-                    f"{base_url}/api/v1/voice-bot/knowledge-base/search",
-                    params={"tenantId": self.tenant_id, "q": question},
-                    headers={"Authorization": f"Bearer {secret}"} if secret else {},
-                )
-                resp.raise_for_status()
-                data = resp.json().get("data")
-        except Exception:
-            return "No match found — continue normally."
+        data = await get_client().search_knowledge_base(self.tenant_id, question)
         if not data:
             return "No match found — continue normally."
         return f"Found in knowledge base: {data['content']}"
@@ -243,30 +231,22 @@ class NadiaAgent(Agent):
         # confuse the turn-taking state.
         context.session.say(HOLD_LINE, allow_interruptions=False)
 
-        base_url = os.environ["CRM_API_BASE_URL"]
-        secret = os.environ.get("LIVEKIT_INGEST_SECRET", "")
-        async with httpx.AsyncClient(timeout=10) as client:
-            resp = await client.post(
-                f"{base_url}/api/v1/voice-bot/livekit/complaint",
-                params={"tenantId": self.tenant_id},
-                headers={"Authorization": f"Bearer {secret}"} if secret else {},
-                json={
-                    "reporterName": reporter_name,
-                    "reporterPhone": reporter_phone,
-                    "category": category,
-                    "priority": priority,
-                    "subject": subject,
-                    "description": description,
-                    "fraudAmount": fraud_amount,
-                    "reporterEmail": reporter_email,
-                    "reporterNic": reporter_nic,
-                    "reporterAddress": reporter_address,
-                    "reporterCity": reporter_city,
-                    "callId": self.call_id,
-                },
-            )
-            resp.raise_for_status()
-            data = resp.json()
+        data = await get_client().create_ticket(
+            self.tenant_id, self.call_id,
+            {
+                "reporterName": reporter_name,
+                "reporterPhone": reporter_phone,
+                "category": category,
+                "priority": priority,
+                "subject": subject,
+                "description": description,
+                "fraudAmount": fraud_amount,
+                "reporterEmail": reporter_email,
+                "reporterNic": reporter_nic,
+                "reporterAddress": reporter_address,
+                "reporterCity": reporter_city,
+            },
+        )
         return f"Ticket {data['ticketNumber']} created."
 
 
@@ -379,22 +359,10 @@ async def entrypoint(ctx: agents.JobContext) -> None:
     recording = {"url": None}
 
     async def _report_call_ended() -> None:
-        base_url = os.environ["CRM_API_BASE_URL"]
-        secret = os.environ.get("LIVEKIT_INGEST_SECRET", "")
-        payload = {
-            "voiceCallId": call_id,
-            "transcript": "\n".join(transcript_parts),
-        }
-        if recording["url"]:
-            payload["recordingUrl"] = recording["url"]
         try:
-            async with httpx.AsyncClient(timeout=10) as client:
-                await client.post(
-                    f"{base_url}/api/v1/voice-bot/livekit/call-ended",
-                    params={"tenantId": tenant_id},
-                    headers={"Authorization": f"Bearer {secret}"} if secret else {},
-                    json=payload,
-                )
+            await get_client().call_ended(
+                tenant_id, call_id, "\n".join(transcript_parts), recording["url"],
+            )
             dbg("call-ended report sent")
         except Exception as e:
             dbg(f"call-ended report FAILED: {type(e).__name__}: {e}")
@@ -452,22 +420,18 @@ async def entrypoint(ctx: agents.JobContext) -> None:
             end the call, relying on the ticket for the follow-up.
             """
             try:
-                async with httpx.AsyncClient(timeout=10) as client:
-                    await client.post(
-                        f"{base_url}/api/v1/voice-bot/livekit/complaint",
-                        params={"tenantId": tenant_id},
-                        headers={"Authorization": f"Bearer {secret}"} if secret else {},
-                        json={
-                            "priority": "urgent",
-                            "category": "other",
-                            "subject": subject,
-                            "description": (
-                                description + "\n\nConversation so far:\n" + "\n".join(transcript_parts)
-                                if transcript_parts else description
-                            ),
-                            "callId": call_id,
-                        },
-                    )
+                await get_client().create_ticket(
+                    tenant_id, call_id,
+                    {
+                        "priority": "urgent",
+                        "category": "other",
+                        "subject": subject,
+                        "description": (
+                            description + "\n\nConversation so far:\n" + "\n".join(transcript_parts)
+                            if transcript_parts else description
+                        ),
+                    },
+                )
             except Exception as e:
                 dbg(f"handoff ticket creation FAILED: {type(e).__name__}: {e}")
 
@@ -497,17 +461,8 @@ async def entrypoint(ctx: agents.JobContext) -> None:
         # VPS's hardware capacity is already full. Checked BEFORE the
         # minutes gate: if there's no room to run the call at all, there's
         # no point spending a minutes-status lookup on it.
-        base_url = os.environ["CRM_API_BASE_URL"]
-        secret = os.environ.get("LIVEKIT_INGEST_SECRET", "")
         try:
-            async with httpx.AsyncClient(timeout=5) as client:
-                resp = await client.post(
-                    f"{base_url}/api/v1/voice-bot/livekit/call-started",
-                    params={"tenantId": tenant_id},
-                    headers={"Authorization": f"Bearer {secret}"} if secret else {},
-                    json={"callId": call_id},
-                )
-                concurrency = resp.json() if resp.status_code == 200 else {"overCapacity": False}
+            concurrency = await get_client().call_started(tenant_id, call_id)
         except Exception as e:
             dbg(f"call-started/concurrency check FAILED (continuing call): {type(e).__name__}: {e}")
             concurrency = {"overCapacity": False}
@@ -529,13 +484,7 @@ async def entrypoint(ctx: agents.JobContext) -> None:
         # follow-up, not a live phone transfer — real live transfer to an
         # available agent is a separate, not-yet-built feature.)
         try:
-            async with httpx.AsyncClient(timeout=5) as client:
-                resp = await client.get(
-                    f"{base_url}/api/v1/voice-bot/livekit/minutes-status",
-                    params={"tenantId": tenant_id},
-                    headers={"Authorization": f"Bearer {secret}"} if secret else {},
-                )
-                status = resp.json() if resp.status_code == 200 else {"exhausted": False}
+            status = await get_client().get_minutes_status(tenant_id)
         except Exception as e:
             dbg(f"minutes-status check FAILED (continuing call): {type(e).__name__}: {e}")
             status = {"exhausted": False}

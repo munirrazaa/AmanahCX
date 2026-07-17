@@ -5,11 +5,9 @@ Config screen — the same way you'd set language/tone/speed/voice in the
 Retell AI or Vapi dashboard, except here the CRM *is* the dashboard.
 """
 
-import os
 from dataclasses import dataclass, field
 
-import httpx
-
+from crm_client import get_client
 from prompts import HBL_MFB_SYSTEM_PROMPT
 
 
@@ -53,24 +51,13 @@ class AgentSettings:
 
 
 async def load_settings(tenant_id: str) -> AgentSettings:
-    """Fetch the tenant's 'livekit' voice_bot_configs row from the CRM API.
+    """Fetch the tenant's bot settings via the active CRM connector
+    (see crm_client.py — AmanahCX today, any other CRM's adapter later).
 
     Falls back to defaults if the tenant hasn't configured one yet, so a
     fresh tenant can still receive calls while an admin sets things up.
     """
-    base_url = os.environ["CRM_API_BASE_URL"]
-    async with httpx.AsyncClient(timeout=10) as client:
-        try:
-            resp = await client.get(
-                f"{base_url}/api/v1/voice-bot/config",
-                headers={"X-Tenant-Id": tenant_id},
-            )
-            resp.raise_for_status()
-            configs = resp.json()["data"]
-        except (httpx.HTTPError, KeyError):
-            return AgentSettings()
-
-    cfg = next((c for c in configs if c.get("provider") == "livekit"), None)
+    cfg = await get_client().get_config(tenant_id)
     if not cfg:
         return AgentSettings()
 
