@@ -3,16 +3,6 @@ _Most recent at top. Tracks structural and security-relevant changes to the live
 
 ---
 
-## 2026-07-17 (2) — users.notification_preferences (migration 069)
-
-- **New column.** `ALTER TABLE users ADD COLUMN notification_preferences JSONB NOT NULL DEFAULT '{}'`. Backs the two Notification-preference screens (Settings → Notifications, My Settings → Notifications), which previously had nowhere to save to — the Save button had no backend at all. Both screens write under their own top-level JSON key; the `PATCH` endpoint merges rather than replaces, so they don't clobber each other.
-
-## 2026-07-17 (1) — platform_invoices + platform_payments (migration 068)
-
-- **New tables, no ALTERs.** Backs Super Admin's own Billing tab (`/super-admin/platform-invoices` route), which has existed in code but had no table to write to — every request 500'd (`relation "platform_invoices" does not exist`). `platform_invoices` (one row per invoice AmanahCX sends a tenant), `platform_payments` (payments recorded against those invoices). RLS enabled, bypass-only policy (`current_setting('app.bypass_rls') = 'on'`) — this data has no tenant-scoped read path at all, only Super Admin's own routes ever touch it. Applied via the `postgres` superuser connection, ownership transferred to `crm_app` immediately after (per the established rule for tables created outside the app's own migration runner). Live-verified: created and deleted a real test invoice through the UI.
-
----
-
 ## 2026-07-13 (5) — voice_bot_configs: sip_trunk_username/password/nickname/outbound_transport (migration 060)
 
 - `ALTER TABLE` adding 4 columns to match the standard SIP-connect dialog field set. Applied

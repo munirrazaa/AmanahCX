@@ -211,7 +211,10 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
     fastify.get('/tenants', async (req, reply) => {
       const QuerySchema = z.object({
         page:     z.coerce.number().int().min(1).default(1),
-        pageSize: z.coerce.number().int().min(1).max(100).default(25),
+        // 500 (not 100) — several picker/filter dropdowns across Super Admin (Reports,
+        // Alerts, Sub-Admins tenant filters) fetch the full tenant list with pageSize=200
+        // to populate a <select>, not a paginated table; 100 broke them with a 400.
+        pageSize: z.coerce.number().int().min(1).max(500).default(25),
         search:   z.string().max(100).optional(),
         plan:     z.enum(['free', 'starter', 'professional', 'enterprise']).optional(),
         status:   z.enum(['active', 'trial', 'suspended', 'cancelled']).optional(),

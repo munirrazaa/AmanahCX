@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { User, Tenant } from '@crm/shared';
 import { api } from '../services/api';
+import { queryClient } from '../App';
 
 interface AuthState {
   user: User | null;
@@ -23,6 +24,10 @@ export const useAuthStore = create<AuthState>()(
       isAuthenticated: false,
 
       login: async (email, password, tenantSlug) => {
+        // Wipe any cached queries from a previous account before loading the new one —
+        // otherwise stale data briefly renders under the new account (e.g. tenant admin's
+        // CRM data flashing in Super Admin's sidebar).
+        queryClient.clear();
         const { data } = await api.post('/auth/login', { email, password, tenantSlug });
         const { token, user, tenant } = data.data;
         api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
@@ -36,6 +41,7 @@ export const useAuthStore = create<AuthState>()(
         // Best-effort server-side logout (invalidate token in Redis blocklist)
         api.post('/auth/logout').catch(() => {});
         set({ user: null, tenant: null, token: null, isAuthenticated: false });
+        queryClient.clear();
       },
 
       setToken: (token: string) => {

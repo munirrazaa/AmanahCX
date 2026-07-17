@@ -194,11 +194,19 @@ export function settingsRoutes(db: DatabaseClient, redis: RedisClient) {
       const sets: string[] = [];
       const vals: unknown[] = [];
       let i = 1;
-      if (body.name)       { sets.push(`name = $${i++}`);                          vals.push(body.name); }
-      if (body.domain)     { sets.push(`custom_domain = $${i++}`);                 vals.push(body.domain); }
-      if (body.timezone)   { sets.push(`settings = jsonb_set(COALESCE(settings,'{}'), '{timezone}', $${i++}::jsonb)`); vals.push(JSON.stringify(body.timezone)); }
-      if (body.dateFormat) { sets.push(`settings = jsonb_set(COALESCE(settings,'{}'), '{dateFormat}', $${i++}::jsonb)`); vals.push(JSON.stringify(body.dateFormat)); }
-      if (body.currency)   { sets.push(`settings = jsonb_set(COALESCE(settings,'{}'), '{currency}', $${i++}::jsonb)`); vals.push(JSON.stringify(body.currency)); }
+      if (body.name)       { sets.push(`name = $${i++}`);          vals.push(body.name); }
+      if (body.domain)     { sets.push(`custom_domain = $${i++}`); vals.push(body.domain); }
+
+      // All settings-jsonb patches must fold into ONE "settings = ..." assignment —
+      // Postgres rejects an UPDATE that assigns the same column twice (42601).
+      const settingsPatch: Record<string, unknown> = {};
+      if (body.timezone)   settingsPatch.timezone   = body.timezone;
+      if (body.dateFormat) settingsPatch.dateFormat = body.dateFormat;
+      if (body.currency)   settingsPatch.currency   = body.currency;
+      if (Object.keys(settingsPatch).length) {
+        sets.push(`settings = COALESCE(settings,'{}') || $${i++}::jsonb`);
+        vals.push(JSON.stringify(settingsPatch));
+      }
       if (!sets.length) return reply.send({ success: true });
 
       vals.push(req.tenant.id);
@@ -915,6 +923,33 @@ export function settingsRoutes(db: DatabaseClient, redis: RedisClient) {
         );
       });
       return reply.send({ success: true, data: { status } });
+    });
+
+    // GET /api/v1/settings/notification-preferences — per-user notification toggle state.
+    // Two different screens write here under their own top-level key (App.tsx's
+    // NotificationsPage uses category objects like "tickets"/"contacts"; PersonalSettings.tsx's
+    // NotificationSettings uses a flat "personal" object) — the backend stores whatever
+    // shape it's given as opaque JSON per top-level key.
+    fastify.get('/notification-preferences', async (req, reply) => {
+      const [row] = await db.withTenant(req.tenant.id, async (client) => {
+        const r = await client.query(`SELECT notification_preferences FROM users WHERE id = $1 AND tenant_id = $2`, [req.user.sub, req.tenant.id]);
+        return r.rows;
+      });
+      return reply.send({ success: true, data: row?.notification_preferences ?? {} });
+    });
+
+    // PATCH /api/v1/settings/notification-preferences — shallow-merges the given top-level
+    // keys into the stored object (not a full replace), so the two screens above don't
+    // clobber each other's sections when saved independently.
+    fastify.patch('/notification-preferences', async (req, reply) => {
+      const body = z.record(z.string(), z.unknown()).parse(req.body);
+      await db.withTenant(req.tenant.id, async (client) => {
+        await client.query(
+          `UPDATE users SET notification_preferences = COALESCE(notification_preferences,'{}') || $1::jsonb WHERE id = $2 AND tenant_id = $3`,
+          [JSON.stringify(body), req.user.sub, req.tenant.id],
+        );
+      });
+      return reply.send({ success: true, data: body });
     });
 
     // GET /api/v1/settings/team/online — managers see who is online right now

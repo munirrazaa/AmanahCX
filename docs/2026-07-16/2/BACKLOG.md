@@ -11,13 +11,6 @@ _All ideas, pending work, and deferred items. Prioritised against enterprise rea
 
 ## 🔴 P1 — Critical (Do Now — blocks enterprise readiness)
 
-### 0d. Super Admin nav showed unreachable items + 4 other real bugs found in full toggle audit — FIXED
-- **Verdict:** Done ✅ — 2026-07-17
-- **Trigger:** user reported Super Admin "not able to save roles"; asked for a systematic audit so no toggle silently fails anywhere.
-- **Findings, all fixed:** wrong-role nav-visibility flag showing 4 dead-end Super Admin menu items (Roles/Integrations/Sales/notifications); Super Admin's Billing tab missing its database table entirely; a SQL bug that broke any workspace-settings save touching 2+ fields at once; a cross-account react-query cache leak on login/logout; Super Admin's tenant-picker dropdowns broken by a pageSize cap mismatch. Full detail in `CHANGE_LOG.md` (2026-07-17).
-- **Also found and fixed (not a bug, a missing feature dressed as one):** Notification Preferences and Active Sessions/Revoke were fully cosmetic screens with zero backend — built real ones for both, live-verified.
-- **Still open, not touched this pass:** items 0a/0b/0e below (agent-dashboard entitlement drift, three-entitlement-system consolidation, dashboard audit) remain as previously logged.
-
 ### 0c. Daily Vercel login "spinner that never stops" — ROOT CAUSE FOUND & FIXED
 - **Verdict:** Done ✅ — 2026-07-13, reproduced live with the user exactly as planned
 - **Root cause (two stacked problems):** (1) the axios response interceptor treated a 401 from `/auth/login` (wrong password) as "expired token" and fired the refresh flow; the refresh call's own 401 got queued behind itself inside the interceptor — a deadlock that left the login promise pending forever → infinite spinner instead of an error. The same deadlock froze the app for any user whose session expired. (2) The user's password genuinely WAS wrong — the 2026-07-12 all-users diagnostic reset had orphaned their documented credentials, so every login was correctly rejected… and then displayed as an endless spinner by bug (1).

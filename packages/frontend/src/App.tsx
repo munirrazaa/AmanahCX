@@ -6,7 +6,7 @@ import {
   CheckSquare, BarChart3, Settings as SettingsIcon, Zap, Shield,
   LogOut, CreditCard, BarChart2, LifeBuoy, List, Clock, Mail, Bot,
   FileText, Layers, MessageCircle, Key, Bell, Lock, ChevronDown, ChevronRight,
-  FileSpreadsheet, ShoppingCart, BookOpen, Tag,
+  FileSpreadsheet, ShoppingCart, BookOpen, Tag, MapPin,
 } from 'lucide-react';
 import { useAuthStore } from './store/auth.store';
 import { useIsSuperAdmin, useIsAdmin, useIsTenantAdmin, useHasRole, useIsPolicyAdmin } from './hooks/useRole';
@@ -56,6 +56,7 @@ import { SalesTemplates }    from './pages/sales/SalesTemplates';
 import { SalesBuilder }      from './pages/sales/SalesBuilder';
 import { SalesSettingsPage } from './pages/sales/SalesSettings';
 import { TeamReports }       from './pages/TeamReports';
+import { FieldTeamView }     from './pages/FieldTeamView';
 import { TicketReports }     from './pages/TicketReports';
 import { Reports }           from './pages/Reports';
 import { EmailAnalytics }    from './pages/EmailAnalytics';
@@ -66,7 +67,10 @@ import { GovernancePage }    from './pages/Governance';
 import { OrdersPage }        from './pages/Orders';
 import { CustomFieldsPage }  from './pages/CustomFields';
 
-const queryClient = new QueryClient({
+// Exported so auth.store.ts can wipe all cached data on logout — otherwise a
+// different account logging in on the same tab (e.g. tenant admin -> super
+// admin) briefly renders the previous account's cached queries.
+export const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 30_000, retry: 1 } },
 });
 
@@ -171,6 +175,7 @@ function Sidebar() {
   const [analyticsOpen, setAnalyticsOpen] = React.useState(true);
 
   // Fetch active modules from the API — drives the sidebar dynamically
+  // (super_admin has no workspace, so this endpoint always 403s for them — skip it)
   const { data: modulesData } = useQuery<ActiveModule[]>({
     queryKey: ['modules'],
     queryFn: async () => {
@@ -178,6 +183,7 @@ function Sidebar() {
       return res.data.data;
     },
     staleTime: 60_000,
+    enabled: !isSuperAdmin,
   });
 
   const modules: ActiveModule[] = modulesData ?? [];
@@ -373,7 +379,7 @@ function Sidebar() {
           const gatedLinks = [
             { to: '/integrations', label: 'Integrations', icon: 'Zap',        key: 'integrations:read', adminBypass: true  },
             { to: '/billing',      label: 'Billing',      icon: 'CreditCard', key: 'billing:read',      adminBypass: false },
-          ].filter((l) => !isTenantAdmin && ((l.adminBypass && isAdmin) || perms[l.key] === true));
+          ].filter((l) => !isTenantAdmin && !isSuperAdmin && ((l.adminBypass && isAdmin) || perms[l.key] === true));
           if (gatedLinks.length === 0) return null;
           return (
             <>
@@ -399,7 +405,7 @@ function Sidebar() {
                   );
                 })}
                 {/* Integration Health — sub-link under Integrations */}
-                {!isTenantAdmin && isAdmin && (
+                {!isTenantAdmin && !isSuperAdmin && isAdmin && (
                   <NavLink to="/integrations/health"
                     className={({ isActive }) =>
                       `flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm transition-all ${
@@ -440,38 +446,12 @@ function Sidebar() {
               <Shield className="w-4 h-4" />
               Super Admin
             </NavLink>
-            <NavLink to="/sales/dashboard"
-              className={({ isActive }) =>
-                `flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm transition-all ${
-                  isActive ? 'text-white font-semibold' : 'text-white/60 hover:text-white hover:bg-white/10'
-                }`
-              }
-              style={({ isActive }) => isActive ? {
-                background: 'rgba(99,102,241,0.2)', borderLeft: '2px solid #818CF8',
-              } : {}}
-            >
-              <CreditCard className="w-4 h-4" />
-              Sales & Invoices
-            </NavLink>
-            <NavLink to="/sales/reports"
-              className={({ isActive }) =>
-                `flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm transition-all ${
-                  isActive ? 'text-white font-semibold' : 'text-white/60 hover:text-white hover:bg-white/10'
-                }`
-              }
-              style={({ isActive }) => isActive ? {
-                background: 'rgba(99,102,241,0.2)', borderLeft: '2px solid #818CF8',
-              } : {}}
-            >
-              <BarChart2 className="w-4 h-4" />
-              Reports
-            </NavLink>
           </>
         )}
 
 
-        {/* Roles — admins only (not tenant admin, they have it in their own sidebar) */}
-        {isAdmin && !isTenantAdmin && (
+        {/* Roles — admins only (not tenant admin, they have it in their own sidebar; not super admin, they have no workspace) */}
+        {isAdmin && !isTenantAdmin && !isSuperAdmin && (
           <NavLink to="/roles"
             className={({ isActive }) =>
               `flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm transition-all ${
@@ -489,7 +469,7 @@ function Sidebar() {
         )}
 
         {/* System Settings — for non-tenant-admin users with settings:read */}
-        {!isTenantAdmin && (isAdmin || (user as any)?.permissions?.['settings:read']) && (
+        {!isTenantAdmin && !isSuperAdmin && (isAdmin || (user as any)?.permissions?.['settings:read']) && (
           <NavLink to="/settings"
             className={({ isActive }) =>
               `flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm transition-all ${
@@ -581,6 +561,20 @@ function Sidebar() {
                   <Users className="w-3.5 h-3.5 shrink-0" />
                   Live Wallboard
                 </NavLink>
+                <NavLink to="/field-team"
+                  className={({ isActive }) =>
+                    `flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs transition-all ${
+                      isActive ? 'text-white font-semibold' : 'text-white/50 hover:text-white hover:bg-white/10'
+                    }`
+                  }
+                  style={({ isActive }) => isActive ? {
+                    background: 'linear-gradient(135deg, rgba(41,171,226,0.2) 0%, rgba(77,139,60,0.1) 100%)',
+                    borderLeft: '2px solid #29ABE2',
+                  } : {}}
+                >
+                  <MapPin className="w-3.5 h-3.5 shrink-0" />
+                  Field Team
+                </NavLink>
               </div>
             )}
           </div>
@@ -633,7 +627,7 @@ function Sidebar() {
             <p className="text-xs font-semibold text-white truncate">{user?.name}</p>
             <AgentStatusPicker isTenantAdmin={isTenantAdmin} isSuperAdmin={isSuperAdmin} />
           </div>
-          <NotificationBell />
+          {!isSuperAdmin && <NotificationBell />}
           <button onClick={logout} title="Log out"
             className="text-white/40 hover:text-white p-0.5 rounded transition-colors">
             <LogOut className="w-3.5 h-3.5" />
@@ -665,11 +659,40 @@ function NotificationsPage() {
     { id: 'team',     label: 'Team',               items: ['New user invited', 'User activated / deactivated', 'Role changed'] },
     { id: 'system',   label: 'System',             items: ['Module enabled / disabled', 'Integration connected / disconnected'] },
   ];
-  const [prefs, setPrefs] = React.useState<Record<string, Record<string, { email: boolean; inApp: boolean }>>>(() =>
-    Object.fromEntries(categories.map(c => [c.id, Object.fromEntries(c.items.map(i => [i, { email: true, inApp: true }]))]))
+  const defaults = React.useMemo(() =>
+    Object.fromEntries(categories.map(c => [c.id, Object.fromEntries(c.items.map(i => [i, { email: true, inApp: true }]))])),
+    [],
   );
+
+  const { data: saved, isLoading } = useQuery<Record<string, Record<string, { email: boolean; inApp: boolean }>>>({
+    queryKey: ['notification-preferences'],
+    queryFn: async () => (await api.get('/api/v1/settings/notification-preferences')).data.data,
+  });
+
+  const [prefs, setPrefs] = React.useState(defaults);
+  React.useEffect(() => {
+    if (!saved) return;
+    // Merge saved values over the defaults so newly-added notification types
+    // (added after the user last saved) still default to on.
+    setPrefs(p => {
+      const merged = { ...p };
+      for (const cat of Object.keys(merged)) {
+        for (const item of Object.keys(merged[cat])) {
+          if (saved[cat]?.[item]) merged[cat] = { ...merged[cat], [item]: saved[cat][item] };
+        }
+      }
+      return merged;
+    });
+  }, [saved]);
+
   const toggle = (cat: string, item: string, channel: 'email' | 'inApp') =>
     setPrefs(p => ({ ...p, [cat]: { ...p[cat], [item]: { ...p[cat][item], [channel]: !p[cat][item][channel] } } }));
+
+  const saveMutation = useMutation({
+    mutationFn: () => api.patch('/api/v1/settings/notification-preferences', prefs),
+  });
+
+  if (isLoading) return <div className="max-w-2xl text-sm text-gray-400">Loading…</div>;
 
   return (
     <div className="max-w-2xl space-y-6">
@@ -703,9 +726,15 @@ function NotificationsPage() {
           </div>
         </div>
       ))}
-      <button className="px-5 py-2.5 text-sm font-semibold text-white rounded-xl" style={{ background: 'linear-gradient(135deg,#29ABE2,#1a8cbf)' }}>
-        Save Preferences
+      <button
+        onClick={() => saveMutation.mutate()}
+        disabled={saveMutation.isPending}
+        className="px-5 py-2.5 text-sm font-semibold text-white rounded-xl disabled:opacity-50"
+        style={{ background: 'linear-gradient(135deg,#29ABE2,#1a8cbf)' }}
+      >
+        {saveMutation.isPending ? 'Saving…' : saveMutation.isSuccess ? 'Saved' : 'Save Preferences'}
       </button>
+      {saveMutation.isError && <p className="text-xs text-red-500">Failed to save. Please try again.</p>}
     </div>
   );
 }
@@ -764,6 +793,7 @@ function AppLayout() {
           <Route path="/team-reports"    element={op(<TeamReports />)} />
           <Route path="/ticket-reports" element={op(<TicketReports />)} />
           <Route path="/wallboard"      element={op(<Wallboard />)} />
+          <Route path="/field-team"     element={op(<FieldTeamView />)} />
           <Route path="/reports"        element={op(<Reports />)} />
           <Route path="/billing"     element={op(<Billing />)} />
           <Route path="/integrations"        element={((tenant as any)?.active_modules ?? []).includes('integrations') ? <Integrations /> : <Navigate to="/dashboard" replace />} />

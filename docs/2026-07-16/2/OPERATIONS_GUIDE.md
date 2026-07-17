@@ -3,19 +3,7 @@
 _Plain-language reference for workspace managers, agents, and admins.
 Updated automatically on every release. Each section covers one feature: who uses it, what it does, and exactly how to operate it._
 
-Last updated: 2026-07-17
-
----
-
-## Notification Preferences & Active Sessions (new — 2026-07-17)
-
-**Who uses it:** anyone with a login — find it under your profile menu ("My Settings") or the Settings sidebar.
-
-**What it does:**
-- **Notifications tab** — choose which alerts you get by email vs. in-app (new ticket assigned, SLA breach, deal won/lost, user changes, and more). Flip any toggle, click Save — it's now permanent and follows you across logins and devices.
-- **Security tab → Active Sessions** — shows every device currently logged into your account (browser + rough device type, when it last logged in). If you don't recognize one, click Revoke to sign it out immediately — the next request from that device is rejected.
-
-**Why it changed:** these two screens existed before but weren't actually saving anything — toggles reset every time you reloaded the page, and Active Sessions showed made-up example data. Both are now fully real.
+Last updated: 2026-07-11
 
 ---
 

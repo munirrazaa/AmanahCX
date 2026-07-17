@@ -15,7 +15,17 @@ const LOCKOUT_KEY          = (tenantId: string, email: string) => `lockout:${ten
 const FAIL_COUNT_KEY       = (tenantId: string, email: string) => `loginfail:${tenantId}:${email.toLowerCase()}`;
 const BLOCKLIST_KEY        = (jti: string) => `blocklist:${jti}`;
 const USER_REVOKED_KEY     = (userId: string) => `user_revoked:${userId}`;
+const SESSION_KEY          = (userId: string, jti: string) => `session:${userId}:${jti}`;
 const JWT_MAX_TTL_S        = 48 * 60 * 60; // 48 h — generous cover for any token lifetime
+const SESSION_TTL_S        = 8 * 60 * 60;  // matches the JWT's own 8h expiry (server.ts)
+
+/** Record a login as an "active session" the user can see and revoke from Settings > Security */
+async function recordSession(redis: RedisClient, userId: string, jti: string, req: { headers: Record<string, unknown> }): Promise<void> {
+  await redis.setex(SESSION_KEY(userId, jti), SESSION_TTL_S, JSON.stringify({
+    userAgent: (req.headers['user-agent'] as string) ?? 'Unknown device',
+    createdAt: new Date().toISOString(),
+  }));
+}
 
 /** Check whether a JTI is in the token revocation blocklist */
 export async function isTokenRevoked(redis: RedisClient, jti: string): Promise<boolean> {
@@ -45,7 +55,7 @@ export async function getUserRevokedAt(redis: RedisClient, userId: string): Prom
 }
 
 /** Add a JTI to the revocation blocklist with a TTL matching token expiry */
-async function revokeToken(redis: RedisClient, jti: string, expiresAt: number): Promise<void> {
+export async function revokeToken(redis: RedisClient, jti: string, expiresAt: number): Promise<void> {
   const ttl = Math.max(1, expiresAt - Math.floor(Date.now() / 1000));
   await redis.setex(BLOCKLIST_KEY(jti), ttl, '1');
 }
@@ -300,6 +310,7 @@ export function authRoutes(db: DatabaseClient, redis: RedisClient) {
         governed_departments: user.governed_departments ?? [],
         jti,
       });
+      await recordSession(redis, user.id, jti, req);
 
       const { password_hash, ...safeUser } = user;
       return reply.send({ success: true, data: {
@@ -436,6 +447,8 @@ export function authRoutes(db: DatabaseClient, redis: RedisClient) {
         // Issue new token with a fresh JTI
         const newJti   = crypto.randomBytes(16).toString('hex');
         const newToken = await reply.jwtSign({ ...payload, jti: newJti });
+        await redis.del(SESSION_KEY(payload.sub, payload.jti));
+        await recordSession(redis, payload.sub, newJti, req);
         return reply.send({ success: true, data: { token: newToken } });
       } catch {
         return reply.code(401).send({ success: false, error: { code: 'INVALID_TOKEN', message: 'Invalid token' } });
@@ -449,10 +462,40 @@ export function authRoutes(db: DatabaseClient, redis: RedisClient) {
         const payload = req.user as any;
         if (payload?.jti && payload?.exp) {
           await revokeToken(redis, payload.jti, payload.exp);
+          await redis.del(SESSION_KEY(payload.sub, payload.jti));
         }
       } catch {
         // Even if token is malformed, return success — client is logging out
       }
+      return reply.send({ success: true });
+    });
+
+    // GET /auth/sessions — list this user's active (non-expired, non-revoked) logins
+    fastify.get('/sessions', async (req, reply) => {
+      await req.jwtVerify();
+      const payload = req.user as any;
+      const keys = await redis.keys(`session:${payload.sub}:*`);
+      const sessions = (await Promise.all(keys.map(async (key: string) => {
+        const raw = await redis.get(key);
+        if (!raw) return null;
+        const jti = key.split(':').pop()!;
+        const { userAgent, createdAt } = JSON.parse(raw);
+        return { jti, userAgent, createdAt, current: jti === payload.jti };
+      }))).filter(Boolean);
+      sessions.sort((a: any, b: any) => (a.current ? -1 : b.current ? 1 : b.createdAt.localeCompare(a.createdAt)));
+      return reply.send({ success: true, data: sessions });
+    });
+
+    // DELETE /api/v1/auth/sessions/:jti — revoke a specific session (can't revoke the current one; use logout for that)
+    fastify.delete('/sessions/:jti', async (req, reply) => {
+      await req.jwtVerify();
+      const payload = req.user as any;
+      const { jti } = req.params as { jti: string };
+      if (jti === payload.jti) {
+        return reply.code(400).send({ success: false, error: { code: 'CANNOT_REVOKE_CURRENT', message: 'Use logout to end your current session' } });
+      }
+      await revokeToken(redis, jti, Math.floor(Date.now() / 1000) + JWT_MAX_TTL_S);
+      await redis.del(SESSION_KEY(payload.sub, jti));
       return reply.send({ success: true });
     });
   };

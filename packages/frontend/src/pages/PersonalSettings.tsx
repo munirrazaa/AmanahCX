@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useState, useEffect } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Save, Check, User, Bell, Shield, Palette, RotateCcw, Type, Pipette, Loader2,
 } from 'lucide-react';
@@ -241,10 +241,23 @@ function AppearanceSettings() {
 
 // ── Notifications ─────────────────────────────────────────────────────────────
 
+const NOTIFICATION_DEFAULTS = {
+  dealWon: true, dealLost: false, newContact: true, voiceCall: true,
+  weeklyReport: true, monthlyReport: false, systemAlerts: true,
+};
+
 function NotificationSettings() {
-  const [prefs, setPrefs] = useState({
-    dealWon: true, dealLost: false, newContact: true, voiceCall: true,
-    weeklyReport: true, monthlyReport: false, systemAlerts: true,
+  const { data: saved, isLoading } = useQuery<{ personal?: typeof NOTIFICATION_DEFAULTS }>({
+    queryKey: ['notification-preferences'],
+    queryFn: async () => (await api.get('/api/v1/settings/notification-preferences')).data.data,
+  });
+  const [prefs, setPrefs] = useState(NOTIFICATION_DEFAULTS);
+  useEffect(() => {
+    if (saved?.personal) setPrefs((p) => ({ ...p, ...saved.personal }));
+  }, [saved]);
+
+  const saveMutation = useMutation({
+    mutationFn: () => api.patch('/api/v1/settings/notification-preferences', { personal: prefs }),
   });
 
   const toggles: { key: keyof typeof prefs; label: string; desc: string }[] = [
@@ -256,6 +269,8 @@ function NotificationSettings() {
     { key: 'monthlyReport', label: 'Monthly report',   desc: 'Emailed on the 1st of each month' },
     { key: 'systemAlerts',  label: 'System alerts',    desc: 'Critical system and billing alerts' },
   ];
+
+  if (isLoading) return <div className="max-w-lg text-sm text-gray-400">Loading…</div>;
 
   return (
     <div className="space-y-6 max-w-lg">
@@ -277,18 +292,51 @@ function NotificationSettings() {
           </div>
         ))}
       </div>
-      <button className="flex items-center gap-2 px-4 py-2 bg-brand-600 text-white text-sm rounded-lg hover:bg-brand-700">
-        <Save className="w-3.5 h-3.5" /> Save Preferences
+      <button
+        onClick={() => saveMutation.mutate()}
+        disabled={saveMutation.isPending}
+        className="flex items-center gap-2 px-4 py-2 bg-brand-600 text-white text-sm rounded-lg hover:bg-brand-700 disabled:opacity-50"
+      >
+        {saveMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : saveMutation.isSuccess ? <Check className="w-3.5 h-3.5" /> : <Save className="w-3.5 h-3.5" />}
+        {saveMutation.isPending ? 'Saving…' : saveMutation.isSuccess ? 'Saved' : 'Save Preferences'}
       </button>
+      {saveMutation.isError && <p className="text-xs text-red-500">Failed to save. Please try again.</p>}
     </div>
   );
 }
 
 // ── Security ──────────────────────────────────────────────────────────────────
 
+// Turns a raw User-Agent string into something a user recognizes, e.g. "Chrome on macOS"
+function friendlyDevice(ua: string): string {
+  const browser =
+    /Edg\//.test(ua) ? 'Edge' :
+    /Chrome\//.test(ua) ? 'Chrome' :
+    /Firefox\//.test(ua) ? 'Firefox' :
+    /Safari\//.test(ua) && !/Chrome/.test(ua) ? 'Safari' : 'Browser';
+  const os =
+    /iPhone|iPad/.test(ua) ? 'iOS' :
+    /Android/.test(ua) ? 'Android' :
+    /Mac OS X/.test(ua) ? 'macOS' :
+    /Windows/.test(ua) ? 'Windows' :
+    /Linux/.test(ua) ? 'Linux' : 'Unknown OS';
+  return `${browser} on ${os}`;
+}
+
+function relativeTime(iso: string): string {
+  const diffMs = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diffMs / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
+}
+
 function SecuritySettings() {
   const isSuperAdmin = useIsSuperAdmin();
   const { logout } = useAuthStore();
+  const qc = useQueryClient();
   const [currentPw, setCurrentPw] = useState('');
   const [newPw,     setNewPw]     = useState('');
   const [confirmPw, setConfirmPw] = useState('');
@@ -300,6 +348,16 @@ function SecuritySettings() {
       // Log out immediately so the user must re-authenticate with the new password
       setTimeout(() => logout(), 1500);
     },
+  });
+
+  const { data: sessions } = useQuery<{ jti: string; userAgent: string; createdAt: string; current: boolean }[]>({
+    queryKey: ['sessions'],
+    queryFn: async () => (await api.get('/auth/sessions')).data.data,
+  });
+
+  const revokeMutation = useMutation({
+    mutationFn: (jti: string) => api.delete(`/auth/sessions/${jti}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['sessions'] }),
   });
 
   return (
@@ -345,18 +403,24 @@ function SecuritySettings() {
       <div className="border-t border-gray-100 pt-6 space-y-4">
         <h3 className="text-sm font-medium text-gray-700">Active Sessions</h3>
         <div className="space-y-2">
-          {[
-            { device: 'Chrome on macOS', location: 'Current session', current: true  },
-            { device: 'Mobile Safari',   location: 'Last seen 2h ago', current: false },
-          ].map((s, i) => (
-            <div key={i} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+          {(sessions ?? []).length === 0 && <p className="text-xs text-gray-400">No active sessions found.</p>}
+          {(sessions ?? []).map((s) => (
+            <div key={s.jti} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
               <div>
-                <p className="text-sm font-medium text-gray-900">{s.device}</p>
-                <p className="text-xs text-gray-400">{s.location}</p>
+                <p className="text-sm font-medium text-gray-900">{friendlyDevice(s.userAgent)}</p>
+                <p className="text-xs text-gray-400">{s.current ? 'Current session' : `Last seen ${relativeTime(s.createdAt)}`}</p>
               </div>
               {s.current
                 ? <span className="text-xs text-emerald-600 font-medium">Current</span>
-                : <button className="text-xs text-red-500 hover:text-red-700">Revoke</button>}
+                : (
+                  <button
+                    onClick={() => revokeMutation.mutate(s.jti)}
+                    disabled={revokeMutation.isPending}
+                    className="text-xs text-red-500 hover:text-red-700 disabled:opacity-50"
+                  >
+                    Revoke
+                  </button>
+                )}
             </div>
           ))}
         </div>

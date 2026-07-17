@@ -3,39 +3,6 @@ _Most recent at top. Treated as the primary record for development tracking._
 
 ---
 
-## Change Log - 2026-07-17 — Full role-by-role toggle/save audit; two cosmetic-only screens made real
-
-### Context
-User reported Super Admin "not able to save roles" and asked for a systematic guarantee that no toggle in the system is broken. Ran a full audit: every role (Super Admin, Tenant Admin, Manager, Agent, Viewer) logged in and clicked through every page; every settings screen's actual toggles/saves exercised, not just page-load checks.
-
-### Fixed
-
-**Super Admin showed 4 dead-end menu items — root cause of the original report**
-- `packages/frontend/src/App.tsx`'s sidebar used `isAdmin` (= tenant_admin OR super_admin) in several places that meant to say "an admin-permission user who isn't tenant_admin" — the check never excluded super_admin, who by design has zero workspace access (`tenantMiddleware` blocks super_admin from every non-`/super-admin/*` route). Result: Roles, Integrations, Sales & Invoices, and the notification bell all appeared for Super Admin and always 403'd. Removed all four; added `!isSuperAdmin` to the guard conditions.
-- Also disabled the `['modules']` react-query fetch for super_admin (`enabled: !isSuperAdmin`) — it was firing and 403ing unconditionally.
-
-**Super Admin's own Billing tab was completely broken (500 error)**
-- The route code (`/super-admin/platform-invoices`) has existed for a while, but its migration was never written — `relation "platform_invoices" does not exist`. New migration `068_platform_invoices.sql` creates `platform_invoices` + `platform_payments` (RLS: bypass-only, since only Super Admin ever touches these). Live-verified: created and deleted a real test invoice through the UI.
-
-**Cross-account cache leak — switching logins in one tab could show the previous account's data**
-- `queryClient` (react-query) was never cleared on logout/login. Logging in as Tenant Admin, then logging into Super Admin in the same tab without a hard refresh, briefly rendered the tenant's cached CRM sidebar under the Super Admin session. Fixed: `queryClient.clear()` now runs on both login and logout (`packages/frontend/src/store/auth.store.ts`, `queryClient` exported from `App.tsx`). Reproduced the exact scenario before and after — confirmed fixed.
-
-**Workspace General Settings save failed (500) whenever more than one field changed at once**
-- `PATCH /api/v1/settings/workspace` built a separate `settings = jsonb_set(...)` SQL fragment per changed field (timezone/dateFormat/currency) and concatenated them into one `UPDATE ... SET settings = X, settings = Y` — Postgres rejects assigning the same column twice (`42601`). Fixed by folding all changed keys into one JSON object and a single `settings = COALESCE(settings,'{}') || $1::jsonb` merge.
-
-**Super Admin's Reports/Alerts/Sub-Admins tenant-picker dropdowns silently broken (400)**
-- Frontend requests `pageSize=200` to populate a `<select>` of all tenants; backend capped at 100. Raised the cap to 500 (`packages/api/src/routes/super-admin.ts`) — this is a picker context, not a paginated table.
-
-**Two settings screens were 100% cosmetic — toggles and Save/Revoke did nothing**
-- Notification Preferences (reachable two ways: Settings → Notifications, and My Settings → Notifications — turned out to be two separate components with different toggle sets) had no backend at all; the Save button had no click handler; every toggle reset on reload.
-- Active Sessions / Revoke on the Security tab showed hardcoded fake data ("Mobile Safari — last seen 2h ago") with a non-functional Revoke button.
-- Built real backend for both: `notification_preferences` JSONB column on `users` (migration `069_notification_preferences.sql`), `GET`/`PATCH /api/v1/settings/notification-preferences` (merge-not-replace, since two screens write to it independently). For sessions: login now records device/timestamp in Redis (`packages/api/src/routes/auth.ts`), `GET /auth/sessions` lists real active logins, `DELETE /auth/sessions/:jti` revokes one using the blocklist mechanism that already existed for logout. Live-verified: toggled a preference, reloaded, still set; created a second session via a direct API login, revoked it, confirmed it disappeared from the list.
-
-### Verified working (no fix needed)
-Tenant Admin: module toggles, routing method change, user activate/deactivate, sub-admin role create/delete, all settings pages load and save cleanly. Manager/Agent: full ticket lifecycle (create → accept → resolve) tested via live API calls, matches expected state transitions and SLA field population. Field Team View (built 2026-07-16) confirmed clean for a manager with no direct reports (correct empty state, not a bug).
-
----
-
 ## Change Log - 2026-07-16 (Push 2) — Manager Field-Team View built
 
 ### Added

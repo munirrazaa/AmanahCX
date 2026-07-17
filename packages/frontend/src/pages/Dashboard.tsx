@@ -1417,7 +1417,7 @@ export function Dashboard() {
           ? <div className="flex flex-col items-center py-24 gap-3 text-gray-400">
               <Shield className="w-10 h-10 opacity-30" />
               <p className="text-base font-medium text-gray-500">View-only access</p>
-              <p className="text-sm text-gray-400">Your account can view messages only. Contact your admin to request additional access.</p>
+              <p className="text-sm text-gray-400">Dashboard analytics aren't available for your account. Use the menu on the left to view the records you have access to, or contact your admin to request more.</p>
             </div>
           : isLoading
           ? <Skeleton />

@@ -889,8 +889,9 @@ export function analyticsRoutes(db: DatabaseClient) {
 
     // GET /analytics/team-reportees — flat list of full hierarchy (for filter UI)
     fastify.get('/team-reportees', { preHandler: teamPreHandler }, async (req, reply) => {
-      const userId = req.user.sub;
-      const role   = req.user.role as string;
+      const userId   = req.user.sub;
+      const role     = req.user.role as string;
+      const tenantId = req.tenant.id;
 
       const reportees = await db.withTenant(req.tenant.id, async (client) => {
         const isAdmin = ['tenant_admin', 'super_admin'].includes(role);
@@ -911,6 +912,88 @@ export function analyticsRoutes(db: DatabaseClient) {
       });
 
       return reply.send({ success: true, data: reportees });
+    });
+
+    // ── Manager Field-Team View ──────────────────────────────────────────
+    // Gives a manager visibility over their field team's today's agenda
+    // (task counts, GPS check-in status, open ticket load) and a per-member
+    // drill-down, so they can decide who to assign new work to.
+    const fieldTeamPreHandler = [requireRole('super_admin', 'tenant_admin', 'manager')];
+
+    // GET /analytics/field-team — one row per team member (direct + indirect
+    // reports), with today's task counts, last GPS check-in, and open ticket load.
+    fastify.get('/field-team', { preHandler: fieldTeamPreHandler }, async (req, reply) => {
+      const userId   = req.user.sub;
+      const role     = req.user.role as string;
+      const tenantId = req.tenant.id;
+
+      const members = await db.withTenant(tenantId, async (client) => {
+        const isAdmin = ['tenant_admin', 'super_admin'].includes(role);
+        const hierarchyIds = await getHierarchyUserIds(client, userId, role, tenantId);
+        const ids = isAdmin ? hierarchyIds : hierarchyIds.filter((id: string) => id !== userId);
+        if (ids.length === 0) return [];
+        const ph = ids.map((_: any, i: number) => `$${i + 1}`).join(', ');
+        const r = await client.query(
+          `SELECT
+             u.id, u.name, u.email, u.agent_status,
+             COUNT(DISTINCT a.id) FILTER (WHERE a.due_at::date = CURRENT_DATE) AS today_total,
+             COUNT(DISTINCT a.id) FILTER (WHERE a.due_at::date = CURRENT_DATE AND a.status = 'pending') AS today_pending,
+             COUNT(DISTINCT a.id) FILTER (WHERE a.due_at::date = CURRENT_DATE AND a.status = 'completed') AS today_completed,
+             COUNT(DISTINCT t.id) FILTER (WHERE t.status NOT IN ('resolved', 'closed')) AS open_tickets,
+             MAX(a.updated_at) AS last_activity_at,
+             (
+               SELECT chk->>'at' FROM activities a2,
+                 LATERAL jsonb_array_elements(COALESCE(a2.metadata->'checkins', '[]'::jsonb)) chk
+               WHERE a2.owner_id = u.id AND a2.tenant_id = $${ids.length + 1}
+               ORDER BY chk->>'at' DESC LIMIT 1
+             ) AS last_checkin_at
+           FROM users u
+           LEFT JOIN activities a ON a.owner_id = u.id AND a.tenant_id = $${ids.length + 1}
+           LEFT JOIN tickets t ON t.assignee_id = u.id AND t.tenant_id = $${ids.length + 1}
+           WHERE u.id IN (${ph}) AND u.is_active = true
+           GROUP BY u.id, u.name, u.email, u.agent_status
+           ORDER BY u.name`,
+          [...ids, tenantId],
+        );
+        return r.rows;
+      });
+
+      return reply.send({ success: true, data: members });
+    });
+
+    // GET /analytics/field-team/:userId — one member's actual task + ticket list
+    fastify.get('/field-team/:userId', { preHandler: fieldTeamPreHandler }, async (req, reply) => {
+      const requesterId = req.user.sub;
+      const role        = req.user.role as string;
+      const tenantId    = req.tenant.id;
+      const { userId: targetId } = req.params as { userId: string };
+
+      const [tasks, tickets] = await db.withTenant(tenantId, async (client) => {
+        const isAdmin = ['tenant_admin', 'super_admin'].includes(role);
+        if (!isAdmin) {
+          const hierarchyIds = await getHierarchyUserIds(client, requesterId, role, tenantId);
+          if (!hierarchyIds.includes(targetId)) {
+            return [[], []]; // not in this manager's team — return nothing rather than leak data
+          }
+        }
+        const taskRows = await client.query(
+          `SELECT a.*, c.first_name, c.last_name, c.phone, c.mobile
+           FROM activities a LEFT JOIN contacts c ON c.id = a.contact_id
+           WHERE a.tenant_id = $1 AND a.owner_id = $2
+           ORDER BY (a.status = 'pending') DESC, COALESCE(a.due_at, a.created_at) ASC
+           LIMIT 100`,
+          [tenantId, targetId],
+        );
+        const ticketRows = await client.query(
+          `SELECT id, ticket_number, subject, status, priority, sla_due_at, created_at
+           FROM tickets WHERE tenant_id = $1 AND assignee_id = $2 AND status NOT IN ('resolved','closed')
+           ORDER BY created_at DESC LIMIT 100`,
+          [tenantId, targetId],
+        );
+        return [taskRows.rows, ticketRows.rows];
+      });
+
+      return reply.send({ success: true, data: { tasks, tickets } });
     });
 
     // GET /analytics/team-export — download CSV or JSON
