@@ -68,6 +68,12 @@ def dbg(msg: str) -> None:
         pass
 
 
+
+# Played (non-blocking) while raise_ticket's ~2s API call is in flight, so the
+# caller hears something instead of dead air. Requested 2026-07-13, built 2026-07-17.
+HOLD_LINE = "ایک لمحہ، میں یہ درج کر رہی ہوں۔"
+
+
 class NadiaAgent(Agent):
     def __init__(self, settings: AgentSettings, tenant_id: str, call_id: str):
         super().__init__(instructions=build_system_prompt(settings))
@@ -231,6 +237,12 @@ class NadiaAgent(Agent):
             reporter_address: Caller's street/house address, if they gave one.
             reporter_city: Caller's city, if they gave one.
         """
+        # Fire-and-forget — don't await, so this plays WHILE the API call below is in
+        # flight, not before it. allow_interruptions=False so a caller talking over
+        # it (common — they're often still adding detail) doesn't cut it short or
+        # confuse the turn-taking state.
+        context.session.say(HOLD_LINE, allow_interruptions=False)
+
         base_url = os.environ["CRM_API_BASE_URL"]
         secret = os.environ.get("LIVEKIT_INGEST_SECRET", "")
         async with httpx.AsyncClient(timeout=10) as client:

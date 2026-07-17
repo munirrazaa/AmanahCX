@@ -4,7 +4,7 @@ import type { DatabaseClient, TenantService } from '@crm/core';
 import type { EventBus } from '@crm/core';
 import { CRM_EVENTS } from '@crm/core';
 import type { VoiceWebhookEvent, VoiceCallStatus } from '@crm/shared';
-import { requireFeature, requireScope } from '../middlewares/auth.middleware';
+import { requireModule, requireScope } from '../middlewares/auth.middleware';
 import { TwilioAdapter } from '../../../../modules/connectors/src/twilio/adapter';
 import { VonageAdapter } from '../../../../modules/connectors/src/vonage/adapter';
 import type { VoiceProviderAdapter } from '../../../../modules/voice/src/provider.interface';
@@ -142,7 +142,9 @@ export function voiceRoutes(db: DatabaseClient, eventBus: EventBus, tenantServic
 
     // ── Outbound call initiation ──────────────────────────────
     fastify.post('/calls/initiate', {
-      preHandler: [requireFeature('voiceBot'), requireScope('voice:write')],
+      // requireModule('voice_bot') replaces requireFeature('voiceBot'), which read
+      // settings.features.voiceBot — a flag the module-licensing flow never writes. Fixed 2026-07-17.
+      preHandler: [requireModule('voice_bot'), requireScope('voice:write')],
     }, async (req, reply) => {
       const { contactId, toNumber, fromNumber, script } = req.body as any;
       const tenant = req.tenant;

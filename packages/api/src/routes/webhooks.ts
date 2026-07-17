@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import crypto from 'node:crypto';
 import type { DatabaseClient, EventBus } from '@crm/core';
-import { requireFeature, requireScope, requireModule } from '../middlewares/auth.middleware';
+import { requireScope, requireModule } from '../middlewares/auth.middleware';
 import { enqueueWebhookDelivery } from '../lib/webhook-worker';
 
 const WebhookSchema = z.object({
@@ -18,7 +18,9 @@ const WebhookSchema = z.object({
 
 export function webhookRoutes(db: DatabaseClient, _eventBus: EventBus) {
   return async function (fastify: FastifyInstance) {
-    const preHandler = [requireModule('integrations'), requireFeature('webhooks'), requireScope('webhooks:manage')];
+    // requireModule('integrations') is the sole licensing gate now — was also requireFeature('webhooks'),
+    // which read settings.features.webhooks, a flag the module-licensing flow never writes. Fixed 2026-07-17.
+    const preHandler = [requireModule('integrations'), requireScope('webhooks:manage')];
 
     fastify.get('/', { preHandler }, async (req, reply) => {
       const webhooks = await db.withTenant(req.tenant.id, async (client) => {

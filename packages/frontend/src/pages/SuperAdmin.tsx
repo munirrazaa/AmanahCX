@@ -1227,6 +1227,12 @@ function ConfigOwnershipModal({ tenant, onClose }: { tenant: any; onClose: () =>
     onSuccess: () => qc.invalidateQueries({ queryKey: ['sa-tenants'] }),
   });
 
+  const [smsGatewayEnabled, setSmsGatewayEnabled] = useState<boolean>(tenant.settings?.connectors?.platform_sms?.enabled ?? false);
+  const smsGatewayMut = useMutation({
+    mutationFn: (enabled: boolean) => api.patch(`/super-admin/tenants/${tenant.id}/sms-gateway`, { enabled }),
+    onSuccess: (_data, enabled) => { setSmsGatewayEnabled(enabled); qc.invalidateQueries({ queryKey: ['sa-tenants'] }); },
+  });
+
   const saveBotConfigMut = useMutation({
     // Empty-string fields mean "left blank", not "clear this out" — omit them
     // so the backend's COALESCE keeps whatever was already saved.
@@ -1276,6 +1282,27 @@ function ConfigOwnershipModal({ tenant, onClose }: { tenant: any; onClose: () =>
               {saveOwnershipMut.isPending ? 'Saving…' : 'Save Ownership Settings'}
             </button>
             {saveOwnershipMut.isSuccess && <p className="text-xs text-green-600 text-center mt-1">Saved.</p>}
+          </div>
+
+          <div className="border-t border-gray-100 pt-4 mt-2">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Platform SMS Gateway</p>
+            <p className="text-xs text-gray-400 mb-3">
+              When enabled, this tenant can send SMS through AmanahCX's shared gateway with zero setup on their end —
+              used automatically whenever they haven't configured their own SMS connector.
+            </p>
+            <label className="flex items-center justify-between p-3 bg-gray-50 rounded-lg cursor-pointer">
+              <span className="text-sm text-gray-700">Enable shared SMS gateway</span>
+              <button
+                type="button"
+                onClick={() => smsGatewayMut.mutate(!smsGatewayEnabled)}
+                disabled={smsGatewayMut.isPending}
+                className={`w-10 h-6 rounded-full transition-colors relative disabled:opacity-50 ${smsGatewayEnabled ? 'bg-brand-500' : 'bg-gray-300'}`}
+              >
+                <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${smsGatewayEnabled ? 'translate-x-5' : 'translate-x-1'}`} />
+              </button>
+            </label>
+            {smsGatewayMut.isSuccess && <p className="text-xs text-green-600 mt-1">Saved.</p>}
+            {smsGatewayMut.isError && <p className="text-xs text-red-500 mt-1">Failed to save.</p>}
           </div>
 
           {voiceBotOwnership === 'super_admin' && botForm && (
@@ -2901,7 +2928,8 @@ function SuperAdminReports() {
   const today = new Date().toISOString().slice(0, 10);
   const monthStart = today.slice(0, 8) + '01';
 
-  const [section, setSection] = useState<'tenant-details' | 'backup' | 'invoices-all' | 'invoices-tenant' | 'audit'>('tenant-details');
+  const [section, setSection] = useState<'tenant-details' | 'backup' | 'invoices-all' | 'invoices-tenant' | 'audit' | 'voice-bot-cost'>('tenant-details');
+  const [costMonth, setCostMonth] = useState(today.slice(0, 7)); // YYYY-MM
   const [dateFrom, setDateFrom] = useState(monthStart);
   const [dateTo,   setDateTo]   = useState(today);
   const [selectedTenant, setSelectedTenant] = useState('');
@@ -2940,6 +2968,11 @@ function SuperAdminReports() {
     queryFn: () => api.get('/super-admin/reports/audit', { params: { entity: auditEntity || undefined, action: auditAction || undefined } }).then(r => r.data.data),
     enabled: section === 'audit',
   });
+  const { data: costReport, isLoading: costLoading } = useQuery<{ period: string; tenants: any[]; totalCostAllTenants: number }>({
+    queryKey: ['sa-rep-voicebot-cost', costMonth],
+    queryFn: () => api.get('/super-admin/voice-bot/cost-report', { params: { month: costMonth } }).then(r => r.data.data),
+    enabled: section === 'voice-bot-cost',
+  });
 
   const fmtDate     = (d: string) => d ? new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
   const fmtDateTime = (d: string) => d ? new Date(d).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
@@ -2951,6 +2984,7 @@ function SuperAdminReports() {
     { key: 'invoices-all',     label: 'All Invoices',          icon: FileText      },
     { key: 'invoices-tenant',  label: 'Tenant Invoices',       icon: Receipt       },
     { key: 'audit',            label: 'Audit Log',             icon: ClipboardList },
+    { key: 'voice-bot-cost',   label: 'Voice Bot Cost',        icon: Phone         },
   ] as const;
 
   const STATUS_BADGE: Record<string, string> = {
@@ -3234,6 +3268,47 @@ function SuperAdminReports() {
                     <td className={tdCls + ' text-gray-400 max-w-xs truncate'}>
                       {a.new_value ? (typeof a.new_value === 'object' ? JSON.stringify(a.new_value).slice(0, 80) : String(a.new_value).slice(0, 80)) : '—'}
                     </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
+
+      {/* ── Voice Bot Cost ── */}
+      {section === 'voice-bot-cost' && (
+        <div className="bg-white rounded-xl border border-gray-100 overflow-x-auto">
+          <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-100">
+            <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Month</label>
+            <input type="month" value={costMonth} onChange={(e) => setCostMonth(e.target.value)}
+              className="border border-gray-200 rounded-lg px-2 py-1 text-sm" />
+            {costReport && (
+              <span className="ml-auto text-sm font-semibold text-gray-700">
+                Total: ${costReport.totalCostAllTenants.toFixed(2)}
+              </span>
+            )}
+          </div>
+          {costLoading ? <div className="flex justify-center py-16"><Loader2 className="w-5 h-5 animate-spin text-gray-400" /></div> : (
+            <table className="w-full">
+              <thead className="bg-gray-50 border-b border-gray-100 sticky top-0">
+                <tr>
+                  {['Tenant', 'Minutes Used', 'Calls', 'Rate / min', 'Total Cost'].map(h => (
+                    <th key={h} className={thCls}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {(costReport?.tenants ?? []).length === 0 && (
+                  <tr><td colSpan={5} className="px-4 py-12 text-center text-xs text-gray-400">No voice-bot-licensed tenants found.</td></tr>
+                )}
+                {(costReport?.tenants ?? []).map((row: any) => (
+                  <tr key={row.tenantId} className="hover:bg-gray-50">
+                    <td className={tdCls + ' font-medium text-gray-900'}>{row.tenantName}</td>
+                    <td className={tdCls}>{row.minutesUsed}</td>
+                    <td className={tdCls}>{row.callCount}</td>
+                    <td className={tdCls}>{row.costPerMinute > 0 ? `$${row.costPerMinute.toFixed(4)}` : <span className="text-gray-400">Not set</span>}</td>
+                    <td className={tdCls + ' font-semibold'}>${row.totalCost.toFixed(2)}</td>
                   </tr>
                 ))}
               </tbody>

@@ -624,7 +624,7 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
     fastify.get('/tenants/:id/voice-bot-usage', async (req, reply) => {
       const { id } = req.params as { id: string };
       const usage = await db.withSuperAdmin(async (client) => {
-        const quota = await client.query(`SELECT minutes_allocated FROM voice_bot_quotas WHERE tenant_id = $1`, [id]);
+        const quota = await client.query(`SELECT minutes_allocated, cost_per_minute FROM voice_bot_quotas WHERE tenant_id = $1`, [id]);
         const consumed = await client.query(
           `SELECT COALESCE(SUM(duration_seconds), 0) AS total_seconds, COUNT(*) AS call_count FROM voice_bot_calls WHERE tenant_id = $1`,
           [id],
@@ -638,6 +638,7 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
         return { quota: quota.rows[0], consumed: consumed.rows[0], topups: topups.rows };
       });
       const allocated = Number(usage.quota?.minutes_allocated ?? 0);
+      const costPerMinute = Number(usage.quota?.cost_per_minute ?? 0);
       const consumedMinutes = Number(usage.consumed.total_seconds) / 60;
       return reply.send({
         success: true,
@@ -646,7 +647,78 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
           consumedMinutes: Number(consumedMinutes.toFixed(2)),
           remainingMinutes: Number((allocated - consumedMinutes).toFixed(2)),
           callCount: Number(usage.consumed.call_count),
+          costPerMinute,
+          totalCost: Number((consumedMinutes * costPerMinute).toFixed(2)),
           topups: usage.topups,
+        },
+      });
+    });
+
+    // PATCH /super-admin/tenants/:id/voice-bot-cost-rate — set what this tenant's
+    // voice bot minutes cost (per minute), for the monthly cost report below.
+    fastify.patch('/tenants/:id/voice-bot-cost-rate', async (req, reply) => {
+      const { id } = req.params as { id: string };
+      const { costPerMinute } = z.object({ costPerMinute: z.number().min(0) }).parse(req.body);
+      await db.withSuperAdmin(async (client) => {
+        await client.query(
+          `INSERT INTO voice_bot_quotas (tenant_id, cost_per_minute)
+           VALUES ($1, $2)
+           ON CONFLICT (tenant_id) DO UPDATE SET cost_per_minute = EXCLUDED.cost_per_minute, updated_at = NOW()`,
+          [id, costPerMinute],
+        );
+      });
+      return reply.send({ success: true, data: { costPerMinute } });
+    });
+
+    // GET /super-admin/voice-bot/cost-report?month=YYYY-MM — cross-tenant monthly
+    // cost report. Cost is always computed live from call duration * rate (same
+    // "never store a running total" approach migration 059 uses for minutes) —
+    // so this reflects the CURRENT rate even for past months; rate changes are
+    // not retroactively versioned. Defaults to the current month.
+    fastify.get('/voice-bot/cost-report', async (req, reply) => {
+      const { month } = req.query as { month?: string };
+      const period = month && /^\d{4}-\d{2}$/.test(month) ? month : new Date().toISOString().slice(0, 7);
+      const [start, end] = [`${period}-01`, `${period}-01`];
+
+      const rows = await db.withSuperAdmin(async (client) => {
+        const r = await client.query(
+          `SELECT t.id AS tenant_id, t.name AS tenant_name,
+                  COALESCE(q.cost_per_minute, 0) AS cost_per_minute,
+                  COALESCE(SUM(c.duration_seconds), 0) AS total_seconds,
+                  COUNT(c.id) AS call_count
+             FROM tenants t
+             LEFT JOIN voice_bot_quotas q ON q.tenant_id = t.id
+             LEFT JOIN voice_bot_calls c
+               ON c.tenant_id = t.id
+              AND c.created_at >= $1::date
+              AND c.created_at <  ($1::date + INTERVAL '1 month')
+            WHERE t.active_modules @> ARRAY['voice_bot']
+            GROUP BY t.id, t.name, q.cost_per_minute
+            ORDER BY total_seconds DESC`,
+          [start],
+        );
+        return r.rows;
+      });
+
+      const data = rows.map((row: any) => {
+        const minutes = Number(row.total_seconds) / 60;
+        const costPerMinute = Number(row.cost_per_minute);
+        return {
+          tenantId: row.tenant_id,
+          tenantName: row.tenant_name,
+          minutesUsed: Number(minutes.toFixed(2)),
+          callCount: Number(row.call_count),
+          costPerMinute,
+          totalCost: Number((minutes * costPerMinute).toFixed(2)),
+        };
+      });
+
+      return reply.send({
+        success: true,
+        data: {
+          period,
+          tenants: data,
+          totalCostAllTenants: Number(data.reduce((sum: number, r: any) => sum + r.totalCost, 0).toFixed(2)),
         },
       });
     });
@@ -877,6 +949,31 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
       });
       await tenantService.invalidateCache(id);
       return reply.send({ success: true });
+    });
+
+    // PATCH /super-admin/tenants/:id/sms-gateway — grant/revoke access to AmanahCX's own
+    // shared SMS gateway. Stored the same way a tenant's own connector would be
+    // (tenants.settings.connectors.platform_sms), so SmsService.getConnectorConfig() only
+    // needs one lookup path — see packages/core/src/sms.service.ts.
+    fastify.patch('/tenants/:id/sms-gateway', async (req, reply) => {
+      const { id } = req.params as { id: string };
+      const { enabled } = z.object({ enabled: z.boolean() }).parse(req.body);
+
+      await db.withSuperAdmin(async (client) => {
+        // jsonb_set does NOT create missing intermediate objects — a bare
+        // '{connectors,platform_sms}' path silently no-ops when settings.connectors
+        // doesn't already exist. Ensure the parent object exists first, then merge.
+        await client.query(
+          `UPDATE tenants SET settings = jsonb_set(
+             COALESCE(settings,'{}'),
+             '{connectors}',
+             COALESCE(settings->'connectors','{}'::jsonb) || jsonb_build_object('platform_sms', $1::jsonb)
+           ) WHERE id = $2`,
+          [JSON.stringify({ enabled }), id],
+        );
+      });
+      await tenantService.invalidateCache(id);
+      return reply.send({ success: true, data: { enabled } });
     });
 
     // All-tenants overview (allocated vs consumed) for the super admin dashboard

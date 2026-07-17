@@ -1,10 +1,14 @@
 import type { FastifyInstance } from 'fastify';
 import type { DatabaseClient } from '@crm/core';
-import { requireFeature, requireScope, requireRole } from '../middlewares/auth.middleware';
+import { requireModule, requireScope, requireRole } from '../middlewares/auth.middleware';
 
 export function analyticsRoutes(db: DatabaseClient) {
   return async function (fastify: FastifyInstance) {
-    const preHandler = [requireFeature('analytics'), requireScope('analytics:read')];
+    // requireModule checks tenants.active_modules (the authoritative, kept-in-sync source) —
+    // was requireFeature('analytics'), which read settings.features.analytics, a flag that's
+    // never written by the module-licensing flow and had drifted stale for 7 of 24 tenants
+    // (correctly licensed for Analytics but silently 402'd here). Fixed 2026-07-17.
+    const preHandler = [requireModule('analytics'), requireScope('analytics:read')];
     // ops-dashboard is the home screen for all roles — not gated by analytics feature flag.
     // Fixed 2026-07-10: this previously still required requireScope('analytics:read'), which
     // checks permissions.analytics — the same key applyModuleLicensing forces to 'none' for any
