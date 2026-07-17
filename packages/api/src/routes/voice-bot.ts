@@ -557,6 +557,77 @@ async function checkVoiceBotUsageThresholds(db: DatabaseClient, tenantId: string
   });
 }
 
+type ContactMatch = {
+  id: string;
+  confidence: 'strong' | 'weak';
+  first_name: string | null;
+  email: string | null;
+  nic_number: string | null;
+  custom_fields: any;
+};
+
+// Matching rule (per user decision 2026-07-17): a "strong" match requires
+// at least TWO of {phone, NIC, email} to agree with the SAME existing
+// contact — much less likely to be a coincidence/typo than any single
+// field. If the caller only gave ONE identifier this call (very common —
+// people asking a quick question rarely share much), we still match on
+// that one field alone, but flag it "weak": the caller hasn't proven it's
+// really them yet, so Nadia should read back something safe (first name)
+// to confirm before treating it as verified. Never creates a contact —
+// callers only use this for read-only identity lookups.
+async function matchContact(
+  c: { query: (sql: string, params: any[]) => Promise<{ rows: any[] }> },
+  tenantId: string,
+  identifiers: { phone?: string | null; nic?: string | null; email?: string | null },
+): Promise<ContactMatch | null> {
+  const normalisedPhone = identifiers.phone?.replace(/\D/g, '').slice(-10) || null;
+  const nic = identifiers.nic?.trim() || null;
+  const email = identifiers.email?.trim().toLowerCase() || null;
+
+  const fieldClause = (field: 'phone' | 'nic' | 'email', params: any[]): string => {
+    if (field === 'phone') { params.push(`%${normalisedPhone}%`); return `(phone ILIKE $${params.length} OR mobile ILIKE $${params.length})`; }
+    if (field === 'nic') { params.push(nic); return `nic_number = $${params.length}`; }
+    params.push(email); return `LOWER(email) = $${params.length}`;
+  };
+
+  const given: Array<'phone' | 'nic' | 'email'> = [
+    ...(normalisedPhone ? (['phone'] as const) : []),
+    ...(nic ? (['nic'] as const) : []),
+    ...(email ? (['email'] as const) : []),
+  ];
+
+  // Strong: try every pair of given identifiers, first pair to hit wins.
+  if (given.length >= 2) {
+    for (let i = 0; i < given.length; i++) {
+      for (let j = i + 1; j < given.length; j++) {
+        const params: any[] = [tenantId];
+        const a = fieldClause(given[i], params);
+        const b = fieldClause(given[j], params);
+        const r = await c.query(
+          `SELECT id, first_name, email, nic_number, custom_fields FROM contacts
+           WHERE tenant_id=$1 AND (${a}) AND (${b}) LIMIT 1`,
+          params,
+        );
+        if (r.rows.length) return { ...r.rows[0], confidence: 'strong' };
+      }
+    }
+  }
+
+  // Weak fallback: whichever single identifiers were given, OR'd together.
+  if (given.length >= 1) {
+    const params: any[] = [tenantId];
+    const clauses = given.map((f) => fieldClause(f, params));
+    const r = await c.query(
+      `SELECT id, first_name, email, nic_number, custom_fields FROM contacts
+       WHERE tenant_id=$1 AND (${clauses.join(' OR ')}) LIMIT 1`,
+      params,
+    );
+    if (r.rows.length) return { ...r.rows[0], confidence: 'weak' };
+  }
+
+  return null;
+}
+
 async function createComplaintFromStructured(
   db: DatabaseClient,
   eventBus: EventBus,
@@ -576,34 +647,34 @@ async function createComplaintFromStructured(
     // 2026-07-13. Cuts this function from 7 sequential round-trips to 3.
     const [[contact], [{ next_val }], [queueRow], [slaRow], [botCall], [config]] = await Promise.all([
       db.withSuperAdmin(async (c) => {
-        const normalised = s.reporterPhone?.replace(/\D/g, '').slice(-10) ?? null;
+        const nic = s.reporterNic?.trim() || null;
         const addressFields = s.reporterAddress || s.reporterCity
           ? { address: s.reporterAddress ?? null, city: s.reporterCity ?? null }
           : null;
 
-        if (normalised) {
-          const r = await c.query(
-            `SELECT id, email, nic_number, custom_fields FROM contacts
-             WHERE tenant_id=$1 AND (phone ILIKE $2 OR mobile ILIKE $2) LIMIT 1`,
-            [tenantId, `%${normalised}%`],
+        const existing = await matchContact(c, tenantId, {
+          phone: s.reporterPhone, nic, email: s.reporterEmail,
+        });
+        if (existing) {
+          // Existing caller (strong or weak match) — fill in any details we
+          // didn't have before, never overwrite something already on file.
+          // Ticket-creation time always merges regardless of confidence —
+          // it's the mid-call identity check (lookup-contact endpoint,
+          // below) that treats "weak" as needing a spoken confirmation
+          // before Nadia relies on it.
+          const mergedCustomFields = addressFields
+            ? { ...addressFields, ...existing.custom_fields }
+            : existing.custom_fields;
+          await c.query(
+            `UPDATE contacts SET
+               phone = COALESCE(phone, $2),
+               email = COALESCE(email, $3),
+               nic_number = COALESCE(nic_number, $4),
+               custom_fields = $5::jsonb
+             WHERE id = $1`,
+            [existing.id, s.reporterPhone ?? null, s.reporterEmail ?? null, nic, JSON.stringify(mergedCustomFields ?? {})],
           );
-          if (r.rows.length) {
-            // Existing caller — fill in any details we didn't have before,
-            // never overwrite something already on file.
-            const existing = r.rows[0];
-            const mergedCustomFields = addressFields
-              ? { ...addressFields, ...existing.custom_fields }
-              : existing.custom_fields;
-            await c.query(
-              `UPDATE contacts SET
-                 email = COALESCE(email, $2),
-                 nic_number = COALESCE(nic_number, $3),
-                 custom_fields = $4::jsonb
-               WHERE id = $1`,
-              [existing.id, s.reporterEmail ?? null, s.reporterNic ?? null, JSON.stringify(mergedCustomFields ?? {})],
-            );
-            return [{ id: existing.id }];
-          }
+          return [{ id: existing.id }];
         }
         // New caller — create a contact so this call/ticket shows up on a
         // unified Contact 360 timeline, same as every other channel does.
@@ -2003,6 +2074,35 @@ export function voiceBotRoutes(db: DatabaseClient, eventBus: EventBus) {
       const consumedMinutes = Number(consumed.total_seconds) / 60;
       const remaining = allocated - consumedMinutes;
       return reply.send({ success: true, exhausted: remaining <= 0, remainingMinutes: Number(remaining.toFixed(1)) });
+    });
+
+    // Mid-call identity check — Nadia calls this the moment a caller shares
+    // ANY ONE identifier (phone, NIC, or email), before she's collected
+    // enough to file/update a ticket. Read-only: never creates a contact.
+    // "strong" means two of the three identifiers agreed with the same
+    // contact already on file; "weak" means only the one given identifier
+    // matched, so Nadia should read back the first name and ask the caller
+    // to confirm before relying on it (e.g. before quoting balance/order
+    // details tied to that contact).
+    fastify.get('/livekit/lookup-contact', async (req, reply) => {
+      const { tenantId, phone, nic, email } = req.query as {
+        tenantId?: string; phone?: string; nic?: string; email?: string;
+      };
+      if (!tenantId) return reply.code(400).send({ error: 'tenantId query param required' });
+      if (!checkSecret(req)) return reply.code(401).send({ error: 'unauthorized' });
+      if (!phone && !nic && !email) {
+        return reply.send({ success: true, found: false });
+      }
+
+      const match = await db.withSuperAdmin(async (c) =>
+        matchContact(c, tenantId, { phone, nic, email }));
+
+      if (!match) return reply.send({ success: true, found: false });
+      return reply.send({
+        success: true, found: true,
+        confidence: match.confidence,
+        firstName: match.first_name ?? null,
+      });
     });
   };
 }

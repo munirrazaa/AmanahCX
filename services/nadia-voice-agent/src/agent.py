@@ -163,6 +163,51 @@ class NadiaAgent(Agent):
         for f in await time_stretch(frames, rate):
             yield f
 
+    # ── Tool the LLM calls the moment the caller shares ANY ONE of phone/ ──
+    # ── NIC/email, so returning callers can be recognised without having ──
+    # ── to repeat everything, while still confirming it's really them. ──
+    @function_tool()
+    async def identify_caller(
+        self,
+        context: RunContext,
+        phone: str | None = None,
+        nic: str | None = None,
+        email: str | None = None,
+    ) -> str:
+        """Call this the moment the caller shares their phone number, NIC
+        (national ID), or email — even before you know why they're calling.
+        Looks up whether they're an existing contact.
+
+        If this comes back "confirmed" (two of phone/NIC/email matched
+        together), you may greet them by name and proceed normally — no
+        need to ask further questions to verify identity.
+
+        If it comes back "unconfirmed" (only the one detail they gave
+        matched), read back the first name and explicitly ask them to
+        confirm it's them (e.g. "I have a record under the name X — is
+        that you?") BEFORE relying on any of their account details. If they
+        say no, treat them as a new/different caller.
+
+        If it comes back "no record", just continue the conversation
+        normally — there's nothing to confirm.
+
+        Args:
+            phone: Caller's phone number, if they've given it.
+            nic: Caller's CNIC / national ID number, if they've given it.
+            email: Caller's email address, if they've given it.
+        """
+        result = await get_client().lookup_contact(self.tenant_id, phone, nic, email)
+        if not result.get("found"):
+            return "No record found — continue normally."
+        name = result.get("firstName") or "the caller"
+        if result.get("confidence") == "strong":
+            return f"Confirmed match: {name}. You may greet them by name and proceed."
+        return (
+            f"Possible match: {name} — but only one detail matched, not confirmed. "
+            f"Ask the caller to confirm: \"I have a record under the name {name}, is that you?\" "
+            "Do not rely on this being them until they confirm."
+        )
+
     # ── Tool the LLM calls to check the tenant's knowledge base before ──
     # ── assuming something needs a ticket (e.g. branch hours, policies) ──
     @function_tool()

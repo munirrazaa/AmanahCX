@@ -41,6 +41,10 @@ class CRMConnector(Protocol):
 
     async def search_knowledge_base(self, tenant_id: str, question: str) -> dict[str, Any] | None: ...
 
+    async def lookup_contact(
+        self, tenant_id: str, phone: str | None, nic: str | None, email: str | None,
+    ) -> dict[str, Any]: ...
+
     async def call_started(self, tenant_id: str, call_id: str) -> dict[str, Any]: ...
 
     async def get_minutes_status(self, tenant_id: str) -> dict[str, Any]: ...
@@ -99,6 +103,27 @@ class AmanahCXConnector:
                 return resp.json().get("data")
             except Exception:
                 return None
+
+    async def lookup_contact(
+        self, tenant_id: str, phone: str | None, nic: str | None, email: str | None,
+    ) -> dict[str, Any]:
+        params: dict[str, str] = {"tenantId": tenant_id}
+        if phone:
+            params["phone"] = phone
+        if nic:
+            params["nic"] = nic
+        if email:
+            params["email"] = email
+        try:
+            async with httpx.AsyncClient(timeout=5) as client:
+                resp = await client.get(
+                    f"{self.base_url}/api/v1/voice-bot/livekit/lookup-contact",
+                    params=params,
+                    headers=self._bearer(),
+                )
+                return resp.json() if resp.status_code == 200 else {"found": False}
+        except Exception:
+            return {"found": False}
 
     async def call_started(self, tenant_id: str, call_id: str) -> dict[str, Any]:
         try:

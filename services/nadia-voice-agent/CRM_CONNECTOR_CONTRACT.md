@@ -20,9 +20,28 @@ however its own systems actually work.
 | 1 | `get_config(tenant_id)` | Once, at the start of every call | Bot settings: name, voice, tone, language, greeting, guardrails, minutes/capacity limits, human transfer destination, etc. `None` if not configured — Nadia uses safe defaults. |
 | 2 | `create_ticket(tenant_id, call_id, ticket)` | Whenever a complaint/request needs a human follow-up | A ticket/case reference number Nadia can read back to the caller. |
 | 3 | `search_knowledge_base(tenant_id, question)` | When the caller asks a general question | A matching answer, or `None` if nothing matches (Nadia proceeds normally). |
+| 3b | `lookup_contact(tenant_id, phone, nic, email)` | The moment the caller shares any one of phone/NIC/email | Whether an existing contact matches, how confidently (see below), and a first name to read back for confirmation. Read-only — never creates a contact. |
 | 4 | `call_started(tenant_id, call_id)` | Right after the caller connects | Whether this call is allowed to proceed, or whether the tenant/server is already at its concurrent-call limit. |
 | 5 | `get_minutes_status(tenant_id)` | Right after the caller connects | Whether this tenant has used up its allocated minutes. |
 | 6 | `call_ended(tenant_id, call_id, transcript, recording_url)` | When the call ends | Nothing — this just reports the outcome back for the CRM to store. |
+
+## Identity matching rule (decided 2026-07-17)
+
+A CRM connector's contact matching should follow this rule so returning
+callers are recognised without over-trusting a single coincidence:
+
+- **Strong match**: at least two of {phone, NIC, email} agree with the
+  same existing contact. Safe to treat as confirmed — no need to ask the
+  caller to verify further.
+- **Weak match**: only one identifier was available this call and it
+  matched. Nadia reads back a safe detail (first name) and asks the
+  caller to confirm before relying on it being them.
+- **No match**: create a new contact (only at ticket-creation time —
+  `lookup_contact` itself never creates one).
+- Every field a caller shares gets merged into the contact record, but
+  never overwrites a value already on file (e.g. an old phone number
+  stays authoritative even if the caller gives a new one this call,
+  until updated some other explicit way).
 
 ## Adding a new CRM
 
