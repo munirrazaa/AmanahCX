@@ -2192,6 +2192,10 @@ export const PLATFORM_MODULE_DEFS: ModuleDef[] = [
     { key: 'billing:view',   label: 'View invoices & payment history',   type: 'read'   },
     { key: 'billing:manage', label: 'Generate & manage tenant invoices', type: 'write'  },
   ]},
+  { key: 'voice_bot', label: 'Voice Bot', icon: '🤖', actions: [
+    { key: 'voice_bot:manage_agents',         label: 'Create, edit & assign agent templates', type: 'write' },
+    { key: 'voice_bot:manage_knowledge_base', label: 'Manage knowledge base entries',          type: 'write' },
+  ]},
   { key: 'production', label: 'Production', icon: '🚀', actions: [
     { key: 'platform:push', label: 'Push changes to production',         type: 'danger' },
   ]},
