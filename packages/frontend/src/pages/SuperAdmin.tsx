@@ -16,7 +16,7 @@ import {
   BarChart2, Receipt, ClipboardList, Edit2, Eye, EyeOff,
   Lock, Calendar, ChevronDown, ChevronRight, Download, ShoppingCart,
   Hourglass, BadgeCheck, XCircle, CheckCircle, Phone,
-  ToggleLeft, ToggleRight, Bell,
+  ToggleLeft, ToggleRight, Bell, Bot,
 } from 'lucide-react';
 import { api } from '../services/api';
 import { useIsSuperAdmin } from '../hooks/useRole';
@@ -2282,6 +2282,259 @@ function PlatformAlertsTab() {
   );
 }
 
+// ── Agent Templates tab (Agent Builder, Phase 1) ───────────────────────────
+// Reusable voice-bot "recipes" created once and assigned to any workspace,
+// instead of configuring each tenant's bot from scratch. Assigning is a
+// one-time copy into that tenant's own config — still editable afterward.
+const CHARACTER_OPTIONS = ['professional', 'chirpy', 'funny', 'cordial', 'empathetic', 'formal'];
+const TONE_OPTIONS = ['professional', 'friendly', 'empathetic', 'formal'];
+const DIRECTION_OPTIONS = ['inbound', 'outbound', 'both'];
+
+function AgentTemplatesTab() {
+  const qc = useQueryClient();
+  const [modal, setModal] = useState<{ open: boolean; template?: any }>({ open: false });
+  const [assignModal, setAssignModal] = useState<{ open: boolean; templateId?: string }>({ open: false });
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+
+  const { data: templates = [], isLoading } = useQuery<any[]>({
+    queryKey: ['sa-agent-templates'],
+    queryFn: () => api.get('/super-admin/agent-templates').then((r) => r.data.data),
+  });
+  const { data: voices } = useQuery<Array<{ voice_id: string; label: string }>>({
+    queryKey: ['sa-voice-bot-voices'],
+    queryFn: () => api.get('/super-admin/voice-bot-voices').then((r) => r.data.data),
+  });
+  const { data: tenantsList } = useQuery<any[]>({
+    queryKey: ['sa-tenants-for-assign'],
+    queryFn: () => api.get('/super-admin/tenants', { params: { page: 1, pageSize: 200 } }).then((r) => r.data.data),
+    enabled: assignModal.open,
+  });
+
+  const deleteMut = useMutation({
+    mutationFn: (id: string) => api.delete(`/super-admin/agent-templates/${id}`),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['sa-agent-templates'] }); setConfirmDelete(null); },
+  });
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-sm font-semibold text-gray-800">Agent Templates</p>
+          <p className="text-xs text-gray-400 mt-0.5">Build a voice bot once, assign it to any workspace</p>
+        </div>
+        <button onClick={() => setModal({ open: true })}
+          className="flex items-center gap-2 px-3 py-2 bg-brand-600 text-white text-sm rounded-lg hover:bg-brand-700">
+          <Plus className="w-4 h-4" /> Create an Agent
+        </button>
+      </div>
+
+      {isLoading ? (
+        <div className="flex justify-center py-12"><Loader2 className="w-5 h-5 animate-spin text-gray-400" /></div>
+      ) : templates.length === 0 ? (
+        <div className="bg-white rounded-xl border border-gray-100 py-16 text-center text-gray-400">
+          <Bot className="w-10 h-10 mx-auto mb-2 opacity-30" />
+          <p className="text-sm">There are no agents yet.</p>
+          <p className="text-xs mt-1">Create an agent to start assigning it to workspaces</p>
+        </div>
+      ) : (
+        <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-gray-50 text-left text-xs text-gray-500">
+                <th className="px-4 py-2.5 font-medium">Agent Name</th>
+                <th className="px-4 py-2.5 font-medium">Sector</th>
+                <th className="px-4 py-2.5 font-medium">Voice</th>
+                <th className="px-4 py-2.5 font-medium">Direction</th>
+                <th className="px-4 py-2.5 font-medium">Assigned</th>
+                <th className="px-4 py-2.5"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {templates.map((t) => (
+                <tr key={t.id} className="border-t border-gray-50">
+                  <td className="px-4 py-3 font-medium text-gray-900">{t.name}</td>
+                  <td className="px-4 py-3 text-gray-500">{t.sector || '—'}</td>
+                  <td className="px-4 py-3 text-gray-500">{t.voice_id || '—'}</td>
+                  <td className="px-4 py-3 text-gray-500 capitalize">{t.call_direction}</td>
+                  <td className="px-4 py-3 text-gray-500">{t.assigned_count} workspace{t.assigned_count === '1' ? '' : 's'}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-2 justify-end">
+                      <button onClick={() => setAssignModal({ open: true, templateId: t.id })}
+                        className="text-xs text-brand-600 hover:underline">Assign</button>
+                      <button onClick={() => setModal({ open: true, template: t })}
+                        className="text-gray-400 hover:text-gray-700"><Edit2 className="w-4 h-4" /></button>
+                      <button onClick={() => setConfirmDelete(t.id)}
+                        className="text-gray-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {modal.open && (
+        <AgentTemplateModal
+          template={modal.template}
+          voices={voices ?? []}
+          onClose={() => setModal({ open: false })}
+          onSaved={() => { qc.invalidateQueries({ queryKey: ['sa-agent-templates'] }); setModal({ open: false }); }}
+        />
+      )}
+
+      {assignModal.open && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-sm p-5">
+            <h3 className="text-sm font-semibold text-gray-900 mb-3">Assign to workspace</h3>
+            <AssignAgentForm
+              templateId={assignModal.templateId!}
+              tenants={tenantsList ?? []}
+              onClose={() => setAssignModal({ open: false })}
+              onAssigned={() => { qc.invalidateQueries({ queryKey: ['sa-agent-templates'] }); setAssignModal({ open: false }); }}
+            />
+          </div>
+        </div>
+      )}
+
+      {confirmDelete && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-sm p-5">
+            <p className="text-sm text-gray-800 mb-4">Delete this agent template? Workspaces already assigned keep their current settings — only the reusable template is removed.</p>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setConfirmDelete(null)} className="px-3 py-1.5 text-sm text-gray-600">Cancel</button>
+              <button onClick={() => deleteMut.mutate(confirmDelete)} className="px-3 py-1.5 text-sm bg-red-600 text-white rounded-lg">Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AssignAgentForm({ templateId, tenants, onClose, onAssigned }: {
+  templateId: string; tenants: any[]; onClose: () => void; onAssigned: () => void;
+}) {
+  const [tenantId, setTenantId] = useState('');
+  const mut = useMutation({
+    mutationFn: () => api.post(`/super-admin/agent-templates/${templateId}/assign`, { tenantId }),
+    onSuccess: onAssigned,
+  });
+  return (
+    <div className="space-y-3">
+      <select value={tenantId} onChange={(e) => setTenantId(e.target.value)}
+        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white">
+        <option value="">Select a workspace…</option>
+        {tenants.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+      </select>
+      <div className="flex justify-end gap-2">
+        <button onClick={onClose} className="px-3 py-1.5 text-sm text-gray-600">Cancel</button>
+        <button onClick={() => mut.mutate()} disabled={!tenantId || mut.isPending}
+          className="px-3 py-1.5 text-sm bg-brand-600 text-white rounded-lg disabled:opacity-50">
+          {mut.isPending ? 'Assigning…' : 'Assign'}
+        </button>
+      </div>
+      {mut.isSuccess && <p className="text-xs text-green-600 text-right">Assigned.</p>}
+    </div>
+  );
+}
+
+function AgentTemplateModal({ template, voices, onClose, onSaved }: {
+  template?: any; voices: Array<{ voice_id: string; label: string }>; onClose: () => void; onSaved: () => void;
+}) {
+  const [form, setForm] = useState({
+    name: template?.name ?? '',
+    sector: template?.sector ?? '',
+    description: template?.description ?? '',
+    companyName: template?.company_name ?? '',
+    department: template?.department ?? '',
+    botEngine: template?.bot_engine ?? 'nadia',
+    voiceId: template?.voice_id ?? '',
+    tone: template?.tone ?? 'professional',
+    character: template?.character ?? 'professional',
+    language: template?.language ?? 'ur-PK',
+    callDirection: template?.call_direction ?? 'inbound',
+    guardrails: template?.guardrails ?? '',
+    systemPrompt: template?.system_prompt ?? '',
+    greetingMessage: template?.greeting_message ?? '',
+  });
+  const mut = useMutation({
+    mutationFn: () => template
+      ? api.put(`/super-admin/agent-templates/${template.id}`, form)
+      : api.post('/super-admin/agent-templates', form),
+    onSuccess: onSaved,
+  });
+  const set = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }));
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-5 space-y-3">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-gray-900">{template ? 'Edit Agent' : 'Create an Agent'}</h3>
+          <button onClick={onClose}><X className="w-4 h-4 text-gray-400" /></button>
+        </div>
+
+        <input value={form.name} onChange={(e) => set('name', e.target.value)} placeholder="Agent name"
+          className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm" />
+        <input value={form.sector} onChange={(e) => set('sector', e.target.value)}
+          placeholder="Sector (e.g. banking, electronics_retail, ecommerce)"
+          className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm" />
+        <input value={form.companyName} onChange={(e) => set('companyName', e.target.value)}
+          placeholder="Company name (spoken in greeting)"
+          className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm" />
+        <input value={form.department} onChange={(e) => set('department', e.target.value)}
+          placeholder="Department (optional)"
+          className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm" />
+
+        <div className="grid grid-cols-2 gap-2">
+          <select value={form.botEngine} onChange={(e) => set('botEngine', e.target.value)}
+            className="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white">
+            <option value="nadia">Nadia</option>
+          </select>
+          <select value={form.voiceId} onChange={(e) => set('voiceId', e.target.value)}
+            className="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white">
+            <option value="">Select voice…</option>
+            {voices.map((v) => <option key={v.voice_id} value={v.voice_id}>{v.label}</option>)}
+          </select>
+          <select value={form.tone} onChange={(e) => set('tone', e.target.value)}
+            className="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white">
+            {TONE_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}
+          </select>
+          <select value={form.character} onChange={(e) => set('character', e.target.value)}
+            className="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white">
+            {CHARACTER_OPTIONS.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+          <input value={form.language} onChange={(e) => set('language', e.target.value)} placeholder="Language (e.g. ur-PK)"
+            className="px-3 py-2 border border-gray-200 rounded-lg text-sm" />
+          <select value={form.callDirection} onChange={(e) => set('callDirection', e.target.value)}
+            className="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white">
+            {DIRECTION_OPTIONS.map((d) => <option key={d} value={d} className="capitalize">{d}</option>)}
+          </select>
+        </div>
+
+        <textarea value={form.greetingMessage} onChange={(e) => set('greetingMessage', e.target.value)}
+          placeholder="Greeting message" rows={2}
+          className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm" />
+        <textarea value={form.guardrails} onChange={(e) => set('guardrails', e.target.value)}
+          placeholder="Guardrails — hard limits" rows={2}
+          className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm" />
+        <textarea value={form.systemPrompt} onChange={(e) => set('systemPrompt', e.target.value)}
+          placeholder="System prompt / behaviour instructions" rows={4}
+          className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm" />
+        <textarea value={form.description} onChange={(e) => set('description', e.target.value)}
+          placeholder="Internal description (not spoken to callers)" rows={2}
+          className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm" />
+
+        <button onClick={() => mut.mutate()} disabled={!form.name || mut.isPending}
+          className="w-full py-2 text-sm font-semibold text-white bg-brand-600 rounded-lg hover:bg-brand-700 disabled:opacity-50">
+          {mut.isPending ? 'Saving…' : template ? 'Save Changes' : 'Create Agent'}
+        </button>
+        {mut.isError && <p className="text-xs text-red-600 text-center">Failed to save — check required fields.</p>}
+      </div>
+    </div>
+  );
+}
+
 // ── Sub-Admin Roles tab ────────────────────────────────────────────────────
 function PlatformRolesTab() {
   const qc = useQueryClient();
@@ -3742,7 +3995,7 @@ export function SuperAdmin() {
   // reading it from the URL instead of local state keeps the two in sync.
   const [searchParams] = useSearchParams();
   const activeTab = (searchParams.get('tab') ?? 'dashboard') as
-    'dashboard' | 'tenants' | 'roles' | 'sub-admins' | 'billing' | 'reports' | 'catalogue' | 'orders' | 'settings' | 'alerts';
+    'dashboard' | 'tenants' | 'roles' | 'sub-admins' | 'billing' | 'reports' | 'catalogue' | 'orders' | 'settings' | 'alerts' | 'agent-templates';
   const [search, setSearch] = useState('');
   const [planFilter, setPlanFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -3804,6 +4057,7 @@ export function SuperAdmin() {
         {activeTab === 'reports'    && <SuperAdminReports />}
         {activeTab === 'settings'   && <SuperAdminSettings />}
         {activeTab === 'alerts'     && <PlatformAlertsTab />}
+        {activeTab === 'agent-templates' && <AgentTemplatesTab />}
 
         {/* Filters */}
         {activeTab === 'tenants' && <div className="flex gap-3 flex-wrap">

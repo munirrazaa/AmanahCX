@@ -175,6 +175,7 @@ const SUPER_ADMIN_NAV = [
   { key: 'billing',    label: 'Billing',          icon: TrendingUp   },
   { key: 'catalogue',  label: 'Module Catalogue', icon: Package      },
   { key: 'orders',     label: 'Tenant Orders',    icon: ShoppingCart },
+  { key: 'agent-templates', label: 'Agent Templates', icon: Bot     },
   { key: 'roles',      label: 'Sub-Admin Roles',  icon: Shield       },
   { key: 'sub-admins', label: 'Sub-Admins',       icon: Users        },
   { key: 'reports',    label: 'Reports',          icon: BarChart2    },

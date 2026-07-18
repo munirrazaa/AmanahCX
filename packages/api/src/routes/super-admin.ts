@@ -877,6 +877,151 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
       return reply.send({ success: true, data: voices });
     });
 
+    // ── Voice Bot Agent Templates (Agent Builder, Phase 1) ──────────────
+    // Reusable agent "recipes" a Super Admin creates once and assigns to
+    // any number of workspaces — not configured per-tenant from scratch
+    // every time. Assigning is a one-time copy into that tenant's own
+    // voice_bot_configs row, not a live binding, so it stays editable
+    // afterward per the user's explicit requirement.
+    const AgentTemplateSchema = z.object({
+      name:             z.string().min(1).max(120),
+      sector:           z.string().optional(),
+      description:      z.string().optional(),
+      companyName:      z.string().optional(),
+      department:       z.string().optional(),
+      botEngine:        z.string().default('nadia'),
+      voiceId:          z.string().optional(),
+      tone:             z.enum(['professional', 'friendly', 'empathetic', 'formal']).default('professional'),
+      character:        z.enum(['professional', 'chirpy', 'funny', 'cordial', 'empathetic', 'formal']).default('professional'),
+      language:         z.string().default('ur-PK'),
+      callDirection:    z.enum(['inbound', 'outbound', 'both']).default('inbound'),
+      guardrails:       z.string().optional(),
+      systemPrompt:     z.string().optional(),
+      greetingMessage:  z.string().optional(),
+    });
+
+    fastify.get('/agent-templates', async (_req, reply) => {
+      const templates = await db.withSuperAdmin(async (c) => {
+        const r = await c.query(
+          `SELECT t.*,
+                  (SELECT COUNT(*) FROM voice_bot_configs vc WHERE vc.source_template_id = t.id) AS assigned_count
+             FROM voice_bot_agent_templates t
+            ORDER BY t.updated_at DESC`,
+        );
+        return r.rows;
+      });
+      return reply.send({ success: true, data: templates });
+    });
+
+    fastify.get('/agent-templates/:id', async (req, reply) => {
+      const { id } = req.params as { id: string };
+      const [template] = await db.withSuperAdmin(async (c) =>
+        (await c.query(`SELECT * FROM voice_bot_agent_templates WHERE id = $1`, [id])).rows);
+      if (!template) return reply.code(404).send({ error: 'not_found' });
+      const assignedTenants = await db.withSuperAdmin(async (c) =>
+        (await c.query(
+          `SELECT t.id, t.name FROM tenants t
+             JOIN voice_bot_configs vc ON vc.tenant_id = t.id
+            WHERE vc.source_template_id = $1`,
+          [id],
+        )).rows);
+      return reply.send({ success: true, data: template, assignedTenants });
+    });
+
+    fastify.post('/agent-templates', async (req, reply) => {
+      const body = AgentTemplateSchema.parse(req.body);
+      const userId = (req as any).user?.id ?? null;
+      const [created] = await db.withSuperAdmin(async (c) =>
+        (await c.query(
+          `INSERT INTO voice_bot_agent_templates
+             (name, sector, description, company_name, department, bot_engine, voice_id,
+              tone, character, language, call_direction, guardrails, system_prompt, greeting_message, created_by)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+           RETURNING *`,
+          [body.name, body.sector ?? null, body.description ?? null, body.companyName ?? null,
+           body.department ?? null, body.botEngine, body.voiceId ?? null, body.tone, body.character,
+           body.language, body.callDirection, body.guardrails ?? null, body.systemPrompt ?? null,
+           body.greetingMessage ?? null, userId],
+        )).rows);
+      return reply.code(201).send({ success: true, data: created });
+    });
+
+    fastify.put('/agent-templates/:id', async (req, reply) => {
+      const { id } = req.params as { id: string };
+      const body = AgentTemplateSchema.partial().parse(req.body);
+      const [updated] = await db.withSuperAdmin(async (c) =>
+        (await c.query(
+          `UPDATE voice_bot_agent_templates SET
+             name             = COALESCE($2, name),
+             sector           = COALESCE($3, sector),
+             description      = COALESCE($4, description),
+             company_name     = COALESCE($5, company_name),
+             department       = COALESCE($6, department),
+             bot_engine       = COALESCE($7, bot_engine),
+             voice_id         = COALESCE($8, voice_id),
+             tone             = COALESCE($9, tone),
+             character        = COALESCE($10, character),
+             language         = COALESCE($11, language),
+             call_direction   = COALESCE($12, call_direction),
+             guardrails       = COALESCE($13, guardrails),
+             system_prompt    = COALESCE($14, system_prompt),
+             greeting_message = COALESCE($15, greeting_message),
+             updated_at       = NOW()
+           WHERE id = $1
+           RETURNING *`,
+          [id, body.name ?? null, body.sector ?? null, body.description ?? null, body.companyName ?? null,
+           body.department ?? null, body.botEngine ?? null, body.voiceId ?? null, body.tone ?? null,
+           body.character ?? null, body.language ?? null, body.callDirection ?? null,
+           body.guardrails ?? null, body.systemPrompt ?? null, body.greetingMessage ?? null],
+        )).rows);
+      if (!updated) return reply.code(404).send({ error: 'not_found' });
+      return reply.send({ success: true, data: updated });
+    });
+
+    fastify.delete('/agent-templates/:id', async (req, reply) => {
+      const { id } = req.params as { id: string };
+      await db.withSuperAdmin(async (c) => {
+        await c.query(`DELETE FROM voice_bot_agent_templates WHERE id = $1`, [id]);
+      });
+      return reply.send({ success: true });
+    });
+
+    // Assign a template to a workspace — one-time copy into that tenant's
+    // voice_bot_configs row (provider='livekit'), same table Nadia already
+    // reads at call time, so nothing about the runtime path changes.
+    fastify.post('/agent-templates/:id/assign', async (req, reply) => {
+      const { id } = req.params as { id: string };
+      const { tenantId } = req.body as { tenantId?: string };
+      if (!tenantId) return reply.code(400).send({ error: 'tenantId required' });
+
+      const [template] = await db.withSuperAdmin(async (c) =>
+        (await c.query(`SELECT * FROM voice_bot_agent_templates WHERE id = $1`, [id])).rows);
+      if (!template) return reply.code(404).send({ error: 'template_not_found' });
+
+      const [cfg] = await db.withSuperAdmin(async (c) =>
+        (await c.query(
+          `INSERT INTO voice_bot_configs
+             (tenant_id, provider, bot_name, greeting_message, system_prompt, tone, voice_id,
+              language, guardrails, source_template_id)
+           VALUES ($1,'livekit',$2,$3,$4,$5,$6,$7,$8,$9)
+           ON CONFLICT (tenant_id, provider) DO UPDATE SET
+             bot_name            = EXCLUDED.bot_name,
+             greeting_message    = COALESCE(EXCLUDED.greeting_message, voice_bot_configs.greeting_message),
+             system_prompt       = COALESCE(EXCLUDED.system_prompt, voice_bot_configs.system_prompt),
+             tone                = EXCLUDED.tone,
+             voice_id            = COALESCE(EXCLUDED.voice_id, voice_bot_configs.voice_id),
+             language            = EXCLUDED.language,
+             guardrails          = COALESCE(EXCLUDED.guardrails, voice_bot_configs.guardrails),
+             source_template_id  = EXCLUDED.source_template_id,
+             updated_at          = NOW()
+           RETURNING *`,
+          [tenantId, template.company_name || template.name, template.greeting_message,
+           template.system_prompt, template.tone, template.voice_id, template.language,
+           template.guardrails, id],
+        )).rows);
+      return reply.send({ success: true, data: cfg });
+    });
+
     // Knowledge base — same table as the tenant-side page, scoped by an
     // explicit :id param instead of req.tenant.id. Text entries only here;
     // file/URL import stays on the tenant-side page for now.
