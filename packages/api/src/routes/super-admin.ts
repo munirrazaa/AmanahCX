@@ -369,6 +369,58 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
       // Seed sector-specific custom fields for all entity types
       await seedSectorFields(db, tenant.id, body.sector);
 
+      // Auto-provision a voice bot config if this tenant is licensed for
+      // it — a working generic bot from day one instead of a dead nav
+      // item until someone manually builds one. Prefers a sector-matched
+      // agent template if a Super Admin has built one for this sector;
+      // falls back to a generic template (sector IS NULL), then to bare
+      // sensible defaults if no templates exist at all yet. Segments:
+      // Inquiry/FAQ self-service is always included (answers directly
+      // when possible, no ticket needed); Complaint appears if this
+      // tenant has Ticketing; Sales appears if it has the Sales module —
+      // so the bot's menu always matches what was actually licensed.
+      if (licensedModules.includes('voice_bot')) {
+        await db.withSuperAdmin(async (client) => {
+          const [sectorTemplate] = (await client.query(
+            `SELECT * FROM voice_bot_agent_templates WHERE sector = $1 ORDER BY updated_at DESC LIMIT 1`,
+            [body.sector],
+          )).rows;
+          const [genericTemplate] = sectorTemplate ? [undefined] : (await client.query(
+            `SELECT * FROM voice_bot_agent_templates WHERE sector IS NULL ORDER BY updated_at DESC LIMIT 1`,
+          )).rows;
+          const template = sectorTemplate ?? genericTemplate ?? null;
+
+          const greeting = template?.greeting_message
+            ?? `Hello, thank you for calling ${tenant.name}. My name is Nadia — how can I help you today?`;
+
+          const ivrMenu: Array<Record<string, unknown>> = [
+            { label: 'Product & service enquiries', intent: 'inquiry', option: 1, ticketType: 'inquiry',
+              description: 'General questions — answered directly when possible, no ticket needed' },
+          ];
+          let nextOption = 2;
+          if (licensedModules.includes('ticketing')) {
+            ivrMenu.push({ label: 'Register a complaint', intent: 'complaint', option: nextOption++, ticketType: 'complaint',
+              description: 'Lodge a complaint about a product or service' });
+          }
+          if (licensedModules.includes('sales')) {
+            ivrMenu.push({ label: 'Speak to a sales agent', intent: 'sales', option: nextOption++, ticketType: 'sales',
+              description: 'Connect with our sales team' });
+          }
+
+          await client.query(
+            `INSERT INTO voice_bot_configs
+               (tenant_id, provider, bot_name, greeting_message, system_prompt, tone, voice_id,
+                language, guardrails, ivr_menu, source_template_id)
+             VALUES ($1,'livekit',$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10)
+             ON CONFLICT (tenant_id, provider) DO NOTHING`,
+            [tenant.id, template?.company_name || tenant.name, greeting, template?.system_prompt ?? null,
+             template?.tone ?? 'professional', template?.voice_id ?? 'helpdesk-agent',
+             template?.language ?? 'ur-PK', template?.guardrails ?? null, JSON.stringify(ivrMenu),
+             template?.id ?? null],
+          );
+        });
+      }
+
       // Provision the first tenant admin so the new customer can log in immediately.
       // If no password was supplied, generate a temporary one and return it once.
       const tempPassword = body.adminPassword ?? generateTempPassword();
