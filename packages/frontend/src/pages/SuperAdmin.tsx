@@ -1201,15 +1201,45 @@ function ConfigOwnershipModal({ tenant, onClose }: { tenant: any; onClose: () =>
     queryFn: () => api.get(`/super-admin/tenants/${tenant.id}/voice-bot-knowledge-base`).then(r => r.data.data),
     enabled: voiceBotOwnership === 'super_admin',
   });
+  // Phase 2: knowledge base entries can come from text, a crawled URL, or
+  // an uploaded PDF/DOCX (text extracted server-side) — same three sources
+  // the tenant-side page already supports, now with parity here too.
+  const [kbMode, setKbMode] = useState<'text' | 'url' | 'file'>('text');
   const [kbTitle, setKbTitle] = useState('');
   const [kbContent, setKbContent] = useState('');
   const [kbKeywords, setKbKeywords] = useState('');
+  const [kbUrl, setKbUrl] = useState('');
+  const [kbFile, setKbFile] = useState<File | null>(null);
+  const resetKbForm = () => { setKbTitle(''); setKbContent(''); setKbKeywords(''); setKbUrl(''); setKbFile(null); };
+
   const addKbMut = useMutation({
     mutationFn: () => api.post(`/super-admin/tenants/${tenant.id}/voice-bot-knowledge-base`, {
       title: kbTitle, content: kbContent, keywords: kbKeywords.split(',').map(k => k.trim()).filter(Boolean),
     }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['sa-voice-bot-kb', tenant.id] }); setKbTitle(''); setKbContent(''); setKbKeywords(''); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['sa-voice-bot-kb', tenant.id] }); resetKbForm(); },
   });
+  const importUrlKbMut = useMutation({
+    mutationFn: () => api.post(`/super-admin/tenants/${tenant.id}/voice-bot-knowledge-base/import-url`, {
+      title: kbTitle, url: kbUrl, keywords: kbKeywords.split(',').map(k => k.trim()).filter(Boolean),
+    }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['sa-voice-bot-kb', tenant.id] }); resetKbForm(); },
+  });
+  const uploadKbMut = useMutation({
+    mutationFn: () => {
+      const fd = new FormData();
+      fd.append('file', kbFile!);
+      fd.append('title', kbTitle);
+      fd.append('keywords', kbKeywords);
+      return api.post(`/super-admin/tenants/${tenant.id}/voice-bot-knowledge-base/upload`, fd, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['sa-voice-bot-kb', tenant.id] }); resetKbForm(); },
+  });
+  const kbSubmitMut = kbMode === 'url' ? importUrlKbMut : kbMode === 'file' ? uploadKbMut : addKbMut;
+  const kbCanSubmit = kbMode === 'text' ? !!(kbTitle && kbContent && kbKeywords)
+    : kbMode === 'url' ? !!(kbTitle && kbUrl && kbKeywords)
+    : !!(kbTitle && kbFile && kbKeywords);
   const toggleKbMut = useMutation({
     mutationFn: ({ id: entryId, isActive }: { id: string; isActive: boolean }) =>
       api.put(`/super-admin/tenants/${tenant.id}/voice-bot-knowledge-base/${entryId}`, { isActive }),
@@ -1442,16 +1472,40 @@ function ConfigOwnershipModal({ tenant, onClose }: { tenant: any; onClose: () =>
                   </div>
                 )}
                 <div className="space-y-1.5">
+                  <div className="flex gap-1 bg-gray-100 rounded-lg p-0.5 mb-1">
+                    {(['text', 'url', 'file'] as const).map(m => (
+                      <button key={m} onClick={() => setKbMode(m)}
+                        className={`flex-1 px-2 py-1.5 text-xs font-medium rounded-md transition-colors ${kbMode === m ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}>
+                        {m === 'text' ? 'Add Text' : m === 'url' ? 'Add Web Page' : 'Upload File'}
+                      </button>
+                    ))}
+                  </div>
+
                   <input value={kbTitle} onChange={e => setKbTitle(e.target.value)} placeholder="Title (e.g. Branch Hours)"
                     className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm" />
-                  <textarea value={kbContent} onChange={e => setKbContent(e.target.value)} placeholder="Answer Nadia should give" rows={2}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm resize-none" />
+
+                  {kbMode === 'text' && (
+                    <textarea value={kbContent} onChange={e => setKbContent(e.target.value)} placeholder="Answer Nadia should give" rows={2}
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm resize-none" />
+                  )}
+                  {kbMode === 'url' && (
+                    <input value={kbUrl} onChange={e => setKbUrl(e.target.value)} placeholder="https://example.com/faq"
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm" />
+                  )}
+                  {kbMode === 'file' && (
+                    <input type="file" accept=".pdf,.docx" onChange={e => setKbFile(e.target.files?.[0] ?? null)}
+                      className="w-full text-xs text-gray-600 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-medium file:bg-gray-100 file:text-gray-700" />
+                  )}
+
                   <input value={kbKeywords} onChange={e => setKbKeywords(e.target.value)} placeholder="Keywords, comma separated"
                     className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm" />
-                  <button onClick={() => addKbMut.mutate()} disabled={!kbTitle || !kbContent || !kbKeywords || addKbMut.isPending}
+                  <button onClick={() => kbSubmitMut.mutate()} disabled={!kbCanSubmit || kbSubmitMut.isPending}
                     className="w-full py-2 text-sm font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50">
-                    {addKbMut.isPending ? 'Adding…' : '+ Add Entry'}
+                    {kbSubmitMut.isPending ? 'Adding…' : '+ Add Entry'}
                   </button>
+                  {kbSubmitMut.isError && <p className="text-xs text-red-600 text-center">
+                    {(kbSubmitMut.error as any)?.response?.data?.error || 'Failed to add — check the file/URL and try again.'}
+                  </p>}
                 </div>
               </div>
             </div>

@@ -6,6 +6,8 @@ import { getSector } from '@crm/shared';
 import { requireRole } from '../middlewares/auth.middleware';
 import { defaultPermissions } from './roles';
 import { ensureDefaultPipeline } from '../lib/default-pipeline';
+import pdfParse from 'pdf-parse';
+import mammoth from 'mammoth';
 
 // The four standard roles auto-seeded into every new workspace. Their default
 // permissions come from defaultPermissions(); the tenant admin tailors them later.
@@ -1023,8 +1025,10 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
     });
 
     // Knowledge base — same table as the tenant-side page, scoped by an
-    // explicit :id param instead of req.tenant.id. Text entries only here;
-    // file/URL import stays on the tenant-side page for now.
+    // explicit :id param instead of req.tenant.id. Phase 2: full parity
+    // with the tenant-side page — text, URL import (crawl + strip to
+    // plain text), and file upload (PDF/DOCX, text extracted at upload
+    // time) — same extraction logic, just targeting an explicit tenant.
     fastify.get('/tenants/:id/voice-bot-knowledge-base', async (req, reply) => {
       const { id } = req.params as { id: string };
       const entries = await db.withSuperAdmin(async (c) => {
@@ -1050,6 +1054,104 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
           `INSERT INTO voice_bot_knowledge_entries (tenant_id, title, content, keywords, source_type)
            VALUES ($1, $2, $3, $4, 'text') RETURNING *`,
           [id, body.title, body.content, body.keywords.map(k => k.toLowerCase())],
+        );
+        return r.rows;
+      });
+      return reply.code(201).send({ success: true, data: entry });
+    });
+
+    // Import from a URL: fetch the page, strip HTML to plain text — same
+    // extraction logic as the tenant-side route, targeting an explicit tenant.
+    fastify.post('/tenants/:id/voice-bot-knowledge-base/import-url', async (req, reply) => {
+      const { id } = req.params as { id: string };
+      const body = z.object({
+        title:    z.string().min(1).max(120),
+        url:      z.string().url(),
+        keywords: z.array(z.string().min(1)).min(1).max(20),
+      }).parse(req.body);
+
+      let text: string;
+      try {
+        const res = await fetch(body.url, { signal: AbortSignal.timeout(10_000) });
+        if (!res.ok) return reply.code(400).send({ success: false, error: `Could not fetch that URL (HTTP ${res.status})` });
+        const html = await res.text();
+        text = html
+          .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+          .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+          .replace(/<[^>]+>/g, ' ')
+          .replace(/&nbsp;/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim()
+          .slice(0, 5000);
+      } catch (err: any) {
+        return reply.code(400).send({ success: false, error: `Could not fetch that URL: ${err.message}` });
+      }
+      if (!text) return reply.code(400).send({ success: false, error: 'No readable text found at that URL' });
+
+      const [entry] = await db.withSuperAdmin(async (c) => {
+        const r = await c.query(
+          `INSERT INTO voice_bot_knowledge_entries
+             (tenant_id, title, content, keywords, source_type, source_url)
+           VALUES ($1, $2, $3, $4, 'url', $5)
+           RETURNING *`,
+          [id, body.title, text, body.keywords.map(k => k.toLowerCase()), body.url],
+        );
+        return r.rows;
+      });
+      return reply.code(201).send({ success: true, data: entry });
+    });
+
+    // Upload a PDF or DOCX: extract its text — same extraction logic as
+    // the tenant-side route, targeting an explicit tenant.
+    fastify.post('/tenants/:id/voice-bot-knowledge-base/upload', async (req, reply) => {
+      const { id } = req.params as { id: string };
+      const parts = req.parts();
+      let fileBuffer: Buffer | null = null;
+      let filename = '';
+      let mimetype = '';
+      let title = '';
+      let keywordsRaw = '';
+      for await (const part of parts) {
+        if (part.type === 'file') {
+          fileBuffer = await part.toBuffer();
+          filename = part.filename;
+          mimetype = part.mimetype;
+        } else if (part.fieldname === 'title') {
+          title = String(part.value);
+        } else if (part.fieldname === 'keywords') {
+          keywordsRaw = String(part.value);
+        }
+      }
+      if (!fileBuffer) return reply.code(400).send({ success: false, error: 'No file uploaded' });
+      if (!title.trim()) return reply.code(400).send({ success: false, error: 'Title is required' });
+      const keywords = keywordsRaw.split(',').map(k => k.trim().toLowerCase()).filter(Boolean);
+      if (keywords.length === 0) return reply.code(400).send({ success: false, error: 'At least one keyword is required' });
+
+      let text: string;
+      try {
+        if (mimetype === 'application/pdf' || filename.toLowerCase().endsWith('.pdf')) {
+          text = (await pdfParse(fileBuffer)).text;
+        } else if (
+          mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+          || filename.toLowerCase().endsWith('.docx')
+        ) {
+          text = (await mammoth.extractRawText({ buffer: fileBuffer })).value;
+        } else {
+          return reply.code(400).send({ success: false, error: 'Only PDF or DOCX files are supported' });
+        }
+      } catch (err: any) {
+        return reply.code(400).send({ success: false, error: `Could not read that file: ${err.message}` });
+      }
+      text = text.replace(/\s+/g, ' ').trim().slice(0, 5000);
+      if (!text) return reply.code(400).send({ success: false, error: 'No readable text found in that file' });
+
+      const [entry] = await db.withSuperAdmin(async (c) => {
+        const r = await c.query(
+          `INSERT INTO voice_bot_knowledge_entries
+             (tenant_id, title, content, keywords, source_type, source_filename)
+           VALUES ($1, $2, $3, $4, 'file', $5)
+           RETURNING *`,
+          [id, title, text, keywords, filename],
         );
         return r.rows;
       });
