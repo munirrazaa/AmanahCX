@@ -3005,6 +3005,48 @@ ${note ? `<p><strong>Reason:</strong> ${note}</p>` : ''}
   };
 }
 
+// Who should be notified for an SLA escalation at a given level — scoped to
+// the ticket's own assignee's management chain (L1 = their direct manager,
+// L2 = that manager's manager), not every manager tenant-wide. This mirrors
+// the same department-isolation principle getVisibleUserIds() (lib/visibility.ts)
+// already enforces for contacts/deals/tickets lists — walking the reporting
+// tree via manager_id — just walked UP from the agent instead of DOWN from a
+// manager. Previously these call sites instead broadcast to every
+// manager/tenant_admin tenant-wide regardless of department, so a Support
+// breach would also page Sales and Complaints managers. Found and fixed
+// 2026-07-18. Falls back to tenant_admin only when the chain doesn't reach
+// that far (e.g. no manager configured for that agent), so a breach is never
+// silently unnoticed.
+async function getEscalationTargets(
+  db: DatabaseClient,
+  tenantId: string,
+  assigneeId: string | null,
+  level: 1 | 2,
+): Promise<string[]> {
+  if (assigneeId) {
+    const chain = await db.withSuperAdmin(async (c) => {
+      const r = await c.query(
+        `SELECT m1.id AS l1_id, m2.id AS l2_id
+         FROM users a
+         LEFT JOIN users m1 ON m1.id = a.manager_id AND m1.is_active = true
+         LEFT JOIN users m2 ON m2.id = m1.manager_id AND m2.is_active = true
+         WHERE a.id = $1`,
+        [assigneeId],
+      );
+      return r.rows[0] ?? {};
+    });
+    const target = level === 1 ? chain.l1_id : chain.l2_id;
+    if (target) return [target];
+  }
+  return db.withSuperAdmin(async (c) => {
+    const r = await c.query(
+      `SELECT id FROM users WHERE tenant_id = $1 AND role = 'tenant_admin' AND is_active = true`,
+      [tenantId],
+    );
+    return r.rows.map((u: any) => u.id as string);
+  });
+}
+
 // ── SLA Worker (lives in modules/ticketing/src/index.ts) ──────────────────
 // The actual SLA worker runs in the TicketingPlatformModule's onLoad().
 // This export is kept for backward compatibility only.
@@ -3084,14 +3126,8 @@ export async function runSlaWorker(db: DatabaseClient, eventBus: EventBus): Prom
           );
         });
 
-        // Notify assignee + managers
-        const managers = await db.withSuperAdmin(async (client) => {
-          const r = await client.query(
-            `SELECT id FROM users WHERE tenant_id = $1 AND role IN ('manager','tenant_admin') AND is_active = true`,
-            [ticket.tenant_id],
-          );
-          return r.rows.map((u: any) => u.id as string);
-        });
+        // Notify assignee + their manager (falls back to tenant_admin if none set)
+        const managers = await getEscalationTargets(db, ticket.tenant_id, ticket.assignee_id, 1);
         const notifyIds = [...(ticket.assignee_id ? [ticket.assignee_id] : []), ...managers];
 
         await notify(db, ticket.tenant_id, notifyIds,
@@ -3164,13 +3200,9 @@ export async function runSlaWorker(db: DatabaseClient, eventBus: EventBus): Prom
             if (ticket.assignee_id) notifyIds.push(ticket.assignee_id);
           }
           if (step.notifyTarget === 'managers' || step.notifyTarget === 'all') {
-            const mgrs = await db.withSuperAdmin(async (c) => {
-              const r = await c.query(
-                `SELECT id FROM users WHERE tenant_id=$1 AND role IN ('manager','tenant_admin') AND is_active=true`,
-                [ticket.tenant_id],
-              );
-              return r.rows.map((u: any) => u.id as string);
-            });
+            const mgrs = await getEscalationTargets(
+              db, ticket.tenant_id, ticket.assignee_id, step.level === 'l2' ? 2 : 1,
+            );
             notifyIds = [...notifyIds, ...mgrs];
           }
           if (step.notifyTarget === 'admins' || step.notifyTarget === 'all') {
@@ -3245,17 +3277,9 @@ export async function runSlaWorker(db: DatabaseClient, eventBus: EventBus): Prom
         }
       }
 
-      // ── L1 Escalation — supervisor/managers notified ─────────────────
+      // ── L1 Escalation — assignee's own manager notified ──────────────
       if (elapsedPct >= l1Pct && ticket.escalation_level < 1 && !ticket.escalated_l1_at) {
-        const managers = await db.withSuperAdmin(async (c) => {
-          const r = await c.query(
-            `SELECT id FROM users
-             WHERE tenant_id = $1 AND role IN ('manager','tenant_admin','super_admin')
-               AND is_active = true`,
-            [ticket.tenant_id],
-          );
-          return r.rows.map((u: any) => u.id as string);
-        });
+        const managers = await getEscalationTargets(db, ticket.tenant_id, ticket.assignee_id, 1);
 
         const notifyIds = [
           ...(ticket.assignee_id ? [ticket.assignee_id] : []),
@@ -3286,16 +3310,11 @@ export async function runSlaWorker(db: DatabaseClient, eventBus: EventBus): Prom
         });
       }
 
-      // ── L2 Escalation — tenant admin notified ────────────────────────
+      // ── L2 Escalation — assignee's manager's manager notified (falls back
+      // to tenant_admin once the chain runs out, e.g. a department manager
+      // with no manager of their own) ───────────────────────────────────
       if (elapsedPct >= l2Pct && ticket.escalation_level < 2 && !ticket.escalated_l2_at) {
-        const admins = await db.withSuperAdmin(async (c) => {
-          const r = await c.query(
-            `SELECT id FROM users
-             WHERE tenant_id = $1 AND role IN ('tenant_admin','super_admin') AND is_active = true`,
-            [ticket.tenant_id],
-          );
-          return r.rows.map((u: any) => u.id as string);
-        });
+        const admins = await getEscalationTargets(db, ticket.tenant_id, ticket.assignee_id, 2);
 
         await db.withSuperAdmin(async (c) => {
           await c.query(

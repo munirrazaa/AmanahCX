@@ -1,0 +1,1439 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AmanahCX — Developer &amp; Integration Partner Orientation</title>
+<style>
+  :root{
+    --teal:#2BB8CC;
+    --teal-dark:#1D8A9A;
+    --green:#4C9A4C;
+    --gold:#E8C025;
+    --navy:#16283A;
+    --ink:#22313F;
+    --muted:#5B6B7A;
+    --line:#E3E9ED;
+    --bg:#F7FAFB;
+    --card:#FFFFFF;
+    --radius:12px;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    color:var(--ink); background:var(--bg); line-height:1.6; font-size:15.5px;
+  }
+  a{color:var(--teal-dark); text-decoration:none;}
+  a:hover{text-decoration:underline;}
+  .layout{display:flex; max-width:1400px; margin:0 auto;}
+  nav.toc{
+    width:300px; flex-shrink:0; position:sticky; top:0; align-self:flex-start;
+    height:100vh; overflow-y:auto; background:var(--navy); color:#fff; padding:28px 22px;
+  }
+  nav.toc .brand{display:flex; align-items:center; gap:10px; margin-bottom:6px;}
+  nav.toc .brand .dot{width:12px;height:12px;border-radius:50%;background:var(--teal);box-shadow:0 0 0 4px rgba(43,184,204,.25);}
+  nav.toc .brand span{font-weight:700; font-size:17px; letter-spacing:.3px;}
+  nav.toc .sub{color:#9FB4C4; font-size:12.5px; margin-bottom:26px;}
+  nav.toc h4{font-size:11px; text-transform:uppercase; letter-spacing:1px; color:#7FA6B8; margin:22px 0 8px;}
+  nav.toc ol{list-style:none; margin:0; padding:0;}
+  nav.toc li{margin-bottom:2px;}
+  nav.toc a{display:block; color:#D6E4EC; padding:6px 10px; border-radius:8px; font-size:13.6px;}
+  nav.toc a:hover{background:rgba(255,255,255,.08); text-decoration:none;}
+  nav.toc a.sub-link{padding-left:22px; font-size:12.6px; color:#A9C1CE;}
+  main{flex:1; min-width:0; padding:40px 56px 100px;}
+  header.hero{
+    background:linear-gradient(135deg, var(--navy) 0%, #1c3b52 60%, var(--teal-dark) 130%);
+    color:#fff; border-radius:16px; padding:42px 46px; margin-bottom:38px;
+    position:relative; overflow:hidden;
+  }
+  header.hero::after{
+    content:""; position:absolute; right:-60px; top:-60px; width:260px; height:260px; border-radius:50%;
+    background:radial-gradient(circle, rgba(232,192,37,.25), transparent 70%);
+  }
+  header.hero .tag{display:inline-block; background:rgba(255,255,255,.14); border:1px solid rgba(255,255,255,.25);
+    padding:4px 12px; border-radius:20px; font-size:12px; letter-spacing:.5px; text-transform:uppercase; margin-bottom:16px;}
+  header.hero h1{margin:0 0 12px; font-size:32px; line-height:1.25;}
+  header.hero p{margin:0; max-width:680px; color:#DCE9EF; font-size:15.5px;}
+  section{margin-bottom:56px; scroll-margin-top:20px;}
+  section h2{
+    font-size:23px; color:var(--navy); border-bottom:3px solid var(--teal); display:inline-block;
+    padding-bottom:6px; margin-bottom:18px;
+  }
+  section h3{font-size:17px; color:var(--teal-dark); margin:26px 0 10px;}
+  section h4{font-size:14.5px; color:var(--navy); margin:18px 0 6px;}
+  .card{background:var(--card); border:1px solid var(--line); border-radius:var(--radius); padding:22px 26px; margin-bottom:18px; box-shadow:0 1px 3px rgba(20,40,60,.04);}
+  .grid2{display:grid; grid-template-columns:1fr 1fr; gap:18px;}
+  .grid3{display:grid; grid-template-columns:repeat(3,1fr); gap:16px;}
+  @media (max-width:900px){.grid2,.grid3{grid-template-columns:1fr;}}
+  .pill{display:inline-block; padding:2px 10px; border-radius:20px; font-size:11.5px; font-weight:600; letter-spacing:.3px;}
+  .pill.teal{background:rgba(43,184,204,.14); color:var(--teal-dark);}
+  .pill.green{background:rgba(76,154,76,.14); color:var(--green);}
+  .pill.gold{background:rgba(232,192,37,.18); color:#8a6d0a;}
+  table{width:100%; border-collapse:collapse; font-size:14px; margin:14px 0;}
+  th,td{text-align:left; padding:9px 12px; border-bottom:1px solid var(--line); vertical-align:top;}
+  th{background:#EFF5F7; color:var(--navy); font-size:12.5px; text-transform:uppercase; letter-spacing:.4px;}
+  tr:hover td{background:#FAFDFE;}
+  code, .code-inline{background:#EEF3F5; color:#B4390B; padding:1px 6px; border-radius:5px; font-size:13px; font-family:"SF Mono",Menlo,Consolas,monospace;}
+  pre{background:#0F2537; color:#DCEEF3; padding:16px 18px; border-radius:10px; overflow-x:auto; font-size:13px; line-height:1.55;}
+  pre code{background:none; color:inherit; padding:0;}
+  ul.clean{padding-left:20px; margin:8px 0;}
+  ul.clean li{margin-bottom:6px;}
+  .diagram-wrap{background:#fff; border:1px solid var(--line); border-radius:var(--radius); padding:18px; overflow-x:auto;}
+  .diagram-wrap svg{display:block; margin:0 auto;}
+  .caption{font-size:12.5px; color:var(--muted); text-align:center; margin-top:8px;}
+  .callout{border-left:4px solid var(--gold); background:#FFFBEB; padding:12px 18px; border-radius:0 8px 8px 0; font-size:14px; margin:16px 0;}
+  .callout.teal{border-left-color:var(--teal); background:#EDFAFC;}
+  .callout.green{border-left-color:var(--green); background:#F1F8F1;}
+  .num-badge{display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px; border-radius:50%;
+    background:var(--teal); color:#fff; font-size:12px; font-weight:700; margin-right:8px; flex-shrink:0;}
+  .step{display:flex; align-items:flex-start; margin-bottom:10px;}
+  .back-to-top{font-size:12.5px; margin-top:10px; display:inline-block;}
+  footer{border-top:1px solid var(--line); margin-top:60px; padding-top:20px; font-size:12.5px; color:var(--muted);}
+
+  .print-toc{display:none;}
+  @media print{
+    nav.toc{display:none;}
+    .print-toc{display:block; margin-bottom:40px; page-break-after:always;}
+    .print-toc h2{font-size:22px; color:var(--navy); border-bottom:3px solid var(--teal); padding-bottom:6px; display:inline-block; margin-bottom:18px;}
+    .print-toc ol{list-style:none; margin:0; padding:0; column-count:1;}
+    .print-toc > ol > li{margin-bottom:10px;}
+    .print-toc a{color:var(--ink); font-weight:600;}
+    .print-toc ol ol{margin:6px 0 6px 22px;}
+    .print-toc ol ol li{margin-bottom:4px; font-weight:400;}
+    .print-toc ol ol a{color:var(--muted); font-weight:400;}
+    .layout{display:block; max-width:100%;}
+    main{padding:0 8px;}
+    header.hero{-webkit-print-color-adjust:exact; print-color-adjust:exact;}
+    .diagram-wrap{page-break-inside:avoid; border:1px solid var(--line);}
+    .card{page-break-inside:avoid;}
+    section h2{page-break-after:avoid;}
+    section{page-break-inside:auto;}
+    a{color:var(--ink); text-decoration:none;}
+  }
+</style>
+</head>
+<body>
+<div class="layout">
+
+<nav class="toc">
+  <div class="brand"><div class="dot"></div><span>AmanahCX</span></div>
+  <div class="sub">Developer &amp; Integration Partner Orientation</div>
+
+  <h4>Index</h4>
+  <ol>
+    <li><a href="#overview">1. What AmanahCX Is</a>
+      <ol><li><a class="sub-link" href="#info-flow">1.1 End-to-End Information Flow</a></li></ol>
+    </li>
+    <li><a href="#landscape">2. System Landscape</a>
+      <ol>
+        <li><a class="sub-link" href="#landscape-diagram">2.1 Components Diagram</a></li>
+        <li><a class="sub-link" href="#tech-stack">2.2 Technology Stack by Component</a></li>
+      </ol>
+    </li>
+    <li><a href="#crm-arch">3. CRM Platform Architecture</a>
+      <ol>
+        <li><a class="sub-link" href="#crm-diagram">3.1 Architecture Diagram</a></li>
+        <li><a class="sub-link" href="#crm-tenancy">3.2 Multi-Tenancy &amp; Security</a></li>
+        <li><a class="sub-link" href="#crm-access">3.3 Access Control Model</a></li>
+        <li><a class="sub-link" href="#crm-modules">3.4 Business Modules</a></li>
+      </ol>
+    </li>
+    <li><a href="#nadia-arch">4. Nadia Voice Agent Architecture</a>
+      <ol>
+        <li><a class="sub-link" href="#nadia-diagram">4.1 SIP + Voice Pipeline Diagram</a></li>
+        <li><a class="sub-link" href="#nadia-pipeline">4.2 The Call Pipeline, Step by Step</a></li>
+        <li><a class="sub-link" href="#nadia-crm-contract">4.3 The CRM Connector Contract</a></li>
+        <li><a class="sub-link" href="#nadia-connect">4.4 Connecting Nadia to a Different CRM</a></li>
+      </ol>
+    </li>
+    <li><a href="#mobile-arch">5. Mobile App Architecture</a>
+      <ol>
+        <li><a class="sub-link" href="#mobile-diagram">5.1 Architecture Diagram</a></li>
+        <li><a class="sub-link" href="#mobile-features">5.2 Screens &amp; Functionality</a></li>
+        <li><a class="sub-link" href="#mobile-offline">5.3 Offline &amp; On-Device AI</a></li>
+      </ol>
+    </li>
+    <li><a href="#integrating">6. Connecting Other Applications</a>
+      <ol>
+        <li><a class="sub-link" href="#int-rest">6.1 REST &amp; GraphQL API</a></li>
+        <li><a class="sub-link" href="#int-webhooks">6.2 Outbound Webhooks</a></li>
+        <li><a class="sub-link" href="#int-apikeys">6.3 API Keys (Inbound)</a></li>
+        <li><a class="sub-link" href="#int-telephony">6.4 Telephony / Softphone Integration</a></li>
+        <li><a class="sub-link" href="#int-patterns">6.5 Common Integration Patterns</a></li>
+      </ol>
+    </li>
+    <li><a href="#data-model">7. Data Model &amp; Auth Essentials</a></li>
+    <li><a href="#deploy">8. Environments &amp; Deployment</a></li>
+    <li><a href="#build-report">9. Consolidated Build &amp; Release Report</a>
+      <ol>
+        <li><a class="sub-link" href="#build-diagram">9.1 Three Pipelines, One Repo</a></li>
+        <li><a class="sub-link" href="#build-web">9.2 CRM Web + API Builds</a></li>
+        <li><a class="sub-link" href="#build-nadia">9.3 Nadia Voice Agent Builds</a></li>
+        <li><a class="sub-link" href="#build-mobile">9.4 Mobile App Builds</a></li>
+      </ol>
+    </li>
+    <li><a href="#vm-migration">10. Self-Hosted Migration (VM + Domain)</a>
+      <ol>
+        <li><a class="sub-link" href="#vm-diagram">10.1 Target Architecture Diagram</a></li>
+        <li><a class="sub-link" href="#vm-runbook">10.2 Migration Runbook</a></li>
+        <li><a class="sub-link" href="#vm-tradeoffs">10.3 What You Gain, What You Now Own</a></li>
+      </ol>
+    </li>
+    <li><a href="#repo-map">11. Repository Map</a></li>
+    <li><a href="#glossary">12. Glossary</a></li>
+  </ol>
+</nav>
+
+<main>
+
+<header class="hero">
+  <div class="tag">Internal &middot; Partner Engineering Reference</div>
+  <h1>AmanahCX Developer &amp; Integration Partner Orientation</h1>
+  <p>This document orients full-stack engineering partners to the AmanahCX platform: what it is, how its
+  pieces fit together, and how to connect Nadia (the voice agent), the mobile app, or a customer's other
+  systems (CRM, softphone, or automation tools) to it. Read section&nbsp;2 first for the big picture, then
+  jump to whichever component you're integrating with.</p>
+</header>
+
+<div class="print-toc">
+  <h2>Index</h2>
+  <ol>
+    <li><a href="#overview">1. What AmanahCX Is</a>
+      <ol><li><a class="sub-link" href="#info-flow">1.1 End-to-End Information Flow</a></li></ol>
+    </li>
+    <li><a href="#landscape">2. System Landscape</a>
+      <ol><li><a href="#landscape-diagram">2.1 Components Diagram</a></li></ol>
+    </li>
+    <li><a href="#crm-arch">3. CRM Platform Architecture</a>
+      <ol>
+        <li><a href="#crm-diagram">3.1 Architecture Diagram</a></li>
+        <li><a href="#crm-tenancy">3.2 Multi-Tenancy &amp; Security</a></li>
+        <li><a href="#crm-access">3.3 Access Control Model</a></li>
+        <li><a href="#crm-modules">3.4 Business Modules</a></li>
+      </ol>
+    </li>
+    <li><a href="#nadia-arch">4. Nadia Voice Agent Architecture</a>
+      <ol>
+        <li><a href="#nadia-diagram">4.1 SIP + Voice Pipeline Diagram</a></li>
+        <li><a href="#nadia-pipeline">4.2 The Call Pipeline, Step by Step</a></li>
+        <li><a href="#nadia-crm-contract">4.3 The CRM Connector Contract</a></li>
+        <li><a href="#nadia-connect">4.4 Connecting Nadia to a Different CRM</a></li>
+      </ol>
+    </li>
+    <li><a href="#mobile-arch">5. Mobile App Architecture</a>
+      <ol>
+        <li><a href="#mobile-diagram">5.1 Architecture Diagram</a></li>
+        <li><a href="#mobile-features">5.2 Screens &amp; Functionality</a></li>
+        <li><a href="#mobile-offline">5.3 Offline &amp; On-Device AI</a></li>
+      </ol>
+    </li>
+    <li><a href="#integrating">6. Connecting Other Applications</a>
+      <ol>
+        <li><a href="#int-rest">6.1 REST &amp; GraphQL API</a></li>
+        <li><a href="#int-webhooks">6.2 Outbound Webhooks</a></li>
+        <li><a href="#int-apikeys">6.3 API Keys (Inbound)</a></li>
+        <li><a href="#int-telephony">6.4 Telephony / Softphone Integration</a></li>
+        <li><a href="#int-patterns">6.5 Common Integration Patterns</a></li>
+      </ol>
+    </li>
+    <li><a href="#data-model">7. Data Model &amp; Auth Essentials</a></li>
+    <li><a href="#deploy">8. Environments &amp; Deployment</a></li>
+    <li><a href="#build-report">9. Consolidated Build &amp; Release Report</a>
+      <ol>
+        <li><a class="sub-link" href="#build-diagram">9.1 Three Pipelines, One Repo</a></li>
+        <li><a class="sub-link" href="#build-web">9.2 CRM Web + API Builds</a></li>
+        <li><a class="sub-link" href="#build-nadia">9.3 Nadia Voice Agent Builds</a></li>
+        <li><a class="sub-link" href="#build-mobile">9.4 Mobile App Builds</a></li>
+      </ol>
+    </li>
+    <li><a href="#vm-migration">10. Self-Hosted Migration (VM + Domain)</a>
+      <ol>
+        <li><a class="sub-link" href="#vm-diagram">10.1 Target Architecture Diagram</a></li>
+        <li><a class="sub-link" href="#vm-runbook">10.2 Migration Runbook</a></li>
+        <li><a class="sub-link" href="#vm-tradeoffs">10.3 What You Gain, What You Now Own</a></li>
+      </ol>
+    </li>
+    <li><a href="#repo-map">11. Repository Map</a></li>
+    <li><a href="#glossary">12. Glossary</a></li>
+  </ol>
+</div>
+
+<section id="overview">
+  <h2>1. What AmanahCX Is</h2>
+  <div class="card">
+    <p>AmanahCX is a <strong>multi-tenant SaaS platform</strong> that combines a CRM, a contact-centre
+    (with an AI voice agent), sales &amp; invoicing, analytics, and a field-staff mobile app — one system
+    hosting many isolated customer organisations ("tenants"). A typical tenant is a bank, an insurer, or a
+    services business that wants: customers to call in and get handled by an AI voice agent in Urdu/English,
+    every enquiry to become a tracked ticket with an SLA clock, and their field/sales staff to work from a
+    phone app.</p>
+    <p>As an integration partner, your work generally falls into one (or more) of three buckets:</p>
+    <ul class="clean">
+      <li><strong>Connect Nadia (voice) to a different CRM</strong> — a customer already has their own CRM
+      (Salesforce, HubSpot, Dynamics, a bespoke system) and wants Nadia's voice capability without adopting
+      AmanahCX's CRM. See <a href="#nadia-arch">Section 4</a>.</li>
+      <li><strong>Connect another application to AmanahCX</strong> — a softphone, a BI tool, an automation
+      platform (Zapier-style), or a customer's existing systems need to read/write AmanahCX data or receive
+      events from it. See <a href="#integrating">Section 6</a>.</li>
+      <li><strong>Extend or customise AmanahCX itself</strong> for a specific customer deployment — new
+      module, new field, new workflow. See <a href="#crm-arch">Section 3</a> and <a href="#repo-map">Section 11</a>.</li>
+    </ul>
+    <p>AmanahCX is <strong>multi-tenant and multi-sector</strong>: every customer organisation is a fully
+    isolated tenant (§3.2), and each tenant is provisioned against a sector template (banking, insurance,
+    education, and others) — creating a tenant automatically populates the sector-specific fields its
+    contacts, tickets, and deals need (e.g. Case Type / Transaction Reference / Regulatory Deadline for a
+    banking tenant), with no manual field setup required (§4.17 of the Master Product Document). Every label
+    in the system is a starting point, not a fixed name: a tenant admin can rename any role or responsibility
+    title (e.g. "Line Manager" → "Territory Manager") and any field name to match how that organisation
+    actually talks about its own work — the underlying permission model and data structure never change,
+    only what they're called.</p>
+  </div>
+
+  <h3 id="info-flow">1.1 End-to-End Information Flow</h3>
+  <p>The diagram below traces one enquiry from the moment a customer dials in, through Nadia's contact
+  matching and ticket creation, ownership and routing, SLA/TAT governance, resolution and escalation, to
+  completion and CSAT — the single flow every integration in this document eventually plugs into somewhere.</p>
+  <div class="diagram-wrap">
+<svg viewBox="0 0 1180 820" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,Segoe UI,Roboto,sans-serif">
+  <defs>
+    <marker id="a7" markerWidth="9" markerHeight="9" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#16283A"/></marker>
+    <marker id="a7d" markerWidth="9" markerHeight="9" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#8FA2AF"/></marker>
+  </defs>
+
+  <rect x="390" y="18" width="400" height="52" rx="10" fill="#F4F6F7" stroke="#8FA2AF" stroke-width="1.5"/>
+  <text x="590" y="40" text-anchor="middle" font-size="12.5" font-weight="700" fill="#16283A">1. Customer Calls</text>
+  <text x="590" y="58" text-anchor="middle" font-size="10" fill="#5B6B7A">dials the sales / support / complaints line</text>
+  <path d="M590,70 L590,88" stroke="#16283A" stroke-width="2" marker-end="url(#a7)"/>
+
+  <rect x="390" y="88" width="400" height="68" rx="10" fill="#FDF8EC" stroke="#E8C025" stroke-width="1.5"/>
+  <text x="590" y="110" text-anchor="middle" font-size="12.5" font-weight="700" fill="#16283A">2. SIP Trunk → Nadia Voice Bot</text>
+  <text x="590" y="128" text-anchor="middle" font-size="10" fill="#5B6B7A">collects category + details; server classifies</text>
+  <text x="590" y="144" text-anchor="middle" font-size="10" fill="#5B6B7A">sales / inquiry / complaint by keyword (§4.2)</text>
+  <path d="M590,156 L590,174" stroke="#16283A" stroke-width="2" marker-end="url(#a7)"/>
+
+  <rect x="390" y="174" width="400" height="74" rx="10" fill="#EDFAFC" stroke="#2BB8CC" stroke-width="1.5"/>
+  <text x="590" y="196" text-anchor="middle" font-size="12.5" font-weight="700" fill="#16283A">3. Contact Validation</text>
+  <text x="590" y="214" text-anchor="middle" font-size="10" fill="#5B6B7A">any 2 of phone / NIC / email match →</text>
+  <text x="590" y="230" text-anchor="middle" font-size="10" fill="#5B6B7A">existing contact used, else a new one is created</text>
+  <path d="M590,248 L590,266" stroke="#16283A" stroke-width="2" marker-end="url(#a7)"/>
+  <path d="M790,211 L850,211" stroke="#8FA2AF" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#a7d)"/>
+
+  <rect x="390" y="266" width="400" height="66" rx="10" fill="#fff" stroke="#16283A" stroke-width="1.5"/>
+  <text x="590" y="286" text-anchor="middle" font-size="12.5" font-weight="700" fill="#16283A">4. Ticket Created — linked to that contact</text>
+  <rect x="410" y="296" width="110" height="24" rx="12" fill="#EDFAFC" stroke="#2BB8CC"/>
+  <text x="465" y="312" text-anchor="middle" font-size="9.5" fill="#1D8A9A">sales</text>
+  <rect x="530" y="296" width="110" height="24" rx="12" fill="#F1F8F1" stroke="#4C9A4C"/>
+  <text x="585" y="312" text-anchor="middle" font-size="9.5" fill="#3A7A3A">inquiry</text>
+  <rect x="650" y="296" width="130" height="24" rx="12" fill="#FDF8EC" stroke="#E8C025"/>
+  <text x="715" y="312" text-anchor="middle" font-size="9.5" fill="#8a6d0a">complaint</text>
+  <path d="M590,332 L590,350" stroke="#16283A" stroke-width="2" marker-end="url(#a7)"/>
+  <path d="M465,320 L200,320 L200,350" stroke="#8FA2AF" stroke-width="1.5" stroke-dasharray="4,3" fill="none" marker-end="url(#a7d)"/>
+
+  <rect x="390" y="350" width="400" height="72" rx="10" fill="#F4F6F7" stroke="#8FA2AF" stroke-width="1.5"/>
+  <text x="590" y="372" text-anchor="middle" font-size="12.5" font-weight="700" fill="#16283A">5. Ticket Owned by Originator</text>
+  <text x="590" y="390" text-anchor="middle" font-size="10" fill="#5B6B7A">usually Support (call-centre); Complaints too if they</text>
+  <text x="590" y="405" text-anchor="middle" font-size="10" fill="#5B6B7A">have their own line — view &amp; edit until routed</text>
+  <path d="M590,422 L590,440" stroke="#16283A" stroke-width="2" marker-end="url(#a7)"/>
+
+  <rect x="390" y="440" width="400" height="68" rx="10" fill="#F4F6F7" stroke="#8FA2AF" stroke-width="1.5"/>
+  <text x="590" y="462" text-anchor="middle" font-size="12.5" font-weight="700" fill="#16283A">6. Routed &amp; Assigned to Department Agent</text>
+  <text x="590" y="480" text-anchor="middle" font-size="10" fill="#5B6B7A">originator becomes VIEW-ONLY — can still add</text>
+  <text x="590" y="495" text-anchor="middle" font-size="10" fill="#5B6B7A">comments from later customer contact</text>
+  <path d="M590,508 L590,526" stroke="#16283A" stroke-width="2" marker-end="url(#a7)"/>
+
+  <rect x="390" y="526" width="400" height="54" rx="10" fill="#F1F8F1" stroke="#4C9A4C" stroke-width="1.5"/>
+  <text x="590" y="549" text-anchor="middle" font-size="12.5" font-weight="700" fill="#16283A">7. Agent Accepts → TAT Clock Starts</text>
+  <text x="590" y="566" text-anchor="middle" font-size="10" fill="#5B6B7A">governed by the policy described on the left</text>
+  <path d="M590,580 L590,598" stroke="#16283A" stroke-width="2" marker-end="url(#a7)"/>
+  <path d="M390,555 L360,555" stroke="#8FA2AF" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#a7d)"/>
+
+  <rect x="390" y="598" width="400" height="90" rx="10" fill="#fff" stroke="#16283A" stroke-width="1.5"/>
+  <text x="590" y="620" text-anchor="middle" font-size="12.5" font-weight="700" fill="#16283A">9. Agent Works to Resolve</text>
+  <text x="590" y="638" text-anchor="middle" font-size="10" fill="#5B6B7A">reminders fire as the SLA deadline nears;</text>
+  <text x="590" y="653" text-anchor="middle" font-size="10" fill="#5B6B7A">a breach auto-escalates (see right) — or the agent</text>
+  <text x="590" y="668" text-anchor="middle" font-size="10" fill="#5B6B7A">can flag it to their manager for support (10)</text>
+  <path d="M790,640 L850,640" stroke="#8FA2AF" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#a7d)"/>
+  <path d="M590,688 L590,706" stroke="#16283A" stroke-width="2" marker-end="url(#a7)"/>
+
+  <rect x="390" y="706" width="400" height="60" rx="10" fill="#EDFAFC" stroke="#2BB8CC" stroke-width="1.5"/>
+  <text x="590" y="729" text-anchor="middle" font-size="12.5" font-weight="700" fill="#16283A">12. Ticket Completed → CSAT Survey Triggered</text>
+  <text x="590" y="747" text-anchor="middle" font-size="10" fill="#5B6B7A">outcome + timeline now permanently part of Customer 360</text>
+  <path d="M390,730 L360,730" stroke="#8FA2AF" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#a7d)"/>
+
+  <rect x="850" y="185" width="310" height="90" rx="10" fill="#F1F8F1" stroke="#4C9A4C" stroke-width="1.5"/>
+  <text x="870" y="207" font-size="11.5" font-weight="700" fill="#16283A">Customer 360 (Step 4)</text>
+  <text x="870" y="225" font-size="9.7" fill="#3A7A3A">Every ticket links to a contact →</text>
+  <text x="870" y="240" font-size="9.7" fill="#3A7A3A">one unified timeline: tickets, calls,</text>
+  <text x="870" y="255" font-size="9.7" fill="#3A7A3A">emails, WhatsApp (planned) — see §4.9.4</text>
+
+  <rect x="20" y="330" width="330" height="90" rx="10" fill="#fff" stroke="#8FA2AF" stroke-width="1.5" stroke-dasharray="3,3"/>
+  <text x="40" y="352" font-size="11.5" font-weight="700" fill="#16283A">Sales Pipeline (Step 11)</text>
+  <text x="40" y="370" font-size="9.7" fill="#5B6B7A">A sales ticket, once accepted, becomes</text>
+  <text x="40" y="385" font-size="9.7" fill="#5B6B7A">a deal in the pipeline and flows through</text>
+  <text x="40" y="400" font-size="9.7" fill="#5B6B7A">the normal sales stages (§4.3 of the MPD)</text>
+
+  <rect x="20" y="505" width="330" height="100" rx="10" fill="#FDF8EC" stroke="#E8C025" stroke-width="1.5"/>
+  <text x="40" y="527" font-size="11.5" font-weight="700" fill="#16283A">SLA Governance (Step 8)</text>
+  <text x="40" y="545" font-size="9.7" fill="#8a6d0a">A separate Policy Admin role designs</text>
+  <text x="40" y="560" font-size="9.7" fill="#8a6d0a">TAT/SLA policies (deadlines, escalation</text>
+  <text x="40" y="575" font-size="9.7" fill="#8a6d0a">steps) — auto-applied to every ticket and</text>
+  <text x="40" y="590" font-size="9.7" fill="#8a6d0a">role, independent of operational managers</text>
+
+  <rect x="850" y="595" width="310" height="130" rx="10" fill="#F4F6F7" stroke="#8FA2AF" stroke-width="1.5"/>
+  <text x="870" y="617" font-size="11.5" font-weight="700" fill="#16283A">Escalation Paths (Steps 9–10)</text>
+  <text x="870" y="636" font-size="9.7" fill="#5B6B7A">Post-breach: notifies the agent's own line</text>
+  <text x="870" y="650" font-size="9.7" fill="#5B6B7A">manager (L1), then that manager's manager</text>
+  <text x="870" y="664" font-size="9.7" fill="#5B6B7A">(L2) — department-scoped, not tenant-wide.</text>
+  <text x="870" y="684" font-size="9.7" fill="#5B6B7A">Manual: the agent flags a ticket for their</text>
+  <text x="870" y="698" font-size="9.7" fill="#5B6B7A">manager's attention — it stays assigned to</text>
+  <text x="870" y="712" font-size="9.7" fill="#5B6B7A">them; the manager must acknowledge it.</text>
+</svg>
+  </div>
+  <p class="caption">Fig 1.1 — one enquiry's full lifecycle: intake through Nadia, contact matching, ticket
+  ownership and routing, SLA-governed resolution, and completion.</p>
+  <div class="callout green">This flow was checked directly against the code (not just prior documentation)
+  on 2026-07-18. Two real bugs were found and fixed as part of that check:
+  <ol class="clean" style="margin-top:8px">
+    <li>In <code>createComplaintFromStructured</code> (<code>packages/api/src/routes/voice-bot.ts</code>), a
+    Nadia-created ticket's <code>ticket_type</code> column was hardcoded to the literal <code>'complaint'</code>
+    regardless of the sales/inquiry/complaint classification computed for queue routing — so a sales enquiry
+    captured by voice routed to the right queue but could never satisfy the <code>ticket_type === 'sales'</code>
+    check that creates a pipeline deal on accept (§4.3). Fixed to persist the actual computed type.</li>
+    <li>SLA breach escalation (<code>runSlaWorker</code> in <code>tickets.ts</code>) notified <strong>every</strong>
+    manager/tenant_admin tenant-wide on breach, regardless of department — a Support ticket breach would also
+    page Sales and Complaints managers. This broke the department-isolation model the rest of the system enforces
+    via the reporting tree (<code>lib/visibility.ts</code>). Fixed with a new <code>getEscalationTargets()</code>
+    helper: L1 now notifies only the assignee's own line manager, L2 only that manager's manager, walking
+    <code>users.manager_id</code> the same way visibility checks already do elsewhere — falling back to
+    tenant_admin only when an agent has no manager configured, so a breach is never silently unnoticed.</li>
+  </ol>
+  Two step descriptions above were also corrected to match real behavior: escalation (steps 9–10) now correctly
+  reflects the assignee's own two-level manager chain, department-scoped, not a tenant-wide broadcast; contact
+  matching (step 3) accepts any two of phone/NIC/email, not only pairs that include phone.</div>
+</section>
+
+<section id="landscape">
+  <h2>2. System Landscape</h2>
+  <p>At the highest level, AmanahCX is <strong>three independently-deployable pieces</strong> talking over
+  HTTP(S)/SIP — not one monolith. This separation is exactly what makes each piece reusable outside
+  AmanahCX: the CRM API doesn't know or care whether a request came from the web app, the mobile app, Nadia,
+  or a third-party integration — they all speak the same REST/GraphQL contract.</p>
+
+  <div class="grid3">
+    <div class="card">
+      <span class="pill teal">Web Platform</span>
+      <h4>CRM Web App + API</h4>
+      <p style="font-size:13.5px; color:var(--muted)">React frontend + Fastify API + PostgreSQL. The system
+      of record: contacts, deals, tickets, sales, roles, settings. <a href="#crm-arch">Details →</a></p>
+    </div>
+    <div class="card">
+      <span class="pill gold">Voice</span>
+      <h4>Nadia Voice Agent</h4>
+      <p style="font-size:13.5px; color:var(--muted)">Independent Python service on LiveKit. Takes phone
+      calls over SIP, talks to whichever CRM is configured via a small connector contract.
+      <a href="#nadia-arch">Details →</a></p>
+    </div>
+    <div class="card">
+      <span class="pill green">Mobile</span>
+      <h4>Field Staff App</h4>
+      <p style="font-size:13.5px; color:var(--muted)">Expo/React Native app for field sales &amp; support
+      staff. Talks to the same CRM API as the web app. <a href="#mobile-arch">Details →</a></p>
+    </div>
+  </div>
+
+  <h3 id="landscape-diagram">2.1 Components Diagram</h3>
+  <div class="diagram-wrap">
+<svg viewBox="0 0 1180 700" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,Segoe UI,Roboto,sans-serif">
+  <defs>
+    <marker id="arrowT" markerWidth="9" markerHeight="9" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#2BB8CC"/></marker>
+    <marker id="arrowG" markerWidth="9" markerHeight="9" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#4C9A4C"/></marker>
+    <marker id="arrowGold" markerWidth="9" markerHeight="9" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#C99A0E"/></marker>
+    <marker id="arrowGrey" markerWidth="9" markerHeight="9" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#8FA2AF"/></marker>
+  </defs>
+
+  <!-- CLIENT LAYER -->
+  <text x="20" y="28" font-size="12" fill="#7FA6B8" letter-spacing="1" font-weight="700">CLIENTS</text>
+  <g>
+    <rect x="20" y="38" width="200" height="58" rx="10" fill="#EDFAFC" stroke="#2BB8CC" stroke-width="1.5"/>
+    <text x="120" y="62" text-anchor="middle" font-size="13.5" font-weight="700" fill="#16283A">Web App</text>
+    <text x="120" y="80" text-anchor="middle" font-size="11" fill="#5B6B7A">React + Vite (Tenant + Super Admin)</text>
+  </g>
+  <g>
+    <rect x="240" y="38" width="200" height="58" rx="10" fill="#F1F8F1" stroke="#4C9A4C" stroke-width="1.5"/>
+    <text x="340" y="62" text-anchor="middle" font-size="13.5" font-weight="700" fill="#16283A">Mobile App</text>
+    <text x="340" y="80" text-anchor="middle" font-size="11" fill="#5B6B7A">Expo / React Native, field staff</text>
+  </g>
+  <g>
+    <rect x="460" y="38" width="220" height="58" rx="10" fill="#FDF8EC" stroke="#E8C025" stroke-width="1.5"/>
+    <text x="570" y="62" text-anchor="middle" font-size="13.5" font-weight="700" fill="#16283A">3rd-Party Apps</text>
+    <text x="570" y="80" text-anchor="middle" font-size="11" fill="#5B6B7A">Softphone · BI · Zapier-style · custom</text>
+  </g>
+  <g>
+    <rect x="700" y="38" width="200" height="58" rx="10" fill="#F4F6F7" stroke="#8FA2AF" stroke-width="1.5"/>
+    <text x="800" y="62" text-anchor="middle" font-size="13.5" font-weight="700" fill="#16283A">Caller (Phone)</text>
+    <text x="800" y="80" text-anchor="middle" font-size="11" fill="#5B6B7A">PSTN via telecom carrier</text>
+  </g>
+
+  <!-- arrows down to API -->
+  <path d="M120,96 L120,140" stroke="#2BB8CC" stroke-width="2" marker-end="url(#arrowT)"/>
+  <path d="M340,96 L340,140" stroke="#4C9A4C" stroke-width="2" marker-end="url(#arrowG)"/>
+  <path d="M570,96 L570,140" stroke="#C99A0E" stroke-width="2" marker-end="url(#arrowGold)"/>
+
+  <!-- API LAYER -->
+  <rect x="20" y="140" width="680" height="90" rx="12" fill="#FFFFFF" stroke="#16283A" stroke-width="2"/>
+  <text x="40" y="166" font-size="14.5" font-weight="700" fill="#16283A">AmanahCX API Server — packages/api</text>
+  <text x="40" y="185" font-size="11.5" fill="#5B6B7A">Fastify · REST /api/v1 · GraphQL (Mercurius) · JWT auth · API Keys · Outbound Webhooks</text>
+  <text x="40" y="203" font-size="11.5" fill="#5B6B7A">Multi-tenant router: resolves tenant from header / subdomain / JWT claim on every request</text>
+  <rect x="40" y="210" width="130" height="16" rx="4" fill="#EDFAFC"/>
+  <text x="105" y="222" text-anchor="middle" font-size="9.5" fill="#1D8A9A">requireRole / requireScope</text>
+  <rect x="180" y="210" width="130" height="16" rx="4" fill="#F1F8F1"/>
+  <text x="245" y="222" text-anchor="middle" font-size="9.5" fill="#3A7A3A">requireModule (entitlements)</text>
+  <rect x="320" y="210" width="130" height="16" rx="4" fill="#FDF8EC"/>
+  <text x="385" y="222" text-anchor="middle" font-size="9.5" fill="#8a6d0a">Row-Level Security (tenant_id)</text>
+
+  <!-- Nadia box -->
+  <rect x="740" y="140" width="420" height="120" rx="12" fill="#FDF8EC" stroke="#E8C025" stroke-width="2"/>
+  <text x="760" y="166" font-size="14.5" font-weight="700" fill="#16283A">Nadia Voice Agent — services/nadia-voice-agent</text>
+  <text x="760" y="185" font-size="11.5" fill="#5B6B7A">Independent Python process · LiveKit Agents SDK</text>
+  <text x="760" y="203" font-size="11.5" fill="#5B6B7A">SIP trunk + dispatch rule → per-call LiveKit Room</text>
+  <text x="760" y="221" font-size="11.5" fill="#5B6B7A">VAD → STT → LLM (gpt-4o-mini) → TTS → tool calls</text>
+  <text x="760" y="243" font-size="11" font-weight="600" fill="#8a6d0a">Talks to ANY CRM via a 6-method connector contract →</text>
+
+  <path d="M800,96 L800,120 Q800,140 780,140" stroke="#8FA2AF" stroke-width="2" fill="none" marker-end="url(#arrowGrey)"/>
+  <text x="808" y="115" font-size="10" fill="#5B6B7A">SIP</text>
+
+  <path d="M700,190 L740,190" stroke="#E8C025" stroke-width="2.5" marker-end="url(#arrowGold)" marker-start="url(#arrowGold)"/>
+  <text x="682" y="182" font-size="9.5" fill="#8a6d0a" text-anchor="end">REST</text>
+  <text x="682" y="204" font-size="9.5" fill="#8a6d0a" text-anchor="end">Bearer</text>
+
+  <!-- CORE LAYER -->
+  <path d="M360,230 L360,260" stroke="#16283A" stroke-width="2" marker-end="url(#arrowGrey)"/>
+  <rect x="20" y="260" width="680" height="70" rx="12" fill="#F4F6F7" stroke="#16283A" stroke-width="1.5"/>
+  <text x="40" y="284" font-size="13.5" font-weight="700" fill="#16283A">Core — packages/core</text>
+  <text x="40" y="302" font-size="11.5" fill="#5B6B7A">DatabaseClient (tenant-scoped, RLS) · EventBus · ModuleRegistry · TenantService · Email/SMS services</text>
+  <text x="40" y="318" font-size="11" fill="#5B6B7A">Business modules plug in here: contacts · deals · activities · ticketing · sales · analytics · connectors</text>
+
+  <!-- DB -->
+  <path d="M360,330 L360,360" stroke="#16283A" stroke-width="2" marker-end="url(#arrowGrey)"/>
+  <rect x="20" y="360" width="330" height="70" rx="12" fill="#EDFAFC" stroke="#2BB8CC" stroke-width="1.5"/>
+  <text x="40" y="384" font-size="13.5" font-weight="700" fill="#16283A">PostgreSQL (Supabase)</text>
+  <text x="40" y="403" font-size="11" fill="#5B6B7A">Row-Level Security by tenant_id · app connects as</text>
+  <text x="40" y="418" font-size="11" fill="#5B6B7A">restricted role <tspan font-family="monospace" fill="#B4390B">crm_app</tspan> (never superuser)</text>
+
+  <!-- External services -->
+  <rect x="380" y="360" width="320" height="70" rx="12" fill="#F1F8F1" stroke="#4C9A4C" stroke-width="1.5"/>
+  <text x="400" y="384" font-size="13.5" font-weight="700" fill="#16283A">External Services</text>
+  <text x="400" y="403" font-size="11" fill="#5B6B7A">Email (SMTP / SendGrid / MS365) · SMS Gateway</text>
+  <text x="400" y="418" font-size="11" fill="#5B6B7A">Stripe/JazzCash/Easypaisa (billing) · Telephony connectors</text>
+  <path d="M700,190 L1050,190 L1050,300" stroke="#2BB8CC" stroke-width="1.5" stroke-dasharray="4,3" fill="none"/>
+
+  <!-- Nadia -> external providers -->
+  <rect x="740" y="290" width="420" height="90" rx="12" fill="#FFFFFF" stroke="#8FA2AF" stroke-width="1.5" stroke-dasharray="3,3"/>
+  <text x="760" y="312" font-size="12" font-weight="700" fill="#16283A">Nadia's Own External Providers</text>
+  <text x="760" y="330" font-size="11" fill="#5B6B7A">LiveKit Cloud (media/SFU + SIP bridging)</text>
+  <text x="760" y="347" font-size="11" fill="#5B6B7A">OpenAI (LLM) · self-hosted Whisper (STT)</text>
+  <text x="760" y="364" font-size="11" fill="#5B6B7A">Uplift AI (Urdu TTS)</text>
+
+  <!-- footer note -->
+  <rect x="20" y="450" width="1140" height="130" rx="12" fill="#FFFFFF" stroke="#E3E9ED" stroke-width="1.5"/>
+  <text x="40" y="475" font-size="13" font-weight="700" fill="#16283A">Why this separation matters for integration work</text>
+  <text x="40" y="497" font-size="11.5" fill="#5B6B7A">• The API layer is the ONLY thing every client talks to — web, mobile, Nadia, and 3rd-party apps all use the same REST/GraphQL surface, so a new</text>
+  <text x="40" y="514" font-size="11.5" fill="#5B6B7A">  integration never needs special-case backend code.</text>
+  <text x="40" y="536" font-size="11.5" fill="#5B6B7A">• Nadia is deliberately CRM-agnostic — it never imports AmanahCX-specific code. Swapping the CRM it talks to means writing one new "connector"</text>
+  <text x="40" y="553" font-size="11.5" fill="#5B6B7A">  class (6 methods), not touching the voice/AI pipeline. See Section 4.4.</text>
+  <text x="40" y="575" font-size="11.5" fill="#5B6B7A">• Tenant isolation is enforced at the database layer (RLS), not just in application code — a bug in a route handler cannot leak another tenant's data.</text>
+</svg>
+  </div>
+  <p class="caption">Fig 2.1 — AmanahCX component landscape: three independently-deployable services sharing one API contract.</p>
+
+  <h3 id="tech-stack">2.2 Technology Stack by Component</h3>
+  <p>Every part of the system is built in the language best suited to what it does — there is no single
+  "one language" answer. Knowing this up front tells you what to expect when you open each folder.</p>
+  <table>
+    <tr><th>Component</th><th>Language</th><th>Runtime / Framework</th><th>Key Libraries</th><th>Build Tool</th></tr>
+    <tr><td><strong>Frontend</strong><br><span style="color:var(--muted); font-size:11.5px">packages/frontend</span></td>
+        <td>TypeScript</td><td>React 18.3 (SPA)</td>
+        <td>TanStack Query 5 + TanStack Table, Tailwind CSS 3</td><td>Vite 5</td></tr>
+    <tr><td><strong>API</strong><br><span style="color:var(--muted); font-size:11.5px">packages/api</span></td>
+        <td>TypeScript</td><td>Node.js + Fastify 4</td>
+        <td>GraphQL 16 + Mercurius 14, Zod 3 (validation), jsonwebtoken + bcryptjs (auth)</td><td>tsc → dist/</td></tr>
+    <tr><td><strong>Core</strong><br><span style="color:var(--muted); font-size:11.5px">packages/core</span></td>
+        <td>TypeScript</td><td>Node.js library (no server of its own)</td>
+        <td><code>pg</code> (node-postgres, tenant-scoped client), <code>ioredis</code></td><td>tsc</td></tr>
+    <tr><td><strong>Shared</strong><br><span style="color:var(--muted); font-size:11.5px">packages/shared</span></td>
+        <td>TypeScript</td><td>—</td>
+        <td>Cross-package types/contracts, sector config</td><td>tsc</td></tr>
+    <tr><td><strong>Business Modules</strong><br><span style="color:var(--muted); font-size:11.5px">modules/*</span></td>
+        <td>TypeScript</td><td>Plug into Core's ModuleRegistry</td>
+        <td>Twilio/Vonage SDKs (telephony connectors)</td><td>tsc</td></tr>
+    <tr><td><strong>Mobile App</strong><br><span style="color:var(--muted); font-size:11.5px">packages/mobile</span></td>
+        <td>TypeScript</td><td>React Native 0.74 on Expo SDK 51</td>
+        <td>Expo Router, Zustand, TanStack Query, ML Kit (on-device OCR), expo-speech-recognition</td><td>Metro (dev) / EAS Build (release)</td></tr>
+    <tr><td><strong>Nadia Voice Agent</strong><br><span style="color:var(--muted); font-size:11.5px">services/nadia-voice-agent</span></td>
+        <td>Python 3.11</td><td>LiveKit Agents SDK 1.5</td>
+        <td>faster-whisper (self-hosted STT), httpx (async HTTP to CRM), livekit-plugins-{openai, upliftai, silero, turn-detector}</td><td>pip / venv (Docker image in production — see §9.3)</td></tr>
+    <tr><td><strong>Database</strong></td>
+        <td>SQL (PostgreSQL 16 dialect)</td><td>PostgreSQL 16</td>
+        <td>Row-Level Security policies · 66 ordered migration files (<code>packages/core/src/database/migrations</code>)</td><td>plain .sql, applied in order</td></tr>
+    <tr><td><strong>Monorepo tooling</strong></td>
+        <td>—</td><td>—</td>
+        <td>Turborepo (build orchestration) + npm workspaces</td><td>—</td></tr>
+  </table>
+  <div class="callout teal">Every TypeScript package shares one root <code>tsconfig</code> lineage (ES2022 target, strict mode,
+  CommonJS output) — Node never runs the <code>.ts</code> files directly, it runs the compiled <code>dist/</code>.
+  Python is entirely isolated to Nadia: nothing else in the platform touches it, and Nadia touches nothing else
+  in the platform except through its CRM connector's HTTP calls (§4.3). If you're a full-stack developer coming
+  from either a Node or Python background, you can be immediately productive in your own language on either
+  Nadia <em>or</em> everything else, without needing the other.</div>
+</section>
+
+<section id="crm-arch">
+  <h2>3. CRM Platform Architecture</h2>
+  <div class="grid2">
+    <div class="card">
+      <h4>Stack</h4>
+      <table>
+        <tr><td><strong>Frontend</strong></td><td>React + TanStack Query, Vite &mdash; <code>packages/frontend</code></td></tr>
+        <tr><td><strong>API</strong></td><td>Fastify, REST (<code>/api/v1</code>) + GraphQL (Mercurius), Zod validation, JWT auth &mdash; <code>packages/api</code></td></tr>
+        <tr><td><strong>Core</strong></td><td>Tenant-aware DB client, EventBus, ModuleRegistry, TenantService &mdash; <code>packages/core</code></td></tr>
+        <tr><td><strong>Database</strong></td><td>PostgreSQL with Row-Level Security, hosted on Supabase, 45+ ordered migrations</td></tr>
+        <tr><td><strong>Modules</strong></td><td>Pluggable business capabilities &mdash; <code>modules/*</code> (contacts, deals, activities, ticketing, sales, analytics, connectors)</td></tr>
+      </table>
+    </div>
+    <div class="card">
+      <h4>Repo layout at a glance</h4>
+<pre><code>solution/
+├── packages/
+│   ├── frontend/   # React SPA (tenant + super admin views)
+│   ├── api/         # Fastify REST + GraphQL server
+│   ├── core/         # DB client, EventBus, ModuleRegistry, TenantService
+│   ├── shared/        # Types/contracts shared across packages
+│   └── mobile/         # Expo/React Native field app
+├── modules/
+│   ├── contacts/ deals/ activities/ ticketing/
+│   ├── sales/ analytics/ voice/ voice-module/
+│   └── connectors/  # Twilio/Vonage telephony adapters
+├── services/
+│   └── nadia-voice-agent/   # independent Python voice service
+└── docs/  # this document + product/ops/change docs</code></pre>
+    </div>
+  </div>
+
+  <h3 id="crm-diagram">3.1 Architecture Diagram</h3>
+  <div class="diagram-wrap">
+<svg viewBox="0 0 1100 560" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,Segoe UI,Roboto,sans-serif">
+  <defs>
+    <marker id="a2" markerWidth="9" markerHeight="9" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#2BB8CC"/></marker>
+  </defs>
+  <rect x="30" y="20" width="260" height="70" rx="10" fill="#EDFAFC" stroke="#2BB8CC" stroke-width="1.5"/>
+  <text x="160" y="48" text-anchor="middle" font-size="13.5" font-weight="700" fill="#16283A">Tenant Web App</text>
+  <text x="160" y="66" text-anchor="middle" font-size="10.5" fill="#5B6B7A">/app — contacts, deals, tickets, sales…</text>
+  <rect x="310" y="20" width="260" height="70" rx="10" fill="#EDFAFC" stroke="#2BB8CC" stroke-width="1.5"/>
+  <text x="440" y="48" text-anchor="middle" font-size="13.5" font-weight="700" fill="#16283A">Super Admin Console</text>
+  <text x="440" y="66" text-anchor="middle" font-size="10.5" fill="#5B6B7A">/super-admin — tenants, licensing, ownership</text>
+  <rect x="590" y="20" width="260" height="70" rx="10" fill="#F1F8F1" stroke="#4C9A4C" stroke-width="1.5"/>
+  <text x="720" y="48" text-anchor="middle" font-size="13.5" font-weight="700" fill="#16283A">Mobile App</text>
+  <text x="720" y="66" text-anchor="middle" font-size="10.5" fill="#5B6B7A">field staff, same JWT auth</text>
+  <rect x="870" y="20" width="200" height="70" rx="10" fill="#FDF8EC" stroke="#E8C025" stroke-width="1.5"/>
+  <text x="970" y="48" text-anchor="middle" font-size="13.5" font-weight="700" fill="#16283A">Nadia / 3rd party</text>
+  <text x="970" y="66" text-anchor="middle" font-size="10.5" fill="#5B6B7A">REST via API key / bearer</text>
+
+  <path d="M160,90 L160,120" stroke="#2BB8CC" stroke-width="2" marker-end="url(#a2)"/>
+  <path d="M440,90 L440,120" stroke="#2BB8CC" stroke-width="2" marker-end="url(#a2)"/>
+  <path d="M720,90 L720,120" stroke="#2BB8CC" stroke-width="2" marker-end="url(#a2)"/>
+  <path d="M970,90 L970,120" stroke="#2BB8CC" stroke-width="2" marker-end="url(#a2)"/>
+
+  <rect x="30" y="120" width="1040" height="80" rx="12" fill="#fff" stroke="#16283A" stroke-width="2"/>
+  <text x="50" y="146" font-size="14" font-weight="700" fill="#16283A">API Gateway (Fastify) — auth &amp; tenant resolution</text>
+  <text x="50" y="165" font-size="11" fill="#5B6B7A">JWT (human users) · API Key + X-Tenant-Id (programmatic) · tenant resolved from header / subdomain / JWT claim</text>
+  <text x="50" y="183" font-size="11" fill="#5B6B7A">Middleware chain: requireRole → requireScope → requireModule (entitlement) → route handler</text>
+
+  <path d="M550,200 L550,230" stroke="#16283A" stroke-width="2" marker-end="url(#a2)"/>
+  <rect x="30" y="230" width="500" height="150" rx="12" fill="#F4F6F7" stroke="#16283A" stroke-width="1.5"/>
+  <text x="50" y="255" font-size="13.5" font-weight="700" fill="#16283A">Business Modules</text>
+  <g font-size="11" fill="#22313F">
+    <rect x="50" y="268" width="110" height="26" rx="6" fill="#fff" stroke="#D8E2E6"/><text x="105" y="285" text-anchor="middle">Contacts</text>
+    <rect x="170" y="268" width="110" height="26" rx="6" fill="#fff" stroke="#D8E2E6"/><text x="225" y="285" text-anchor="middle">Deals</text>
+    <rect x="290" y="268" width="110" height="26" rx="6" fill="#fff" stroke="#D8E2E6"/><text x="345" y="285" text-anchor="middle">Activities</text>
+    <rect x="410" y="268" width="105" height="26" rx="6" fill="#fff" stroke="#D8E2E6"/><text x="462" y="285" text-anchor="middle">Ticketing</text>
+    <rect x="50" y="302" width="110" height="26" rx="6" fill="#fff" stroke="#D8E2E6"/><text x="105" y="319" text-anchor="middle">Sales/Invoicing</text>
+    <rect x="170" y="302" width="110" height="26" rx="6" fill="#fff" stroke="#D8E2E6"/><text x="225" y="319" text-anchor="middle">Analytics</text>
+    <rect x="290" y="302" width="110" height="26" rx="6" fill="#fff" stroke="#D8E2E6"/><text x="345" y="319" text-anchor="middle">Voice / Voice-Bot</text>
+    <rect x="410" y="302" width="105" height="26" rx="6" fill="#fff" stroke="#D8E2E6"/><text x="462" y="319" text-anchor="middle">Connectors</text>
+  </g>
+  <text x="50" y="358" font-size="10.5" fill="#5B6B7A">Each module registers routes + event listeners via ModuleRegistry (packages/core) — see Section 9 "Adding a Module".</text>
+
+  <rect x="550" y="230" width="520" height="150" rx="12" fill="#F4F6F7" stroke="#16283A" stroke-width="1.5"/>
+  <text x="570" y="255" font-size="13.5" font-weight="700" fill="#16283A">Cross-Cutting Core Services</text>
+  <text x="570" y="278" font-size="11" fill="#5B6B7A">• DatabaseClient.withTenant() — sets app.tenant_id per request</text>
+  <text x="570" y="296" font-size="11" fill="#5B6B7A">• EventBus — deal.won, contact.created, voice.call_completed…</text>
+  <text x="570" y="314" font-size="11" fill="#5B6B7A">• TenantService — entitlements, active_modules, config ownership</text>
+  <text x="570" y="332" font-size="11" fill="#5B6B7A">• Outbound Webhooks — HMAC-signed event delivery to subscribers</text>
+  <text x="570" y="350" font-size="11" fill="#5B6B7A">• Visibility engine — line-manager tree record scoping</text>
+  <text x="570" y="368" font-size="10.5" fill="#5B6B7A" font-style="italic">Used by every module above — not module-specific.</text>
+
+  <path d="M550,380 L550,410" stroke="#16283A" stroke-width="2" marker-end="url(#a2)"/>
+  <rect x="30" y="410" width="1040" height="80" rx="12" fill="#EDFAFC" stroke="#2BB8CC" stroke-width="1.5"/>
+  <text x="50" y="436" font-size="13.5" font-weight="700" fill="#16283A">PostgreSQL (Supabase, TLS pooler)</text>
+  <text x="50" y="455" font-size="11" fill="#5B6B7A">Row-Level Security policies scoped by tenant_id · app role <tspan font-family="monospace" fill="#B4390B">crm_app</tspan> (restricted, non-superuser — required for RLS to actually apply)</text>
+  <text x="50" y="473" font-size="11" fill="#5B6B7A">45+ migrations · every tenant's rows physically coexist in the same tables, isolated purely by policy</text>
+</svg>
+  </div>
+  <p class="caption">Fig 3.1 — CRM platform layers: clients → API gateway → business modules + core services → database.</p>
+
+  <h3 id="crm-tenancy">3.2 Multi-Tenancy &amp; Security</h3>
+  <div class="card">
+    <ul class="clean">
+      <li><strong>Row-Level Security (RLS):</strong> every tenant's data lives in the same tables, isolated by
+      a <code>tenant_id</code> column and Postgres RLS policies. The API sets <code>app.tenant_id</code> as a
+      session variable at the start of each transaction (<code>DatabaseClient.withTenant</code>).</li>
+      <li><strong>Non-superuser DB role is mandatory:</strong> the app connects as a restricted role
+      (<code>crm_app</code>), never as <code>postgres</code>. A <code>BYPASSRLS</code> or <code>SUPERUSER</code>
+      role silently ignores every RLS policy — this was a real production incident, fixed 2026-07-10. Any
+      integration that touches <code>DATABASE_URL</code> must preserve this.</li>
+      <li><strong>Tenant resolution</strong> on every request, in priority order: <code>X-Tenant-Id</code> header
+      → subdomain → custom domain → JWT claim.</li>
+    </ul>
+  </div>
+
+  <h3 id="crm-access">3.3 Access Control Model</h3>
+  <p>Four layers, each answering a different question:</p>
+  <table>
+    <tr><th>Layer</th><th>Question it answers</th><th>Mechanism</th></tr>
+    <tr><td><strong>1. Entitlement</strong></td><td>What has the tenant licensed?</td><td><code>tenants.entitled_features</code> / <code>active_modules</code> — set by Super Admin, checked via <code>requireModule()</code></td></tr>
+    <tr><td><strong>2. Roles</strong></td><td>What can this role do?</td><td>Tenant admin builds roles (Admin/Manager/Agent/Viewer + custom + Policy Admin governance role) — checked via <code>requireRole()</code> / <code>requireScope()</code></td></tr>
+    <tr><td><strong>3. Record visibility</strong></td><td>Whose records can this user see?</td><td>Line-manager tree filter — agent sees own, line manager sees team, manager sees department</td></tr>
+    <tr><td><strong>4. Separation of duties</strong></td><td>Structural guardrails</td><td>e.g. tenant_admin is administrative-only, blocked from operational/billing routes</td></tr>
+  </table>
+  <div class="callout teal">For any new integration, decide up front which of these four layers your integration's credentials
+  should sit at — e.g. a softphone integration typically needs a scoped API key (layer 2), not a full admin JWT.</div>
+
+  <h3 id="crm-modules">3.4 Business Modules</h3>
+  <p>Core CRM (contacts, companies, deals, activities) · Sales &amp; Invoicing (invoices, quotations, payments,
+  templates) · Ticketing/Contact-Centre (queues, SLA/TAT policies, CSAT, escalation) · Voice + Voice-Bot (Nadia)
+  · Email inbox · Analytics &amp; Reports · Team Messaging · Integrations (connectors, webhooks, API keys) ·
+  Departments &amp; Opportunities · Super-Admin console.</p>
+</section>
+
+<section id="nadia-arch">
+  <h2>4. Nadia Voice Agent Architecture</h2>
+  <div class="callout gold">Nadia is a <strong>self-hosted alternative to Retell AI / Vapi</strong>, purpose-built
+  for the Pakistani market (Urdu/English, self-hosted STT, local TTS voice). It runs as its own Python
+  service — <code>services/nadia-voice-agent</code> — completely independent of the AmanahCX codebase.
+  It is deliberately CRM-agnostic: it never imports AmanahCX-specific code.</div>
+
+  <h3 id="nadia-diagram">4.1 SIP + Voice Pipeline Diagram</h3>
+  <div class="diagram-wrap">
+<svg viewBox="0 0 1180 760" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,Segoe UI,Roboto,sans-serif">
+  <defs>
+    <marker id="a3" markerWidth="9" markerHeight="9" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#8a6d0a"/></marker>
+    <marker id="a3b" markerWidth="9" markerHeight="9" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#2BB8CC"/></marker>
+    <marker id="a3g" markerWidth="9" markerHeight="9" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#4C9A4C"/></marker>
+  </defs>
+
+  <!-- Caller -->
+  <rect x="20" y="30" width="170" height="64" rx="10" fill="#F4F6F7" stroke="#8FA2AF" stroke-width="1.5"/>
+  <text x="105" y="56" text-anchor="middle" font-size="13" font-weight="700" fill="#16283A">Caller</text>
+  <text x="105" y="74" text-anchor="middle" font-size="10.5" fill="#5B6B7A">phone, PSTN</text>
+
+  <!-- Browser test call -->
+  <rect x="20" y="120" width="170" height="64" rx="10" fill="#F4F6F7" stroke="#8FA2AF" stroke-width="1.5" stroke-dasharray="4,3"/>
+  <text x="105" y="146" text-anchor="middle" font-size="12" font-weight="700" fill="#16283A">Browser Test Call</text>
+  <text x="105" y="163" text-anchor="middle" font-size="10" fill="#5B6B7A">WebRTC, bypasses SIP</text>
+
+  <!-- Telecom -->
+  <rect x="230" y="30" width="200" height="64" rx="10" fill="#F4F6F7" stroke="#8FA2AF" stroke-width="1.5"/>
+  <text x="330" y="56" text-anchor="middle" font-size="13" font-weight="700" fill="#16283A">Telecom Carrier</text>
+  <text x="330" y="74" text-anchor="middle" font-size="10.5" fill="#5B6B7A">e.g. Telecard — SIP trunk provider</text>
+
+  <path d="M190,62 L230,62" stroke="#8FA2AF" stroke-width="2" marker-end="url(#a3)"/>
+  <text x="210" y="55" font-size="9" text-anchor="middle" fill="#5B6B7A">PSTN</text>
+
+  <path d="M430,62 L470,62" stroke="#8a6d0a" stroke-width="2" marker-end="url(#a3)"/>
+  <text x="450" y="55" font-size="9" text-anchor="middle" fill="#8a6d0a">SIP</text>
+  <path d="M190,152 L470,152 L470,120" stroke="#8FA2AF" stroke-width="1.5" stroke-dasharray="4,3" fill="none" marker-end="url(#a3)"/>
+
+  <!-- LiveKit Cloud -->
+  <rect x="470" y="30" width="290" height="150" rx="12" fill="#FDF8EC" stroke="#E8C025" stroke-width="2"/>
+  <text x="488" y="54" font-size="13.5" font-weight="700" fill="#16283A">LiveKit Cloud</text>
+  <rect x="488" y="64" width="120" height="26" rx="6" fill="#fff" stroke="#EAD68C"/>
+  <text x="548" y="81" text-anchor="middle" font-size="10" fill="#22313F">SIP Inbound Trunk</text>
+  <rect x="620" y="64" width="120" height="26" rx="6" fill="#fff" stroke="#EAD68C"/>
+  <text x="680" y="81" text-anchor="middle" font-size="10" fill="#22313F">Dispatch Rule</text>
+  <text x="488" y="106" font-size="10.5" fill="#5B6B7A">Dispatch rule: number → tenant_id metadata</text>
+  <text x="488" y="122" font-size="10.5" fill="#5B6B7A">Creates a per-call Room ("call-xxxx")</text>
+  <text x="488" y="138" font-size="10.5" fill="#5B6B7A">Dispatches the named agent "nadia" into it</text>
+  <text x="488" y="158" font-size="10" fill="#8a6d0a" font-weight="600">setup_sip.py provisions this once per number</text>
+
+  <path d="M615,180 L615,215" stroke="#E8C025" stroke-width="2.5" marker-end="url(#a3)"/>
+
+  <!-- Nadia worker box -->
+  <rect x="380" y="215" width="470" height="330" rx="14" fill="#fff" stroke="#16283A" stroke-width="2"/>
+  <text x="400" y="240" font-size="14.5" font-weight="700" fill="#16283A">Nadia Agent Worker (Python)</text>
+  <text x="400" y="257" font-size="10.5" fill="#5B6B7A">services/nadia-voice-agent/src/agent.py — one process per call</text>
+
+  <!-- pipeline stages -->
+  <g font-size="11.5" fill="#22313F">
+    <rect x="400" y="270" width="200" height="34" rx="8" fill="#EDFAFC" stroke="#2BB8CC"/>
+    <text x="500" y="285" text-anchor="middle" font-weight="700">Silero VAD</text>
+    <text x="500" y="298" text-anchor="middle" font-size="9.5" fill="#5B6B7A">turn-taking / end-of-speech</text>
+
+    <path d="M500,304 L500,320" stroke="#2BB8CC" stroke-width="2" marker-end="url(#a3b)"/>
+    <rect x="400" y="320" width="200" height="40" rx="8" fill="#EDFAFC" stroke="#2BB8CC"/>
+    <text x="500" y="337" text-anchor="middle" font-weight="700">STT</text>
+    <text x="500" y="351" text-anchor="middle" font-size="9.5" fill="#5B6B7A">self-hosted Whisper OR hosted OpenAI</text>
+
+    <path d="M500,360 L500,376" stroke="#2BB8CC" stroke-width="2" marker-end="url(#a3b)"/>
+    <rect x="400" y="376" width="200" height="40" rx="8" fill="#EDFAFC" stroke="#2BB8CC"/>
+    <text x="500" y="393" text-anchor="middle" font-weight="700">LLM Brain</text>
+    <text x="500" y="407" text-anchor="middle" font-size="9.5" fill="#5B6B7A">gpt-4o-mini + tenant system prompt</text>
+
+    <path d="M500,416 L500,432" stroke="#2BB8CC" stroke-width="2" marker-end="url(#a3b)"/>
+    <rect x="400" y="432" width="200" height="40" rx="8" fill="#EDFAFC" stroke="#2BB8CC"/>
+    <text x="500" y="449" text-anchor="middle" font-weight="700">Uplift AI TTS</text>
+    <text x="500" y="463" text-anchor="middle" font-size="9.5" fill="#5B6B7A">Urdu voice, +ffmpeg speed control</text>
+
+    <path d="M500,472 L500,488" stroke="#2BB8CC" stroke-width="2" marker-end="url(#a3b)"/>
+    <path d="M500,488 Q500,500 470,500 Q440,500 440,215" stroke="#2BB8CC" stroke-width="1.5" fill="none" stroke-dasharray="3,3"/>
+    <text x="365" y="350" font-size="9" fill="#2BB8CC" text-anchor="middle" transform="rotate(-90 365 350)">back to Room → SIP → caller</text>
+  </g>
+
+  <!-- tool calls -->
+  <rect x="620" y="270" width="210" height="145" rx="10" fill="#F1F8F1" stroke="#4C9A4C" stroke-width="1.5"/>
+  <text x="640" y="292" font-size="12" font-weight="700" fill="#16283A">Function Tools (LLM-called)</text>
+  <text x="640" y="312" font-size="10.5" fill="#3A7A3A">• identify_caller()</text>
+  <text x="640" y="329" font-size="10.5" fill="#3A7A3A">• check_knowledge_base()</text>
+  <text x="640" y="346" font-size="10.5" fill="#3A7A3A">• raise_ticket()</text>
+  <text x="640" y="366" font-size="10" fill="#5B6B7A">Hold-line played while raise_ticket's</text>
+  <text x="640" y="380" font-size="10" fill="#5B6B7A">~2s API call is in flight</text>
+  <text x="640" y="400" font-size="9.5" fill="#5B6B7A" font-style="italic">Guardrails / silence-nudge / max-duration</text>
+
+  <path d="M600,340 L620,340" stroke="#4C9A4C" stroke-width="2" marker-end="url(#a3g)"/>
+
+  <!-- Live transfer -->
+  <rect x="620" y="425" width="210" height="60" rx="10" fill="#fff" stroke="#8FA2AF" stroke-width="1.5" stroke-dasharray="4,3"/>
+  <text x="640" y="446" font-size="11" font-weight="700" fill="#16283A">Live Human Transfer</text>
+  <text x="640" y="463" font-size="9.5" fill="#5B6B7A">SIP transfer to configured destination</text>
+  <text x="640" y="477" font-size="9.5" fill="#5B6B7A">(if minutes exhausted / at capacity)</text>
+  <path d="M700,415 L700,425" stroke="#8FA2AF" stroke-width="1.5" marker-end="url(#a3)"/>
+
+  <!-- CRM connection -->
+  <path d="M615,545 L615,580" stroke="#8a6d0a" stroke-width="2.5" marker-end="url(#a3)"/>
+  <text x="630" y="565" font-size="10" fill="#8a6d0a">HTTPS + Bearer (LIVEKIT_INGEST_SECRET)</text>
+  <rect x="380" y="580" width="470" height="140" rx="12" fill="#FDF8EC" stroke="#E8C025" stroke-width="2"/>
+  <text x="400" y="604" font-size="13.5" font-weight="700" fill="#16283A">CRM Connector Contract (crm_client.py)</text>
+  <text x="400" y="622" font-size="10.5" fill="#5B6B7A">6 methods any CRM implements — Nadia's code never</text>
+  <text x="400" y="637" font-size="10.5" fill="#5B6B7A">knows which CRM is on the other end. See §4.3.</text>
+  <g font-size="10" fill="#8a6d0a">
+    <text x="400" y="660">get_config</text><text x="510" y="660">lookup_contact</text><text x="640" y="660">search_knowledge_base</text>
+    <text x="400" y="678">call_started</text><text x="510" y="678">create_ticket</text><text x="640" y="678">get_minutes_status</text>
+    <text x="400" y="696">call_ended</text>
+  </g>
+  <text x="400" y="712" font-size="10" fill="#5B6B7A" font-style="italic">Reference implementation today: AmanahCXConnector → /api/v1/voice-bot/livekit/*</text>
+</svg>
+  </div>
+  <p class="caption">Fig 4.1 — Nadia's SIP-to-speech pipeline and its connector boundary to whichever CRM is configured.</p>
+
+  <h3 id="nadia-pipeline">4.2 The Call Pipeline, Step by Step</h3>
+  <div class="card">
+    <div class="step"><span class="num-badge">1</span><div><strong>SIP wiring (one-time, per phone number):</strong>
+    <code>setup_sip.py</code> creates a LiveKit inbound SIP trunk for the carrier's number, plus a dispatch rule
+    that puts every inbound call into its own room and dispatches the named agent <code>nadia</code> into it,
+    carrying the tenant ID as room metadata.</div></div>
+    <div class="step"><span class="num-badge">2</span><div><strong>Call arrives:</strong> caller dials the number
+    → carrier delivers it over SIP to LiveKit Cloud → dispatch rule creates room <code>call-xxxx</code> and starts
+    a Nadia worker process for it.</div></div>
+    <div class="step"><span class="num-badge">3</span><div><strong>Settings load:</strong> the worker extracts
+    the tenant ID from job metadata and calls <code>get_config()</code> on the CRM connector to fetch that
+    tenant's bot name, tone, speaking rate, voice, system prompt, and guardrails — this is what makes Nadia's
+    behaviour fully configurable per-tenant from the CRM's own admin screen, no redeploy needed.</div></div>
+    <div class="step"><span class="num-badge">4</span><div><strong>Speech loop:</strong> Silero VAD detects when
+    the caller stops talking → buffered audio goes to STT (self-hosted Whisper on capable hardware, or hosted
+    OpenAI transcription on constrained hosts) → transcript goes to the gpt-4o-mini LLM with the tenant's system
+    prompt → LLM either replies directly or calls a tool.</div></div>
+    <div class="step"><span class="num-badge">5</span><div><strong>Tools:</strong> <code>identify_caller</code>
+    (recognise a returning contact), <code>check_knowledge_base</code> (answer general questions without a
+    ticket), <code>raise_ticket</code> (file a complaint/case — plays a spoken hold line while the ~2s API call
+    is in flight).</div></div>
+    <div class="step"><span class="num-badge">6</span><div><strong>Reply spoken back:</strong> LLM text → Uplift
+    AI TTS → (optional ffmpeg time-stretch if speaking rate ≠ 1.0) → audio frames → back down the same
+    room/SIP leg to the caller.</div></div>
+    <div class="step"><span class="num-badge">7</span><div><strong>Guardrails running throughout:</strong>
+    concurrency/capacity gate and minutes-allocation gate (checked right after connect — if exhausted, Nadia
+    hands off with an urgent ticket + optional live SIP transfer instead of running normally); silence nudge
+    (asks twice, then ends the call); hard max-call-duration cutoff.</div></div>
+    <div class="step"><span class="num-badge">8</span><div><strong>Call ends:</strong> full transcript
+    (+ recording URL if enabled) is reported back to the CRM via <code>call_ended()</code>.</div></div>
+  </div>
+
+  <h3 id="nadia-crm-contract">4.3 The CRM Connector Contract</h3>
+  <p>This is the single most important thing to understand for integration work: <strong>Nadia's voice/AI code
+  never talks to a specific CRM's API directly</strong>. Every CRM-facing call goes through one Python
+  <code>Protocol</code> with exactly six methods, defined in
+  <code>services/nadia-voice-agent/src/crm_client.py</code>:</p>
+<pre><code>class CRMConnector(Protocol):
+    async def get_config(tenant_id) -> dict | None
+    async def create_ticket(tenant_id, call_id, ticket: dict) -> dict
+    async def search_knowledge_base(tenant_id, question) -> dict | None
+    async def lookup_contact(tenant_id, phone, nic, email) -> dict
+    async def call_started(tenant_id, call_id) -> dict      # concurrency/capacity check
+    async def get_minutes_status(tenant_id) -> dict          # minutes-allocation check
+    async def call_ended(tenant_id, call_id, transcript, recording_url) -> None</code></pre>
+  <p>Today there is exactly one implementation, <code>AmanahCXConnector</code>, which calls AmanahCX's own REST
+  endpoints under <code>/api/v1/voice-bot/livekit/*</code> with a bearer token
+  (<code>LIVEKIT_INGEST_SECRET</code>). <code>get_client()</code> picks the active connector from the
+  <code>CRM_CONNECTOR</code> env var.</p>
+
+  <h3 id="nadia-connect">4.4 Connecting Nadia to a Different CRM</h3>
+  <div class="callout teal">
+    <strong>To connect Nadia to Salesforce, HubSpot, Dynamics, or a bespoke CRM:</strong> write one new class
+    implementing the six <code>CRMConnector</code> methods against that CRM's own API/webhooks, and register it
+    in <code>get_client()</code>. Nothing in <code>agent.py</code>, the VAD/STT/LLM/TTS pipeline, the SIP setup,
+    or the tool definitions needs to change.
+  </div>
+  <table>
+    <tr><th>Method</th><th>What the target CRM needs to expose</th></tr>
+    <tr><td><code>get_config</code></td><td>Return the tenant's bot settings (name, tone, voice, system prompt, guardrails). If the target CRM has no such concept yet, this can start as a static/env-driven config.</td></tr>
+    <tr><td><code>create_ticket</code></td><td>Create a case/ticket/lead record and return an ID Nadia can read back to the caller.</td></tr>
+    <tr><td><code>search_knowledge_base</code></td><td>Optional — return a direct-answer match for general questions. Can return <code>None</code> always if the target CRM has no KB.</td></tr>
+    <tr><td><code>lookup_contact</code></td><td>Search by phone/NIC/email, return a confidence-graded match so Nadia can (or cannot) greet a returning caller by name.</td></tr>
+    <tr><td><code>call_started</code> / <code>get_minutes_status</code></td><td>Optional gating hooks — can be stubbed to always return "not exhausted / not over capacity" if the target deployment doesn't need usage limits.</td></tr>
+    <tr><td><code>call_ended</code></td><td>Persist the transcript/recording somewhere on the target CRM's side (case notes, call log, etc.).</td></tr>
+  </table>
+  <p>Everything else — the SIP trunk, LiveKit dispatch rule, VAD/STT/LLM/TTS pipeline, guardrails, silence
+  handling, live transfer — is entirely CRM-independent and is reused as-is.</p>
+  <div class="callout">Nadia currently lives inside the AmanahCX repo as a convenience, but architecturally it is
+  already a standalone product (comparable to Retell AI / Vapi) — the connector pattern above is exactly what
+  makes that possible without a rewrite.</div>
+</section>
+
+<section id="mobile-arch">
+  <h2>5. Mobile App Architecture</h2>
+  <p>The field-staff mobile app (<code>packages/mobile</code>) is an Expo/React Native app used by sales and
+  support staff working outside the office. It talks to the <strong>exact same REST API</strong> as the web
+  app (same JWT auth, same endpoints) — there is no separate mobile backend.</p>
+
+  <h3 id="mobile-diagram">5.1 Architecture Diagram</h3>
+  <div class="diagram-wrap">
+<svg viewBox="0 0 1100 520" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,Segoe UI,Roboto,sans-serif">
+  <defs>
+    <marker id="a4" markerWidth="9" markerHeight="9" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#4C9A4C"/></marker>
+    <marker id="a4b" markerWidth="9" markerHeight="9" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#2BB8CC"/></marker>
+  </defs>
+
+  <!-- Phone -->
+  <rect x="30" y="30" width="330" height="420" rx="20" fill="#F8FBFB" stroke="#4C9A4C" stroke-width="2"/>
+  <text x="195" y="58" text-anchor="middle" font-size="14" font-weight="700" fill="#16283A">Field Staff Phone</text>
+  <text x="195" y="76" text-anchor="middle" font-size="10.5" fill="#5B6B7A">Expo / React Native app</text>
+
+  <rect x="50" y="90" width="290" height="80" rx="10" fill="#fff" stroke="#D8E2E6"/>
+  <text x="65" y="110" font-size="11" font-weight="700" fill="#16283A">Screens</text>
+  <text x="65" y="127" font-size="9.7" fill="#5B6B7A">Login · My Tasks · Dashboard · Deals</text>
+  <text x="65" y="142" font-size="9.7" fill="#5B6B7A">Tickets · Contacts · Profile</text>
+  <text x="65" y="157" font-size="9.7" fill="#5B6B7A">Contact/Deal/Task Detail · New Lead · New Task</text>
+
+  <rect x="50" y="180" width="140" height="90" rx="10" fill="#EDFAFC" stroke="#2BB8CC"/>
+  <text x="65" y="200" font-size="10.5" font-weight="700" fill="#16283A">On-Device AI</text>
+  <text x="65" y="216" font-size="9.3" fill="#3A7A3A">ML Kit OCR (card scan)</text>
+  <text x="65" y="230" font-size="9.3" fill="#3A7A3A">Speech Recognition</text>
+  <text x="65" y="244" font-size="9.3" fill="#3A7A3A">EN / اردو / ਪੰਜਾਬੀ</text>
+  <text x="65" y="258" font-size="9.3" fill="#3A7A3A">works fully offline</text>
+
+  <rect x="200" y="180" width="140" height="90" rx="10" fill="#FDF8EC" stroke="#E8C025"/>
+  <text x="215" y="200" font-size="10.5" font-weight="700" fill="#16283A">Device Features</text>
+  <text x="215" y="216" font-size="9.3" fill="#8a6d0a">GPS check-in / complete</text>
+  <text x="215" y="230" font-size="9.3" fill="#8a6d0a">Camera / photo attach</text>
+  <text x="215" y="244" font-size="9.3" fill="#8a6d0a">Google Maps navigate</text>
+  <text x="215" y="258" font-size="9.3" fill="#8a6d0a">Keep-awake (dev builds)</text>
+
+  <rect x="50" y="280" width="290" height="70" rx="10" fill="#fff" stroke="#8FA2AF" stroke-dasharray="4,3"/>
+  <text x="65" y="300" font-size="10.5" font-weight="700" fill="#16283A">Offline Lead/Task Queue</text>
+  <text x="65" y="316" font-size="9.3" fill="#5B6B7A">AsyncStorage-backed, auto-syncs when</text>
+  <text x="65" y="330" font-size="9.3" fill="#5B6B7A">connection returns (NetInfo listener)</text>
+
+  <rect x="50" y="360" width="290" height="70" rx="10" fill="#fff" stroke="#D8E2E6"/>
+  <text x="65" y="380" font-size="10.5" font-weight="700" fill="#16283A">Local Storage</text>
+  <text x="65" y="396" font-size="9.3" fill="#5B6B7A">expo-secure-store (session/token)</text>
+  <text x="65" y="410" font-size="9.3" fill="#5B6B7A">zustand (app state) · react-query cache</text>
+
+  <!-- API -->
+  <rect x="450" y="130" width="260" height="90" rx="12" fill="#fff" stroke="#16283A" stroke-width="2"/>
+  <text x="580" y="155" text-anchor="middle" font-size="13" font-weight="700" fill="#16283A">CRM API</text>
+  <text x="580" y="173" text-anchor="middle" font-size="10.5" fill="#5B6B7A">same endpoints as the web app</text>
+  <text x="580" y="190" text-anchor="middle" font-size="10.5" fill="#5B6B7A">JWT auth, tenant-scoped</text>
+  <text x="580" y="205" text-anchor="middle" font-size="10" fill="#5B6B7A">/contacts /activities /tickets /deals</text>
+
+  <path d="M360,150 L450,150" stroke="#4C9A4C" stroke-width="2.5" marker-end="url(#a4)"/>
+  <text x="400" y="142" text-anchor="middle" font-size="9.5" fill="#3A7A3A">REST</text>
+  <path d="M360,300 L440,300 Q450,300 450,220" stroke="#4C9A4C" stroke-width="2" fill="none" marker-end="url(#a4)" stroke-dasharray="4,3"/>
+  <text x="405" y="292" text-anchor="middle" font-size="9" fill="#3A7A3A">sync on reconnect</text>
+
+  <!-- AI fallback -->
+  <rect x="450" y="260" width="260" height="100" rx="12" fill="#EDFAFC" stroke="#2BB8CC" stroke-width="1.5"/>
+  <text x="580" y="283" text-anchor="middle" font-size="12" font-weight="700" fill="#16283A">Server AI Fallback</text>
+  <text x="465" y="303" font-size="9.7" fill="#1D8A9A">POST /contacts/scan-card</text>
+  <text x="465" y="318" font-size="9.7" fill="#1D8A9A">POST /contacts/parse-lead-text</text>
+  <text x="465" y="333" font-size="9.7" fill="#1D8A9A">POST /activities/parse-task-text</text>
+  <text x="465" y="350" font-size="9.3" fill="#5B6B7A">Claude — used when online &amp; on-device OCR/parse is uncertain</text>
+
+  <path d="M580,220 L580,260" stroke="#2BB8CC" stroke-width="2" fill="none" marker-end="url(#a4b)"/>
+
+  <!-- CRM records -->
+  <rect x="770" y="150" width="280" height="70" rx="10" fill="#F4F6F7" stroke="#16283A" stroke-width="1.5"/>
+  <text x="910" y="172" text-anchor="middle" font-size="11.5" font-weight="700" fill="#16283A">CRM Records</text>
+  <text x="910" y="190" text-anchor="middle" font-size="10" fill="#5B6B7A">Contacts · Deals · Activities · Tickets</text>
+  <text x="910" y="205" text-anchor="middle" font-size="9.5" fill="#5B6B7A">confirm-before-push dialog on every save</text>
+  <path d="M710,175 L770,175" stroke="#16283A" stroke-width="2" marker-end="url(#a4b)"/>
+
+  <!-- flow note -->
+  <rect x="30" y="470" width="1020" height="40" rx="8" fill="#fff" stroke="#E3E9ED"/>
+  <text x="46" y="494" font-size="10.5" fill="#5B6B7A">Golden path: scan / speak / type in the field → user verifies extracted data → confirm dialog → saved to CRM (or queued offline until reconnect)</text>
+</svg>
+  </div>
+  <p class="caption">Fig 5.1 — Mobile app: same API contract as the web app, plus on-device AI and an offline queue for field conditions.</p>
+
+  <h3 id="mobile-features">5.2 Screens &amp; Functionality</h3>
+  <table>
+    <tr><th>Screen</th><th>Purpose</th></tr>
+    <tr><td>Login</td><td>Workspace slug + email + password (same JWT auth as web)</td></tr>
+    <tr><td>My Tasks</td><td>Landing screen — assigned activities/tasks, role-aware chips (sales → leads, support → tickets)</td></tr>
+    <tr><td>Dashboard</td><td>Stat cards + To-do/Done task cards (tappable → filters)</td></tr>
+    <tr><td>Deals</td><td>Pipeline list; Deal Detail includes photo attachments (camera/gallery)</td></tr>
+    <tr><td>Tickets / Contacts</td><td>Same records as the web CRM, filtered to the user's visibility scope</td></tr>
+    <tr><td>New Lead</td><td>Scan a visiting card (camera) or speak (voice capture) → extracted/verified fields → save as contact/lead</td></tr>
+    <tr><td>New Task</td><td>Voice capture → AI resolves relative dates/priority/type, auto-matches an existing contact by name</td></tr>
+    <tr><td>Task Detail</td><td>Call / Navigate (opens Google Maps) / GPS Check-in / Complete with outcome</td></tr>
+  </table>
+
+  <h3 id="mobile-offline">5.3 Offline &amp; On-Device AI</h3>
+  <div class="grid2">
+    <div class="card">
+      <h4>Works with no internet</h4>
+      <ul class="clean">
+        <li><strong>Card scan:</strong> on-device ML Kit text recognition (Android/iOS) extracts name/title/company/email/phone from a photo — no network call.</li>
+        <li><strong>Voice capture:</strong> on-device speech recognition, multilingual (English / Urdu / Punjabi), with an offline dictation parser as fallback.</li>
+        <li><strong>Save:</strong> if offline, the record is written to a local queue and auto-synced the moment connectivity returns (NetInfo listener).</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>Upgrades when online</h4>
+      <ul class="clean">
+        <li>Card photo / raw dictation can be sent to the server, where Claude produces a cleaner structured extraction than the on-device pass.</li>
+        <li>Every save — offline or online — shows a confirm dialog summarising what will be pushed to the CRM, so the field worker verifies AI-extracted data before it's committed.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section id="integrating">
+  <h2>6. Connecting Other Applications</h2>
+  <p>This section is for integrating a customer's <strong>other</strong> systems — a softphone, an existing
+  CRM, a BI tool, or an automation platform — with AmanahCX itself (as opposed to Section 4, which is about
+  connecting Nadia to a different CRM).</p>
+
+  <h3 id="int-rest">6.1 REST &amp; GraphQL API</h3>
+  <div class="card">
+    <p>All CRM data is reachable at <code>/api/v1/*</code> (REST) and via GraphQL (Mercurius). Both share the
+    same auth, tenant resolution, and access-control middleware described in <a href="#crm-access">3.3</a>.
+    This is the primary integration surface — the web app, mobile app, and Nadia's connector all use it.</p>
+  </div>
+
+  <h3 id="int-webhooks">6.2 Outbound Webhooks</h3>
+  <div class="card">
+    <p>A tenant can subscribe an external endpoint to CRM events and receive a signed POST whenever they fire:</p>
+<pre><code>POST /api/v1/webhooks
+{
+  "name": "My Integration",
+  "url": "https://partner-system.example.com/hooks/amanahcx",
+  "events": ["deal.won", "contact.created", "ticket.created", "voice.call_completed"]
+}</code></pre>
+    <p>Deliveries are HMAC-SHA256 signed; the receiver verifies with the shared secret. Failed deliveries land
+    in a dead-letter queue with a replay endpoint (<code>GET /webhooks/dead-letter</code>,
+    <code>POST /webhooks/dead-letter/:deliveryId/replay</code>) — useful for building a reliable sync against
+    a customer's other system.</p>
+  </div>
+
+  <h3 id="int-apikeys">6.3 API Keys (Inbound)</h3>
+  <div class="card">
+    <p>For a third-party system to <em>call into</em> AmanahCX programmatically (rather than receive events
+    from it), it authenticates with a scoped API key instead of a user JWT:</p>
+<pre><code>Authorization: ApiKey crm_live_xxxxxxxxxxxxxxxx
+X-Tenant-Id: &lt;tenant-uuid&gt;</code></pre>
+    <p>Keys are scoped per resource/action (e.g. <code>contacts:read</code>, <code>deals:write</code>,
+    <code>voice:read</code>) — issue the narrowest scope the integration actually needs. Managed at
+    <code>Settings → Integrations → API Keys</code> (tenant admin only).</p>
+  </div>
+
+  <h3 id="int-telephony">6.4 Telephony / Softphone Integration</h3>
+  <div class="card">
+    <p>Two distinct patterns exist depending on what you're building:</p>
+    <ul class="clean">
+      <li><strong>Voice bot number (Nadia):</strong> SIP trunk → LiveKit dispatch rule, as described in
+      <a href="#nadia-arch">Section 4</a>. This is for AI-handled inbound calls.</li>
+      <li><strong>Human agent softphone:</strong> the <code>connectors</code> module (<code>modules/connectors</code>)
+      has provider adapters (Twilio, Vonage today) for agent-facing calling — inbound webhook normalisation,
+      outbound call initiation, and call-completed events into the CRM's activity/ticket timeline. A softphone
+      product integrates the same way a new telephony provider adapter would: implement the provider webhook
+      contract and register it as a connector, rather than hand-building CRM-side call logging.</li>
+    </ul>
+  </div>
+
+  <h3 id="int-patterns">6.5 Common Integration Patterns</h3>
+  <table>
+    <tr><th>You're building…</th><th>Use…</th></tr>
+    <tr><td>A softphone for human agents</td><td>Telephony connector adapter (§6.4) + webhooks for call-completed events</td></tr>
+    <tr><td>Nadia talking to a different CRM</td><td>New <code>CRMConnector</code> implementation (§4.3/4.4) — no AmanahCX API involved at all</td></tr>
+    <tr><td>Syncing AmanahCX records into another system</td><td>Outbound webhooks (§6.2) for real-time push, or scoped API key polling (§6.3) for batch sync</td></tr>
+    <tr><td>Letting another system create/update CRM records</td><td>Scoped API key (§6.3) calling REST/GraphQL directly</td></tr>
+    <tr><td>An automation platform (Zapier-style)</td><td>Webhooks as the trigger source + API key as the action target — the same two primitives cover both directions</td></tr>
+  </table>
+</section>
+
+<section id="data-model">
+  <h2>7. Data Model &amp; Auth Essentials</h2>
+  <div class="grid2">
+    <div class="card">
+      <h4>Auth mechanisms</h4>
+      <table>
+        <tr><td><strong>JWT</strong></td><td>Human users (web + mobile). <code>Authorization: Bearer &lt;token&gt;</code></td></tr>
+        <tr><td><strong>API Key</strong></td><td>Programmatic/integration access, scoped per resource:action</td></tr>
+        <tr><td><strong>Bearer secret</strong></td><td>Service-to-service — e.g. Nadia → CRM uses <code>LIVEKIT_INGEST_SECRET</code></td></tr>
+      </table>
+    </div>
+    <div class="card">
+      <h4>Key data-model facts</h4>
+      <ul class="clean">
+        <li>Every ticket links to a contact (auto-matched or auto-created on inbound).</li>
+        <li>A <code>sales</code> ticket converts to a pipeline deal on acceptance (idempotent, <code>tickets.deal_id</code>).</li>
+        <li>Per-channel communication consent (WhatsApp/SMS/Email) is append-only and enforced before outbound sends.</li>
+        <li>SLA policies match by priority + channel/department/tags; escalation is multi-step with % thresholds.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section id="deploy">
+  <h2>8. Environments &amp; Deployment</h2>
+  <table>
+    <tr><th>Piece</th><th>Hosting</th><th>Deploy trigger</th></tr>
+    <tr><td>Frontend (packages/frontend)</td><td>Vercel</td><td>Auto-deploy on push to GitHub main</td></tr>
+    <tr><td>API (packages/api)</td><td>Railway</td><td>Auto-deploy on push to GitHub main</td></tr>
+    <tr><td>Database</td><td>Supabase (PostgreSQL, TLS pooler)</td><td>Migrations run as part of deploy</td></tr>
+    <tr><td>Nadia voice agent</td><td>Railway — a <strong>second, separate service</strong> in the same Railway project as the API, <code>rootDirectory=services/nadia-voice-agent</code></td><td>Auto-deploy on push, but <strong>scoped</strong>: only rebuilds when files under that folder change</td></tr>
+    <tr><td>Mobile app</td><td>EAS build → Android APK direct-install; iOS via TestFlight (Apple Developer account required)</td><td>Manual build trigger (<code>eas build</code>) — not connected to GitHub auto-deploy at all</td></tr>
+  </table>
+  <div class="callout">GitHub, Railway, Vercel, and Supabase are kept continuously in sync — there is no manual
+  deploy step for the CRM web/API. Repo: <code>github.com/munirrazaa/AmanahCX</code> (main). See §9 for how these
+  three build pipelines actually differ in practice, and §10 for what changes if you move off this managed stack.</div>
+</section>
+
+<section id="build-report">
+  <h2>9. Consolidated Build &amp; Release Report</h2>
+  <p>One GitHub repository feeds <strong>three independent build pipelines</strong>, plus a fourth path
+  (mobile) that isn't connected to GitHub auto-deploy at all. Understanding which push triggers which build
+  — and which one doesn't auto-trigger anything — matters for anyone shipping changes: pushing to
+  <code>main</code> silently ships to two production services at once (frontend + API) but only touches
+  Nadia if you changed her folder, and never touches the mobile app.</p>
+
+  <h3 id="build-diagram">9.1 Three Pipelines, One Repo</h3>
+  <div class="diagram-wrap">
+<svg viewBox="0 0 1180 420" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,Segoe UI,Roboto,sans-serif">
+  <defs>
+    <marker id="a5" markerWidth="9" markerHeight="9" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#16283A"/></marker>
+    <marker id="a5b" markerWidth="9" markerHeight="9" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#8FA2AF"/></marker>
+  </defs>
+
+  <rect x="410" y="16" width="330" height="58" rx="10" fill="#F4F6F7" stroke="#16283A" stroke-width="2"/>
+  <text x="575" y="40" text-anchor="middle" font-size="13.5" font-weight="700" fill="#16283A">GitHub — munirrazaa/AmanahCX</text>
+  <text x="575" y="58" text-anchor="middle" font-size="10.5" fill="#5B6B7A">every push to main</text>
+
+  <rect x="965" y="16" width="195" height="58" rx="10" fill="#F4F6F7" stroke="#8FA2AF" stroke-width="1.5" stroke-dasharray="4,3"/>
+  <text x="1062" y="40" text-anchor="middle" font-size="12.5" font-weight="700" fill="#16283A">Developer's Laptop</text>
+  <text x="1062" y="58" text-anchor="middle" font-size="10" fill="#5B6B7A">local working tree</text>
+
+  <path d="M500,74 L120,140" stroke="#16283A" stroke-width="2" fill="none" marker-end="url(#a5)"/>
+  <path d="M575,74 L575,140" stroke="#16283A" stroke-width="2" marker-end="url(#a5)"/>
+  <path d="M650,74 L1000,140" stroke="#16283A" stroke-width="2" fill="none" marker-end="url(#a5)"/>
+  <path d="M1062,74 L1062,140" stroke="#8FA2AF" stroke-width="2" stroke-dasharray="4,3" marker-end="url(#a5b)"/>
+
+  <rect x="20" y="140" width="310" height="120" rx="10" fill="#EDFAFC" stroke="#2BB8CC" stroke-width="1.5"/>
+  <text x="40" y="164" font-size="13" font-weight="700" fill="#16283A">Vercel — Frontend</text>
+  <text x="40" y="183" font-size="10.5" fill="#5B6B7A">Watches: whole repo (build only touches</text>
+  <text x="40" y="198" font-size="10.5" fill="#5B6B7A">packages/frontend)</text>
+  <text x="40" y="218" font-size="10.5" fill="#1D8A9A" font-weight="600">Auto-deploys on EVERY push to main</text>
+  <text x="40" y="238" font-size="10" fill="#5B6B7A">Output: static build → app.yourdomain.com</text>
+
+  <rect x="420" y="140" width="310" height="120" rx="10" fill="#F1F8F1" stroke="#4C9A4C" stroke-width="1.5"/>
+  <text x="440" y="164" font-size="13" font-weight="700" fill="#16283A">Railway — API service</text>
+  <text x="440" y="183" font-size="10.5" fill="#5B6B7A">Watches: whole repo (build touches</text>
+  <text x="440" y="198" font-size="10.5" fill="#5B6B7A">packages/api, packages/core, modules/*)</text>
+  <text x="440" y="218" font-size="10.5" fill="#3A7A3A" font-weight="600">Auto-deploys on EVERY push to main</text>
+  <text x="440" y="238" font-size="10" fill="#5B6B7A">Output: Fastify process → api.yourdomain.com</text>
+
+  <rect x="850" y="140" width="310" height="120" rx="10" fill="#FDF8EC" stroke="#E8C025" stroke-width="1.5"/>
+  <text x="870" y="164" font-size="13" font-weight="700" fill="#16283A">Railway — Nadia service</text>
+  <text x="870" y="183" font-size="10.5" fill="#5B6B7A">Watches ONLY: services/nadia-voice-agent/**</text>
+  <text x="870" y="198" font-size="10.5" fill="#5B6B7A">2nd service, same Railway project as the API</text>
+  <text x="870" y="218" font-size="10.5" fill="#8a6d0a" font-weight="600">Rebuilds ONLY when Nadia's own files change</text>
+  <text x="870" y="238" font-size="10" fill="#5B6B7A">Output: Docker worker → registers with LiveKit</text>
+
+  <rect x="965" y="270" width="195" height="110" rx="10" fill="#fff" stroke="#8FA2AF" stroke-width="1.5" stroke-dasharray="4,3"/>
+  <text x="985" y="292" font-size="12.5" font-weight="700" fill="#16283A">EAS Build (cloud)</text>
+  <text x="985" y="310" font-size="10" fill="#5B6B7A">Manual trigger only:</text>
+  <text x="985" y="324" font-size="10" fill="#5B6B7A"><tspan font-family="monospace" fill="#B4390B">eas build</tspan></text>
+  <text x="985" y="342" font-size="10" fill="#5B6B7A">NOT wired to GitHub —</text>
+  <text x="985" y="356" font-size="10" fill="#5B6B7A">builds whatever is on disk</text>
+  <text x="985" y="370" font-size="9.5" fill="#8a6d0a" font-weight="600">Output: APK / TestFlight build</text>
+
+  <rect x="20" y="285" width="800" height="95" rx="10" fill="#fff" stroke="#E3E9ED" stroke-width="1.5"/>
+  <text x="40" y="308" font-size="12.5" font-weight="700" fill="#16283A">Why this matters when you're shipping</text>
+  <text x="40" y="328" font-size="10.5" fill="#5B6B7A">• A push touching only frontend/API code silently redeploys BOTH Vercel and Railway-API — there is no "just deploy one" without excluding the other.</text>
+  <text x="40" y="345" font-size="10.5" fill="#5B6B7A">• A push touching Nadia's prompt/config code only rebuilds the Nadia Railway service — the CRM web/API are untouched, and vice versa.</text>
+  <text x="40" y="362" font-size="10.5" fill="#5B6B7A">• The mobile app can silently drift out of sync with the backend — an EAS build cut last week does not reflect an API contract change pushed today.</text>
+</svg>
+  </div>
+  <p class="caption">Fig 9.1 — one repo, three auto-deploy targets, and one manually-triggered mobile build path that isn't wired to any of them.</p>
+
+  <h3 id="build-web">9.2 CRM Web + API Builds (GitHub → Vercel + Railway)</h3>
+  <p>A representative sample — the full history (60+ entries) lives in <code>docs/CHANGE_LOG.md</code>, not
+  reproduced in full here.</p>
+  <table>
+    <tr><th>Date</th><th>Push</th><th>What shipped</th></tr>
+    <tr><td>2026-06-29</td><td>Push 5 of 5</td><td>Policy Admin governance role — independent SLA-policy write access, ranked above Manager</td></tr>
+    <tr><td>2026-07-01</td><td>—</td><td>SLA governance guardrail (mandatory reason for priority changes) + reassignment audit trail</td></tr>
+    <tr><td>2026-07-10</td><td>Critical fix</td><td>Tenant data-isolation fix — restricted <code>crm_app</code> DB role (migration 048) + Vercel reconnected to the correct repo for auto-deploy</td></tr>
+    <tr><td>2026-07-13</td><td>Push 2 of 2</td><td>Login "spinner forever" root-cause fixed + Voice Bot admin screen added</td></tr>
+    <tr><td>2026-07-14</td><td>Push 3</td><td>SLA Save bug fixed — was blocked by four separate stacked causes</td></tr>
+    <tr><td>2026-07-15</td><td>Push 15</td><td>Super Admin can centrally hold Voice Bot + Integrations config per tenant (Phase 1)</td></tr>
+    <tr><td>2026-07-16</td><td>Push 2</td><td>Manager Field-Team View built</td></tr>
+    <tr><td>2026-07-17</td><td>Push 3</td><td>Full 5-role audit across all 8 tenants; 4 crash fixes; Super Admin sidebar nav fix</td></tr>
+  </table>
+
+  <h3 id="build-nadia">9.3 Nadia Voice Agent Builds (GitHub → Railway, scoped path)</h3>
+  <p>Nadia's Railway service builds from a <code>python:3.11-slim</code> Dockerfile that also installs
+  <code>ffmpeg</code> (required for the speaking-rate time-stretch, §4.2) and pre-downloads the Whisper
+  model at build time so the first live call isn't stuck on a cold download.</p>
+  <table>
+    <tr><th>Date</th><th>Push</th><th>What shipped</th></tr>
+    <tr><td>2026-07-13</td><td>Initial build</td><td>Nadia built — self-hosted LiveKit agent (Whisper STT + Uplift AI TTS + gpt-4o-mini), Pakistani-market alternative to Retell/Vapi</td></tr>
+    <tr><td>2026-07-14</td><td>Push 1 of 2</td><td>First real production deployment — 2nd Railway service, Dockerfile, <code>agent_name</code> mismatch bug fixed (calls were never being picked up), scoped auto-deploy wired up</td></tr>
+    <tr><td>2026-07-14</td><td>Push 6</td><td>Production call-quality — two root causes fixed</td></tr>
+    <tr><td>2026-07-14</td><td>Push 8</td><td>SIP wiring audit — 3 real phone-call bugs fixed + <code>setup_sip.py</code> automation added</td></tr>
+    <tr><td>2026-07-14</td><td>Push 9</td><td>Silence handling — "are you still there?" nudge sequence</td></tr>
+    <tr><td>2026-07-14</td><td>Push 10</td><td>Audio call recording with spoken consent notice</td></tr>
+    <tr><td>2026-07-14</td><td>Push 13</td><td>Knowledge Base tool — answers general questions before raising a ticket</td></tr>
+    <tr><td>2026-07-17</td><td>Push 2</td><td>Hold-message during ticket creation + per-minute voice bot cost tracking</td></tr>
+  </table>
+
+  <h3 id="build-mobile">9.4 Mobile App Builds (EAS — not part of GitHub auto-deploy)</h3>
+  <p>Mobile releases are a deliberate, manual step (<code>eas build --profile &lt;profile&gt; --platform
+  android</code>) — there is no equivalent of Vercel/Railway's "push and it's live" for the app. Whatever is
+  on the developer's disk at build time is what ships; a build cut today does not automatically pick up an
+  API change merged tomorrow.</p>
+  <table>
+    <tr><th>Date</th><th>Build</th><th>What shipped</th></tr>
+    <tr><td>2026-07-06</td><td>Dev build config</td><td>Offline on-device OCR scanner + voice lead/task capture built; Vivid rebrand applied; first <code>eas.json</code> profile created</td></tr>
+    <tr><td>2026-07-07</td><td>APK #2</td><td><code>eas build --non-interactive</code> — deal photo attachments, login-path fix; distributed as a direct-install APK</td></tr>
+    <tr><td>2026-07-11</td><td>Code-level (no new APK)</td><td>Field-visit flow (GPS check-in/complete) recovered from a stash conflict and re-tested against the cloud database</td></tr>
+    <tr><td>2026-07-12</td><td>Live phone test</td><td>First live test of the production APK on a real Android phone; 3 field-capture bugs found and fixed</td></tr>
+  </table>
+  <div class="callout">Full, unabridged history for all three pipelines: <code>docs/CHANGE_LOG.md</code>. This
+  report is a curated sample to show the pattern and cadence, not a replacement for it.</div>
+</section>
+
+<section id="vm-migration">
+  <h2>10. Self-Hosted Migration (VM + Domain)</h2>
+  <div class="callout gold">This section is a <strong>ready-to-execute runbook</strong> for moving off Railway/
+  Vercel/Supabase onto infrastructure you control — a single VMware VM reachable by a domain name. Hand this
+  to whoever provisions the VM (ops/infra) — steps 1–11 below are written to be followed in order, with the
+  one non-negotiable called out explicitly at step 4 (recreating the restricted <code>crm_app</code> role so
+  Row-Level Security keeps working).</div>
+
+  <h3 id="vm-diagram">10.1 Target Architecture Diagram</h3>
+  <div class="diagram-wrap">
+<svg viewBox="0 0 1180 460" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,Segoe UI,Roboto,sans-serif">
+  <defs>
+    <marker id="a6" markerWidth="9" markerHeight="9" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#16283A"/></marker>
+  </defs>
+
+  <text x="20" y="24" font-size="12.5" font-weight="700" fill="#7FA6B8" letter-spacing="1">TODAY — MANAGED SERVICES</text>
+  <rect x="20" y="34" width="230" height="50" rx="8" fill="#F4F6F7" stroke="#8FA2AF" stroke-width="1.5"/>
+  <text x="135" y="64" text-anchor="middle" font-size="12" font-weight="700" fill="#16283A">GitHub (source)</text>
+  <path d="M135,84 L135,110" stroke="#8FA2AF" stroke-width="1.5" marker-end="url(#a6)"/>
+  <rect x="20" y="110" width="230" height="50" rx="8" fill="#EDFAFC" stroke="#2BB8CC" stroke-width="1.5"/>
+  <text x="135" y="140" text-anchor="middle" font-size="11.5" fill="#16283A">Vercel (frontend)</text>
+  <rect x="20" y="170" width="230" height="50" rx="8" fill="#F1F8F1" stroke="#4C9A4C" stroke-width="1.5"/>
+  <text x="135" y="200" text-anchor="middle" font-size="11.5" fill="#16283A">Railway (API + Nadia)</text>
+  <rect x="20" y="230" width="230" height="50" rx="8" fill="#F4F6F7" stroke="#8FA2AF" stroke-width="1.5"/>
+  <text x="135" y="260" text-anchor="middle" font-size="11.5" fill="#16283A">Supabase (Postgres)</text>
+  <rect x="20" y="300" width="230" height="50" rx="8" fill="#FDF8EC" stroke="#E8C025" stroke-width="1.5"/>
+  <text x="135" y="330" text-anchor="middle" font-size="11.5" fill="#16283A">LiveKit Cloud (SIP/media)</text>
+
+  <line x1="290" y1="230" x2="290" y2="230" stroke="none"/>
+  <path d="M290,80 L320,80" stroke="#8FA2AF" stroke-width="0" />
+
+  <text x="330" y="230" text-anchor="middle" font-size="22" fill="#8FA2AF">→</text>
+
+  <text x="620" y="24" font-size="12.5" font-weight="700" fill="#7FA6B8" letter-spacing="1">TARGET — ONE VM + YOUR DOMAIN</text>
+  <rect x="620" y="34" width="540" height="50" rx="8" fill="#F4F6F7" stroke="#8FA2AF" stroke-width="1.5"/>
+  <text x="890" y="64" text-anchor="middle" font-size="12" font-weight="700" fill="#16283A">yourdomain.com — DNS A records → VM's public IP</text>
+  <path d="M890,84 L890,105" stroke="#16283A" stroke-width="2" marker-end="url(#a6)"/>
+
+  <rect x="620" y="105" width="540" height="300" rx="14" fill="#fff" stroke="#16283A" stroke-width="2"/>
+  <text x="640" y="128" font-size="13.5" font-weight="700" fill="#16283A">VMware VM (Ubuntu 22.04 LTS) — single host</text>
+
+  <rect x="640" y="140" width="500" height="34" rx="8" fill="#FDF8EC" stroke="#E8C025"/>
+  <text x="890" y="161" text-anchor="middle" font-size="11.5" font-weight="600" fill="#8a6d0a">Caddy — TLS termination + routing by subdomain</text>
+
+  <rect x="640" y="186" width="155" height="60" rx="8" fill="#EDFAFC" stroke="#2BB8CC"/>
+  <text x="717" y="210" text-anchor="middle" font-size="11" font-weight="700" fill="#16283A">Frontend</text>
+  <text x="717" y="226" text-anchor="middle" font-size="9.5" fill="#5B6B7A">static Vite build</text>
+
+  <rect x="805" y="186" width="155" height="60" rx="8" fill="#F1F8F1" stroke="#4C9A4C"/>
+  <text x="882" y="210" text-anchor="middle" font-size="11" font-weight="700" fill="#16283A">API process</text>
+  <text x="882" y="226" text-anchor="middle" font-size="9.5" fill="#5B6B7A">Node/Fastify via systemd</text>
+
+  <rect x="970" y="186" width="155" height="60" rx="8" fill="#FDF8EC" stroke="#E8C025"/>
+  <text x="1047" y="210" text-anchor="middle" font-size="11" font-weight="700" fill="#16283A">Nadia service</text>
+  <text x="1047" y="226" text-anchor="middle" font-size="9.5" fill="#5B6B7A">Python venv via systemd</text>
+
+  <rect x="640" y="256" width="240" height="55" rx="8" fill="#F4F6F7" stroke="#8FA2AF"/>
+  <text x="760" y="280" text-anchor="middle" font-size="11" font-weight="700" fill="#16283A">PostgreSQL 16</text>
+  <text x="760" y="296" text-anchor="middle" font-size="9.5" fill="#5B6B7A">restricted crm_app role, RLS intact</text>
+
+  <rect x="890" y="256" width="235" height="55" rx="8" fill="#F4F6F7" stroke="#8FA2AF"/>
+  <text x="1007" y="280" text-anchor="middle" font-size="11" font-weight="700" fill="#16283A">Redis</text>
+  <text x="1007" y="296" text-anchor="middle" font-size="9.5" fill="#5B6B7A">caching / EventBus support</text>
+
+  <rect x="640" y="322" width="485" height="70" rx="8" fill="#fff" stroke="#D8E2E6" stroke-dasharray="3,3"/>
+  <text x="660" y="344" font-size="10.5" font-weight="700" fill="#16283A">Optional: MinIO (object storage)</text>
+  <text x="660" y="362" font-size="9.5" fill="#5B6B7A">Same pattern already proven for Nadia's call recordings —</text>
+  <text x="660" y="376" font-size="9.5" fill="#5B6B7A">reusable here for CRM attachments too</text>
+
+  <path d="M1047,246 L1047,420" stroke="#16283A" stroke-width="1.5" stroke-dasharray="3,3"/>
+  <rect x="850" y="420" width="330" height="34" rx="8" fill="#FDF8EC" stroke="#E8C025"/>
+  <text x="1015" y="441" text-anchor="middle" font-size="10.5" fill="#8a6d0a">LiveKit Cloud (or self-hosted livekit-server) — SIP/media, unchanged</text>
+</svg>
+  </div>
+  <p class="caption">Fig 10.1 — collapsing four managed services into one VM behind your own domain; LiveKit's SIP/media plane can stay external or move in too.</p>
+
+  <h3 id="vm-runbook">10.2 Migration Runbook</h3>
+  <div class="card">
+    <div class="step"><span class="num-badge">1</span><div><strong>Provision the VM.</strong> Ubuntu 22.04 LTS,
+    reserved/static internal IP, a public IP (or NAT port-forward for 80/443). Sizing: 4 vCPU / 8GB RAM covers
+    frontend + API + Postgres comfortably; if Nadia's self-hosted Whisper STT also runs on this box, budget
+    significantly more CPU — Whisper is what maxed out Railway's small hosts in production (§9.3), which is
+    why <code>STT_PROVIDER=openai</code> (hosted transcription) exists as a fallback for constrained hardware.</div></div>
+    <div class="step"><span class="num-badge">2</span><div><strong>Install the base stack.</strong> Node.js 20 LTS,
+    Python 3.11, PostgreSQL 16, Redis, Caddy (automatic HTTPS — the same pattern already used for Nadia's MinIO
+    recording storage), and <strong>ffmpeg</strong> (Nadia's speaking-rate control depends on it, §4.2 — easy to
+    miss since nothing fails loudly without it until a tenant sets a non-default speaking rate).</div></div>
+    <div class="step"><span class="num-badge">3</span><div><strong>Clone the repo.</strong> GitHub stays the
+    source of truth — <code>git clone github.com/munirrazaa/AmanahCX</code> onto the VM.</div></div>
+    <div class="step"><span class="num-badge">4</span><div><strong>Migrate the database — the step that must not
+    be shortcut.</strong> <code>pg_dump</code> the Supabase database → restore into local Postgres → recreate the
+    restricted <code>crm_app</code> role with <code>NOSUPERUSER NOBYPASSRLS</code> and only the grants it needs
+    (§3.2 — either attribute silently disables every Row-Level Security policy). Point <code>DATABASE_URL</code>
+    at <code>crm_app@localhost</code>, never at a superuser connection.</div></div>
+    <div class="step"><span class="num-badge">5</span><div><strong>Build and run the API.</strong>
+    <code>npm install && npm run build</code> in <code>packages/api</code> → run the compiled <code>dist/</code>
+    under a systemd service on an internal port, proxied by Caddy at <code>api.yourdomain.com</code>.</div></div>
+    <div class="step"><span class="num-badge">6</span><div><strong>Build and serve the frontend.</strong>
+    <code>npm run build</code> (Vite) in <code>packages/frontend</code> → the static <code>dist/</code> files are
+    served directly by Caddy at <code>app.yourdomain.com</code> — no Node process needed, same as Vercel today,
+    just served locally.</div></div>
+    <div class="step"><span class="num-badge">7</span><div><strong>Deploy Nadia.</strong> Python venv, <code>pip
+    install -r requirements.txt</code>, confirm <code>ffmpeg</code> is on PATH, set <code>CRM_API_BASE_URL</code>
+    to the new internal API address, run <code>src/agent.py</code> as a systemd service with
+    <code>agent_name=nadia</code> set (§9.3 — this exact value mismatch broke production once already).
+    <code>LIVEKIT_URL</code>/<code>API_KEY</code>/<code>API_SECRET</code> keep pointing at LiveKit Cloud unless
+    you also self-host <code>livekit-server</code> on this VM.</div></div>
+    <div class="step"><span class="num-badge">8</span><div><strong>Point the domain at the VM.</strong> Create A
+    records for <code>app.yourdomain.com</code> and <code>api.yourdomain.com</code> → the VM's public IP. Caddy
+    auto-provisions Let's Encrypt certificates the moment DNS resolves — no manual certificate step.</div></div>
+    <div class="step"><span class="num-badge">9</span><div><strong>Lock it down.</strong> Only open 80/443
+    publicly; keep Postgres bound to localhost (never expose 5432); SSH via key-based auth only; keep
+    <code>crm_app</code> non-superuser as the one non-negotiable carried over from today's setup.</div></div>
+    <div class="step"><span class="num-badge">10</span><div><strong>Replace the "push and it's live" convenience.
+    </strong> Railway/Vercel's auto-deploy doesn't exist for free on a bare VM — the simplest equivalent is a
+    small webhook receiver (or a GitHub Actions self-hosted runner) that runs <code>git pull &amp;&amp; npm run
+    build &amp;&amp; systemctl restart api</code> (and rebuilds the frontend static files) on every push to
+    main. This is the one piece of automation the team now owns and must consciously rebuild.</div></div>
+    <div class="step"><span class="num-badge">11</span><div><strong>Back up.</strong> Nightly <code>pg_dump</code>
+    cron to storage off the VM, plus a VMware-level snapshot before any major change — a safety net most managed
+    PaaS platforms don't hand you directly.</div></div>
+  </div>
+
+  <h3 id="vm-tradeoffs">10.3 What You Gain, What You Now Own</h3>
+  <table>
+    <tr><th>Concern</th><th>Today (managed)</th><th>Self-hosted VM</th></tr>
+    <tr><td>TLS certificates</td><td>Handled automatically by Vercel/Railway</td><td>Caddy auto-provisions via Let's Encrypt — still automatic, but it's now your Caddy config</td></tr>
+    <tr><td>OS &amp; runtime patching</td><td>Not your concern</td><td>Your team's responsibility (apt updates, Node/Python version bumps)</td></tr>
+    <tr><td>Auto-deploy on push</td><td>Free, built-in</td><td>You build and maintain the pull-and-restart script (§10.2 step 10)</td></tr>
+    <tr><td>Database backups</td><td>Supabase-managed</td><td>Your cron job + your retention policy</td></tr>
+    <tr><td>Scaling</td><td>Usage-based, elastic</td><td>Fixed VM capacity — scaling means resizing the VM or adding another one</td></tr>
+    <tr><td>Cost model</td><td>Usage-based billing across 3 vendors</td><td>One fixed VM cost, no per-request/per-build billing</td></tr>
+    <tr><td>Data residency / control</td><td>Data lives in Vercel/Railway/Supabase's infrastructure</td><td>Full control — everything sits on hardware you (or your VMware host) own</td></tr>
+    <tr><td>Incident recovery</td><td>Vendor status pages, vendor SLAs</td><td>VM snapshots give instant rollback, but you're the one restoring it at 2am</td></tr>
+  </table>
+</section>
+
+<section id="repo-map">
+  <h2>11. Repository Map</h2>
+<pre><code>AmanahCX/solution/
+├── packages/
+│   ├── frontend/        React + Vite SPA — tenant app + super-admin console
+│   ├── api/              Fastify REST + GraphQL server, all route handlers
+│   ├── core/               DatabaseClient, EventBus, ModuleRegistry, TenantService
+│   ├── shared/               Cross-package types, sector config, contracts
+│   └── mobile/                 Expo/React Native field-staff app
+├── modules/
+│   ├── contacts/ companies/ deals/ activities/
+│   ├── ticketing/ sales/ analytics/ voice/ voice-module/
+│   └── connectors/               Twilio/Vonage telephony provider adapters
+├── services/
+│   └── nadia-voice-agent/        Independent Python LiveKit voice service
+│       └── src/
+│           ├── agent.py           entrypoint, pipeline, tools, silence/capacity guards
+│           ├── config.py           per-tenant AgentSettings + system-prompt builder
+│           ├── crm_client.py        CRMConnector contract + AmanahCXConnector
+│           ├── setup_sip.py          one-time SIP trunk + dispatch rule provisioning
+│           ├── stt_whisper.py         self-hosted Whisper STT wrapper
+│           └── recording.py             call recording + consent line
+├── docs/                          Product docs — MASTER_PRODUCT_DOCUMENT.md,
+│                                    CHANGE_LOG.md, OPERATIONS_GUIDE.md, this file
+└── infra/                          Docker/K8s manifests (legacy — current hosting is
+                                      Vercel/Railway/Supabase, see §8)</code></pre>
+  <div class="callout teal">Adding a new business module to the CRM: implement the <code>CRMModule</code>
+  interface (<code>onLoad</code>, <code>registerRoutes</code>) and register it in
+  <code>packages/api/src/server.ts</code> — the ModuleRegistry handles load order and route mounting.</div>
+</section>
+
+<section id="glossary">
+  <h2>12. Glossary</h2>
+  <table>
+    <tr><th>Term</th><th>Meaning</th></tr>
+    <tr><td>Tenant</td><td>One isolated customer organisation on the shared AmanahCX platform</td></tr>
+    <tr><td>RLS</td><td>Row-Level Security — Postgres feature enforcing tenant isolation at the database layer</td></tr>
+    <tr><td>Nadia</td><td>AmanahCX's self-hosted AI voice agent (LiveKit-based)</td></tr>
+    <tr><td>LiveKit</td><td>Real-time media/SFU platform Nadia runs on; also brokers SIP trunking and browser WebRTC test calls</td></tr>
+    <tr><td>SIP trunk</td><td>The telecom connection that delivers real phone calls into LiveKit</td></tr>
+    <tr><td>Dispatch rule</td><td>LiveKit config that routes an inbound SIP call into a room and starts the Nadia agent in it</td></tr>
+    <tr><td>Connector (Nadia)</td><td>The 6-method adapter class that lets Nadia talk to any CRM (§4.3)</td></tr>
+    <tr><td>Connector (CRM)</td><td>A telephony/messaging provider adapter (Twilio, Vonage) inside <code>modules/connectors</code> — different meaning, same word</td></tr>
+    <tr><td>Entitlement</td><td>What a tenant has actually licensed (modules/features) — Layer 1 of access control</td></tr>
+    <tr><td>Policy Admin</td><td>Governance-only role with sole write access to SLA policies, ranked above Manager</td></tr>
+    <tr><td>TAT / SLA</td><td>Turn-Around-Time / Service-Level-Agreement — the deadline clocks on tickets</td></tr>
+  </table>
+</section>
+
+<footer>
+  AmanahCX Developer &amp; Integration Partner Orientation — generated 2026-07-17. Source of truth for
+  day-to-day product behaviour: <code>docs/MASTER_PRODUCT_DOCUMENT.md</code>. For recent changes:
+  <code>docs/CHANGE_LOG.md</code>.
+</footer>
+
+</main>
+</div>
+</body>
+</html>

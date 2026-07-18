@@ -748,11 +748,17 @@ async function createComplaintFromStructured(
            (tenant_id, ticket_number, subject, description, status, priority, channel,
             queue_id, sla_policy_id, contact_id, reporter_phone, reporter_name, reporter_email,
             ticket_type, tags, custom_fields)
-         VALUES ($1,$2,$3,$4,'open',$5,'voice_bot',$6,$7,$8,$9,$10,$11,'complaint',$12,$13::jsonb)
+         VALUES ($1,$2,$3,$4,'open',$5,'voice_bot',$6,$7,$8,$9,$10,$11,$12,$13,$14::jsonb)
          RETURNING id`,
         [tenantId, ticketNumber, subject, description, priority,
          resolvedQueueId, slaRow?.id ?? null, contact?.id ?? null,
          s.reporterPhone ?? null, s.reporterName ?? null, s.reporterEmail ?? null,
+         // Was hardcoded to the literal 'complaint' regardless of the sales/inquiry
+         // classification computed above — meant a voice-bot sales enquiry routed to
+         // the right queue but could never satisfy the accept-time
+         // `ticket.ticket_type === 'sales'` check that creates a pipeline deal
+         // (tickets.ts POST /:id/accept). Now persists the actual computed type.
+         ticketType,
          [s.category ?? 'other'],
          JSON.stringify({ category: s.category, fraud_amount: s.fraudAmount, agent: 'nadia' })],
       )).rows);
