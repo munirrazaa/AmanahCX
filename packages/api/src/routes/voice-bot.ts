@@ -725,13 +725,24 @@ async function createComplaintFromStructured(
 
     // Route by department/intent, same as the other bot providers — a fraud or
     // sales-flagged call should not just land in whatever queue is "default".
+    // If the LLM already classified the call with an exact segment key
+    // (sales / inquiry / complaint), trust its explicit decision — keyword
+    // scanning the whole transcript misroutes easily (e.g. a COMPLAINT
+    // about a "product" contains the word "product", which used to flip it
+    // into the inquiry queue). The keyword scan remains only as the
+    // fallback for legacy/sector-specific category keys (loan_issue etc.).
     const ivrMenu = config?.ivr_menu ?? DEFAULT_IVR_MENU;
-    const text = ((s.category ?? '') + ' ' + (s.subject ?? '') + ' ' + (s.description ?? '') + ' ' + (s.transcript ?? '')).toLowerCase();
+    const exactCategory = (s.category ?? '').trim().toLowerCase();
     let ticketType = 'complaint';
-    if (text.includes('sales') || text.includes('buy') || text.includes('purchase') || text.includes('price') || text.includes('offer')) {
-      ticketType = 'sales';
-    } else if (text.includes('inquiry') || text.includes('enquiry') || text.includes('information') || text.includes('product') || text.includes('service')) {
-      ticketType = 'inquiry';
+    if (exactCategory === 'sales' || exactCategory === 'inquiry' || exactCategory === 'complaint') {
+      ticketType = exactCategory;
+    } else {
+      const text = (exactCategory + ' ' + (s.subject ?? '') + ' ' + (s.description ?? '') + ' ' + (s.transcript ?? '')).toLowerCase();
+      if (text.includes('sales') || text.includes('buy') || text.includes('purchase') || text.includes('price') || text.includes('offer')) {
+        ticketType = 'sales';
+      } else if (text.includes('inquiry') || text.includes('enquiry') || text.includes('information') || text.includes('product') || text.includes('service')) {
+        ticketType = 'inquiry';
+      }
     }
     const ivrOption = ivrMenu.find((m: any) => m.ticketType === ticketType || m.intent === ticketType);
     let resolvedQueueId = ivrOption?.queueId ?? queueRow?.id ?? null;
