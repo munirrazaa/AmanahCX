@@ -707,11 +707,22 @@ async function createComplaintFromStructured(
         (await c.query(`SELECT id FROM sla_policies WHERE tenant_id=$1 AND priority=$2 AND is_active=true LIMIT 1`, [tenantId, priority])).rows),
       db.withSuperAdmin(async (c) =>
         (await c.query(
+          // Upsert, not plain insert: a second raise_ticket in the SAME call
+          // (a genuinely separate second complaint — which the bot's script
+          // explicitly supports — or a retry after a failure) reuses the
+          // call row instead of colliding with uq_voice_bot_calls_provider_
+          // call_id and 500ing. Found live 2026-07-18 on the second ticket
+          // attempt of a browser test call.
           `INSERT INTO voice_bot_calls
              (tenant_id, provider, provider_call_id, from_number, status, transcript, summary,
               sentiment, extracted_subject, extracted_priority, extracted_reporter_name,
               extracted_reporter_email, raw_payload)
            VALUES ($1,'livekit',$2,$3,'completed',$4,$5,$6,$7,$8,$9,$10,$11::jsonb)
+           ON CONFLICT (provider, provider_call_id) DO UPDATE SET
+             transcript         = COALESCE(EXCLUDED.transcript, voice_bot_calls.transcript),
+             summary            = EXCLUDED.summary,
+             extracted_subject  = EXCLUDED.extracted_subject,
+             extracted_priority = EXCLUDED.extracted_priority
            RETURNING id`,
           [tenantId, s.callId ?? null, s.reporterPhone ?? null, s.transcript ?? null, description,
            priority === 'urgent' ? 'urgent' : 'negative', subject, priority,
