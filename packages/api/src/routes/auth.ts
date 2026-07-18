@@ -221,7 +221,10 @@ export function authRoutes(db: DatabaseClient, redis: RedisClient) {
       if (!tenantSlug) {
         const [platformUser] = await db.withSuperAdmin(async (client) => {
           const r = await client.query(
-            `SELECT * FROM users WHERE tenant_id IS NULL AND email = $1 AND role = 'super_admin' AND is_active = true`,
+            `SELECT u.*, pr.permissions AS platform_role_permissions
+             FROM users u
+             LEFT JOIN platform_roles pr ON u.platform_role_id = pr.id
+             WHERE u.tenant_id IS NULL AND u.email = $1 AND u.role = 'super_admin' AND u.is_active = true`,
             [body.email],
           );
           return r.rows;
@@ -263,6 +266,8 @@ export function authRoutes(db: DatabaseClient, redis: RedisClient) {
             sub: platformUser.id, tenantId: null, role: platformUser.role, plan: null,
             department: null, department_type: null, sector: null,
             permissions: {}, governed_departments: [], jti,
+            platformRoleId: platformUser.platform_role_id ?? null,
+            platformPermissions: platformUser.platform_role_permissions ?? {},
           });
           await recordSession(redis, platformUser.id, jti, req);
 
@@ -306,9 +311,11 @@ export function authRoutes(db: DatabaseClient, redis: RedisClient) {
 
       const [user] = await db.withSuperAdmin(async (client) => {
         const result = await client.query(
-          `SELECT u.*, r.name as role_name, r.color as role_color, r.permissions as role_permissions
+          `SELECT u.*, r.name as role_name, r.color as role_color, r.permissions as role_permissions,
+                  pr.permissions as platform_role_permissions
            FROM users u
            LEFT JOIN roles r ON u.custom_role_id = r.id
+           LEFT JOIN platform_roles pr ON u.platform_role_id = pr.id
            WHERE u.tenant_id = $1 AND u.email = $2 AND u.is_active = true`,
           [tenant.id, body.email],
         );
@@ -372,6 +379,8 @@ export function authRoutes(db: DatabaseClient, redis: RedisClient) {
         permissions: effectivePermissions,
         governed_departments: user.governed_departments ?? [],
         jti,
+        platformRoleId: user.platform_role_id ?? null,
+        platformPermissions: user.platform_role_permissions ?? {},
       });
       await recordSession(redis, user.id, jti, req);
 

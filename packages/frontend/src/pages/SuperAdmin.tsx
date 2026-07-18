@@ -2176,9 +2176,10 @@ function SyncEntitlementsModal({ onClose }: { onClose: () => void }) {
 // ── Platform permission definitions (for sub-admin roles) ─────────────────
 export const PLATFORM_MODULE_DEFS: ModuleDef[] = [
   { key: 'tenants', label: 'Tenant Management', icon: '🏢', actions: [
-    { key: 'tenants:view',    label: 'View all tenants & metrics',       type: 'read'   },
-    { key: 'tenants:create',  label: 'Create new tenant workspaces',     type: 'write'  },
-    { key: 'tenants:suspend', label: 'Suspend & reactivate tenants',     type: 'danger' },
+    { key: 'tenants:view',         label: 'View all tenants & metrics',       type: 'read'   },
+    { key: 'tenants:create',       label: 'Create new tenant workspaces',     type: 'write'  },
+    { key: 'tenants:suspend',      label: 'Suspend & reactivate tenants',     type: 'danger' },
+    { key: 'tenants:manage_users', label: 'Manage tenant users & passwords',  type: 'write'  },
   ]},
   { key: 'modules', label: 'Module & Plan Control', icon: '📦', actions: [
     { key: 'modules:manage', label: 'Assign & revoke licensed modules',  type: 'write'  },
@@ -2195,6 +2196,16 @@ export const PLATFORM_MODULE_DEFS: ModuleDef[] = [
   { key: 'voice_bot', label: 'Voice Bot', icon: '🤖', actions: [
     { key: 'voice_bot:manage_agents',         label: 'Create, edit & assign agent templates', type: 'write' },
     { key: 'voice_bot:manage_knowledge_base', label: 'Manage knowledge base entries',          type: 'write' },
+    { key: 'voice_bot:manage_tenants',        label: 'Manage per-tenant voice bot usage, cost & config', type: 'write' },
+  ]},
+  { key: 'integrations', label: 'Integrations', icon: '🔗', actions: [
+    { key: 'integrations:manage', label: 'Manage shared SMS gateway & integration ownership', type: 'write' },
+  ]},
+  { key: 'platform_ops', label: 'Platform Operations', icon: '📊', actions: [
+    { key: 'alerts:manage',     label: 'View & acknowledge platform alerts',   type: 'write' },
+    { key: 'metrics:view',      label: 'View platform-wide metrics dashboard', type: 'read'  },
+    { key: 'reports:view',      label: 'View workspace/backup/audit reports',  type: 'read'  },
+    { key: 'entitlements:sync', label: 'Preview & apply entitlement sync',     type: 'danger' },
   ]},
   { key: 'production', label: 'Production', icon: '🚀', actions: [
     { key: 'platform:push', label: 'Push changes to production',         type: 'danger' },

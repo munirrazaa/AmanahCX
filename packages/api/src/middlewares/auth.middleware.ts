@@ -238,6 +238,31 @@ export function requirePermission(key: string) {
   };
 }
 
+// Platform (Sub-Admin Roles) permission guard — enforces a specific action key
+// (e.g. 'tenants:suspend') from PLATFORM_MODULE_DEFS against the calling user's
+// platform_roles permission matrix, carried in the JWT as `platformPermissions`.
+//   • role === 'super_admin' AND no platformRoleId assigned → the true, unrestricted
+//     platform owner — full bypass.
+//   • role === 'platform_admin' (or a super_admin who WAS assigned a platformRoleId)
+//     → must have the exact key set to true in their matrix; absent or false → deny.
+// Unlike requirePermission (tenant roles), there is no "absent key = allow" backward
+// compatibility here — sub-admin roles are new and default to deny for anything not
+// explicitly granted.
+export function requirePlatformPermission(key: string) {
+  return async (req: FastifyRequest, reply: FastifyReply): Promise<void> => {
+    const platformRoleId = (req.user as any)?.platformRoleId;
+    if (req.user?.role === 'super_admin' && !platformRoleId) return; // true super admin
+
+    const perms = (req.user as any)?.platformPermissions as Record<string, boolean> | undefined;
+    if (perms?.[key] === true) return;
+
+    return reply.code(403).send({
+      success: false,
+      error: { code: 'FORBIDDEN', message: 'You do not have permission for this platform action.' },
+    });
+  };
+}
+
 // Feature flag guard
 export function requireFeature(feature: keyof import('@crm/shared').FeatureFlags) {
   return async (req: FastifyRequest, reply: FastifyReply): Promise<void> => {

@@ -3,7 +3,7 @@ import { z } from 'zod';
 import type { DatabaseClient, TenantService } from '@crm/core';
 import type { Plan } from '@crm/shared';
 import { getSector } from '@crm/shared';
-import { requireRole } from '../middlewares/auth.middleware';
+import { requireRole, requirePlatformPermission } from '../middlewares/auth.middleware';
 import { defaultPermissions } from './roles';
 import { ensureDefaultPipeline } from '../lib/default-pipeline';
 import pdfParse from 'pdf-parse';
@@ -206,11 +206,15 @@ async function sendSystemEmail(opts: {
 
 export function superAdminRoutes(db: DatabaseClient, tenantService: TenantService) {
   return async function (fastify: FastifyInstance) {
-    // All super-admin routes require super_admin role
-    fastify.addHook('preHandler', requireRole('super_admin'));
+    // All super-admin routes require super_admin OR a delegated platform_admin
+    // (Sub-Admin Roles) account. Base gate only checks the DB role column — the
+    // per-route requirePlatformPermission() preHandlers below then narrow a
+    // platform_admin to exactly what their assigned platform_roles matrix grants.
+    // A true super_admin (no platformRoleId in their token) bypasses those checks.
+    fastify.addHook('preHandler', requireRole('super_admin', 'platform_admin'));
 
     // List all tenants
-    fastify.get('/tenants', async (req, reply) => {
+    fastify.get('/tenants', { preHandler: requirePlatformPermission('tenants:view') }, async (req, reply) => {
       const QuerySchema = z.object({
         page:     z.coerce.number().int().min(1).default(1),
         // 500 (not 100) — several picker/filter dropdowns across Super Admin (Reports,
@@ -272,7 +276,7 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
     });
 
     // Get tenant details + usage
-    fastify.get('/tenants/:id', async (req, reply) => {
+    fastify.get('/tenants/:id', { preHandler: requirePlatformPermission('tenants:view') }, async (req, reply) => {
       const { id } = req.params as { id: string };
       const [tenant] = await db.withSuperAdmin(async (client) => {
         const result = await client.query('SELECT * FROM tenants WHERE id = $1', [id]);
@@ -293,12 +297,12 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
     });
 
     // Full module catalog — so the frontend can render it without hard-coding
-    fastify.get('/modules', async (_req, reply) => {
+    fastify.get('/modules', { preHandler: requirePlatformPermission('tenants:view') }, async (_req, reply) => {
       return reply.send({ success: true, data: MODULE_CATALOG });
     });
 
     // Create tenant (when a new customer signs up)
-    fastify.post('/tenants', async (req, reply) => {
+    fastify.post('/tenants', { preHandler: requirePlatformPermission('tenants:create') }, async (req, reply) => {
       const body = CreateTenantSchema.parse(req.body);
 
       // Auto-provisioning: the sector picked for this tenant carries a recommended
@@ -446,7 +450,7 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
     });
 
     // Upgrade / downgrade plan
-    fastify.patch('/tenants/:id/plan', async (req, reply) => {
+    fastify.patch('/tenants/:id/plan', { preHandler: requirePlatformPermission('plans:manage') }, async (req, reply) => {
       const { id } = req.params as { id: string };
       const { plan } = req.body as { plan: Plan };
       await tenantService.updatePlan(id, plan);
@@ -455,7 +459,7 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
 
     // Update licensed modules for a tenant (super admin sets the ceiling)
     // e.g. PATCH /super-admin/tenants/:id/modules { "modules": ["crm","voice","ticketing"] }
-    fastify.patch('/tenants/:id/modules', async (req, reply) => {
+    fastify.patch('/tenants/:id/modules', { preHandler: requirePlatformPermission('modules:manage') }, async (req, reply) => {
       const { id } = req.params as { id: string };
       const body = z.object({
         modules: z.array(z.string()).min(1),
@@ -516,7 +520,7 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
     });
 
     // GET /super-admin/tenants/:id/roles — fetch this tenant's system role permissions
-    fastify.get('/tenants/:id/roles', async (req, reply) => {
+    fastify.get('/tenants/:id/roles', { preHandler: requirePlatformPermission('tenants:view') }, async (req, reply) => {
       const { id } = req.params as { id: string };
       const rows = await db.withSuperAdmin(async (client) => {
         const r = await client.query(
@@ -530,7 +534,7 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
     });
 
     // POST /super-admin/tenants/:id/roles — upsert system role permissions for a tenant
-    fastify.post('/tenants/:id/roles', async (req, reply) => {
+    fastify.post('/tenants/:id/roles', { preHandler: requirePlatformPermission('roles:manage') }, async (req, reply) => {
       const { id } = req.params as { id: string };
       const { roles } = z.object({ roles: z.array(RolePayloadSchema) }).parse(req.body);
       await db.withSuperAdmin(async (client) => {
@@ -548,14 +552,14 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
     });
 
     // Suspend tenant
-    fastify.post('/tenants/:id/suspend', async (req, reply) => {
+    fastify.post('/tenants/:id/suspend', { preHandler: requirePlatformPermission('tenants:suspend') }, async (req, reply) => {
       const { id } = req.params as { id: string };
       await tenantService.suspend(id);
       return reply.send({ success: true });
     });
 
     // Reactivate tenant
-    fastify.post('/tenants/:id/activate', async (req, reply) => {
+    fastify.post('/tenants/:id/activate', { preHandler: requirePlatformPermission('tenants:suspend') }, async (req, reply) => {
       const { id } = req.params as { id: string };
       await db.withSuperAdmin(async (client) => {
         await client.query(`UPDATE tenants SET status = 'active', updated_at = NOW() WHERE id = $1`, [id]);
@@ -565,7 +569,7 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
 
     // Reset the tenant admin password — generates a new temp password, updates the user,
     // emails it to the admin, and returns it in the response for the super admin to relay.
-    fastify.post('/tenants/:id/reset-admin-password', async (req, reply) => {
+    fastify.post('/tenants/:id/reset-admin-password', { preHandler: requirePlatformPermission('tenants:manage_users') }, async (req, reply) => {
       const { id } = req.params as { id: string };
 
       const [adminUser] = await db.withSuperAdmin(async (client) => {
@@ -623,7 +627,7 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
     // GET /super-admin/platform-roles
     // ── Voice bot minutes — allocation, top-up, and cross-tenant usage overview ──
 
-    fastify.get('/tenants/:id/voice-bot-usage', async (req, reply) => {
+    fastify.get('/tenants/:id/voice-bot-usage', { preHandler: requirePlatformPermission('voice_bot:manage_tenants') }, async (req, reply) => {
       const { id } = req.params as { id: string };
       const usage = await db.withSuperAdmin(async (client) => {
         const quota = await client.query(`SELECT minutes_allocated, cost_per_minute FROM voice_bot_quotas WHERE tenant_id = $1`, [id]);
@@ -658,7 +662,7 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
 
     // PATCH /super-admin/tenants/:id/voice-bot-cost-rate — set what this tenant's
     // voice bot minutes cost (per minute), for the monthly cost report below.
-    fastify.patch('/tenants/:id/voice-bot-cost-rate', async (req, reply) => {
+    fastify.patch('/tenants/:id/voice-bot-cost-rate', { preHandler: requirePlatformPermission('voice_bot:manage_tenants') }, async (req, reply) => {
       const { id } = req.params as { id: string };
       const { costPerMinute } = z.object({ costPerMinute: z.number().min(0) }).parse(req.body);
       await db.withSuperAdmin(async (client) => {
@@ -677,7 +681,7 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
     // "never store a running total" approach migration 059 uses for minutes) —
     // so this reflects the CURRENT rate even for past months; rate changes are
     // not retroactively versioned. Defaults to the current month.
-    fastify.get('/voice-bot/cost-report', async (req, reply) => {
+    fastify.get('/voice-bot/cost-report', { preHandler: requirePlatformPermission('voice_bot:manage_tenants') }, async (req, reply) => {
       const { month } = req.query as { month?: string };
       const period = month && /^\d{4}-\d{2}$/.test(month) ? month : new Date().toISOString().slice(0, 7);
       const [start, end] = [`${period}-01`, `${period}-01`];
@@ -725,7 +729,7 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
       });
     });
 
-    fastify.post('/tenants/:id/voice-bot-minutes', async (req, reply) => {
+    fastify.post('/tenants/:id/voice-bot-minutes', { preHandler: requirePlatformPermission('voice_bot:manage_tenants') }, async (req, reply) => {
       const { id } = req.params as { id: string };
       const body = z.object({
         minutesToAdd: z.number().positive(),
@@ -763,7 +767,7 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
     // "tenant_admin" = works as it always has — the tenant configures it
     // themselves. Defaults to tenant_admin for any tenant that's never had
     // this set, so nothing existing changes behaviour silently.
-    fastify.patch('/tenants/:id/voice-bot-ownership', async (req, reply) => {
+    fastify.patch('/tenants/:id/voice-bot-ownership', { preHandler: requirePlatformPermission('voice_bot:manage_tenants') }, async (req, reply) => {
       const { id } = req.params as { id: string };
       const body = z.object({ ownership: z.enum(['super_admin', 'tenant_admin']) }).parse(req.body);
       await db.withSuperAdmin(async (client) => {
@@ -783,7 +787,7 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
     // config — only meaningful once that tenant is set to "super_admin"
     // ownership above, but not itself gated on that (a super admin should
     // always be able to look, even before locking it).
-    fastify.get('/tenants/:id/voice-bot-config', async (req, reply) => {
+    fastify.get('/tenants/:id/voice-bot-config', { preHandler: requirePlatformPermission('voice_bot:manage_tenants') }, async (req, reply) => {
       const { id } = req.params as { id: string };
       const [cfg] = await db.withSuperAdmin(async (client) => {
         const r = await client.query(
@@ -818,7 +822,7 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
       humanTransferDestination: z.string().optional(),
     });
 
-    fastify.put('/tenants/:id/voice-bot-config', async (req, reply) => {
+    fastify.put('/tenants/:id/voice-bot-config', { preHandler: requirePlatformPermission('voice_bot:manage_tenants') }, async (req, reply) => {
       const { id } = req.params as { id: string };
       const body = SuperAdminVoiceBotConfigSchema.parse(req.body);
       const [cfg] = await db.withSuperAdmin(async (client) => {
@@ -869,7 +873,7 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
     // Shared voice catalog (same table the tenant-side page reads) — Super
     // Admin can't call the tenant-scoped /api/v1/voice-bot/voices route
     // (blocked entirely from workspace data), so this is its own copy.
-    fastify.get('/voice-bot-voices', async (_req, reply) => {
+    fastify.get('/voice-bot-voices', { preHandler: requirePlatformPermission('voice_bot:manage_agents') }, async (_req, reply) => {
       const voices = await db.withSuperAdmin(async (c) => {
         const r = await c.query(
           `SELECT id, provider, voice_id, label, description FROM voice_bot_voices WHERE is_active = true ORDER BY created_at ASC`,
@@ -902,7 +906,7 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
       greetingMessage:  z.string().optional(),
     });
 
-    fastify.get('/agent-templates', async (_req, reply) => {
+    fastify.get('/agent-templates', { preHandler: requirePlatformPermission('voice_bot:manage_agents') }, async (_req, reply) => {
       const templates = await db.withSuperAdmin(async (c) => {
         const r = await c.query(
           `SELECT t.*,
@@ -915,7 +919,7 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
       return reply.send({ success: true, data: templates });
     });
 
-    fastify.get('/agent-templates/:id', async (req, reply) => {
+    fastify.get('/agent-templates/:id', { preHandler: requirePlatformPermission('voice_bot:manage_agents') }, async (req, reply) => {
       const { id } = req.params as { id: string };
       const [template] = await db.withSuperAdmin(async (c) =>
         (await c.query(`SELECT * FROM voice_bot_agent_templates WHERE id = $1`, [id])).rows);
@@ -930,7 +934,7 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
       return reply.send({ success: true, data: template, assignedTenants });
     });
 
-    fastify.post('/agent-templates', async (req, reply) => {
+    fastify.post('/agent-templates', { preHandler: requirePlatformPermission('voice_bot:manage_agents') }, async (req, reply) => {
       const body = AgentTemplateSchema.parse(req.body);
       const userId = (req as any).user?.id ?? null;
       const [created] = await db.withSuperAdmin(async (c) =>
@@ -948,7 +952,7 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
       return reply.code(201).send({ success: true, data: created });
     });
 
-    fastify.put('/agent-templates/:id', async (req, reply) => {
+    fastify.put('/agent-templates/:id', { preHandler: requirePlatformPermission('voice_bot:manage_agents') }, async (req, reply) => {
       const { id } = req.params as { id: string };
       const body = AgentTemplateSchema.partial().parse(req.body);
       const [updated] = await db.withSuperAdmin(async (c) =>
@@ -980,7 +984,7 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
       return reply.send({ success: true, data: updated });
     });
 
-    fastify.delete('/agent-templates/:id', async (req, reply) => {
+    fastify.delete('/agent-templates/:id', { preHandler: requirePlatformPermission('voice_bot:manage_agents') }, async (req, reply) => {
       const { id } = req.params as { id: string };
       await db.withSuperAdmin(async (c) => {
         await c.query(`DELETE FROM voice_bot_agent_templates WHERE id = $1`, [id]);
@@ -991,7 +995,7 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
     // Assign a template to a workspace — one-time copy into that tenant's
     // voice_bot_configs row (provider='livekit'), same table Nadia already
     // reads at call time, so nothing about the runtime path changes.
-    fastify.post('/agent-templates/:id/assign', async (req, reply) => {
+    fastify.post('/agent-templates/:id/assign', { preHandler: requirePlatformPermission('voice_bot:manage_agents') }, async (req, reply) => {
       const { id } = req.params as { id: string };
       const { tenantId } = req.body as { tenantId?: string };
       if (!tenantId) return reply.code(400).send({ error: 'tenantId required' });
@@ -1029,7 +1033,7 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
     // with the tenant-side page — text, URL import (crawl + strip to
     // plain text), and file upload (PDF/DOCX, text extracted at upload
     // time) — same extraction logic, just targeting an explicit tenant.
-    fastify.get('/tenants/:id/voice-bot-knowledge-base', async (req, reply) => {
+    fastify.get('/tenants/:id/voice-bot-knowledge-base', { preHandler: requirePlatformPermission('voice_bot:manage_knowledge_base') }, async (req, reply) => {
       const { id } = req.params as { id: string };
       const entries = await db.withSuperAdmin(async (c) => {
         const r = await c.query(
@@ -1042,7 +1046,7 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
       return reply.send({ success: true, data: entries });
     });
 
-    fastify.post('/tenants/:id/voice-bot-knowledge-base', async (req, reply) => {
+    fastify.post('/tenants/:id/voice-bot-knowledge-base', { preHandler: requirePlatformPermission('voice_bot:manage_knowledge_base') }, async (req, reply) => {
       const { id } = req.params as { id: string };
       const body = z.object({
         title:    z.string().min(1).max(120),
@@ -1062,7 +1066,7 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
 
     // Import from a URL: fetch the page, strip HTML to plain text — same
     // extraction logic as the tenant-side route, targeting an explicit tenant.
-    fastify.post('/tenants/:id/voice-bot-knowledge-base/import-url', async (req, reply) => {
+    fastify.post('/tenants/:id/voice-bot-knowledge-base/import-url', { preHandler: requirePlatformPermission('voice_bot:manage_knowledge_base') }, async (req, reply) => {
       const { id } = req.params as { id: string };
       const body = z.object({
         title:    z.string().min(1).max(120),
@@ -1103,7 +1107,7 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
 
     // Upload a PDF or DOCX: extract its text — same extraction logic as
     // the tenant-side route, targeting an explicit tenant.
-    fastify.post('/tenants/:id/voice-bot-knowledge-base/upload', async (req, reply) => {
+    fastify.post('/tenants/:id/voice-bot-knowledge-base/upload', { preHandler: requirePlatformPermission('voice_bot:manage_knowledge_base') }, async (req, reply) => {
       const { id } = req.params as { id: string };
       const parts = req.parts();
       let fileBuffer: Buffer | null = null;
@@ -1158,7 +1162,7 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
       return reply.code(201).send({ success: true, data: entry });
     });
 
-    fastify.put('/tenants/:id/voice-bot-knowledge-base/:entryId', async (req, reply) => {
+    fastify.put('/tenants/:id/voice-bot-knowledge-base/:entryId', { preHandler: requirePlatformPermission('voice_bot:manage_knowledge_base') }, async (req, reply) => {
       const { id, entryId } = req.params as { id: string; entryId: string };
       const body = z.object({ isActive: z.boolean() }).parse(req.body);
       await db.withSuperAdmin(async (c) => {
@@ -1167,7 +1171,7 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
       return reply.send({ success: true });
     });
 
-    fastify.delete('/tenants/:id/voice-bot-knowledge-base/:entryId', async (req, reply) => {
+    fastify.delete('/tenants/:id/voice-bot-knowledge-base/:entryId', { preHandler: requirePlatformPermission('voice_bot:manage_knowledge_base') }, async (req, reply) => {
       const { id, entryId } = req.params as { id: string; entryId: string };
       await db.withSuperAdmin(async (c) => {
         await c.query(`DELETE FROM voice_bot_knowledge_entries WHERE id = $1 AND tenant_id = $2`, [entryId, id]);
@@ -1177,7 +1181,7 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
 
     // ── Integrations ownership (Phase 1) ─────────────────────────────────────
     // Same hold/push idea, applied to the three top-level Integrations tabs.
-    fastify.patch('/tenants/:id/integration-ownership', async (req, reply) => {
+    fastify.patch('/tenants/:id/integration-ownership', { preHandler: requirePlatformPermission('integrations:manage') }, async (req, reply) => {
       const { id } = req.params as { id: string };
       const body = z.object({
         connectors: z.enum(['super_admin', 'tenant_admin']).optional(),
@@ -1202,7 +1206,7 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
     // shared SMS gateway. Stored the same way a tenant's own connector would be
     // (tenants.settings.connectors.platform_sms), so SmsService.getConnectorConfig() only
     // needs one lookup path — see packages/core/src/sms.service.ts.
-    fastify.patch('/tenants/:id/sms-gateway', async (req, reply) => {
+    fastify.patch('/tenants/:id/sms-gateway', { preHandler: requirePlatformPermission('integrations:manage') }, async (req, reply) => {
       const { id } = req.params as { id: string };
       const { enabled } = z.object({ enabled: z.boolean() }).parse(req.body);
 
@@ -1227,7 +1231,7 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
     // Platform-level alerts (currently: Voice Bot 70/90/100% threshold
     // crossings) — Super Admin's own notification feed, separate from the
     // tenant-scoped `notifications` table since Super Admin has no tenant.
-    fastify.get('/alerts', async (req, reply) => {
+    fastify.get('/alerts', { preHandler: requirePlatformPermission('alerts:manage') }, async (req, reply) => {
       const { unreadOnly } = req.query as { unreadOnly?: string };
       const alerts = await db.withSuperAdmin(async (client) => {
         const r = await client.query(
@@ -1242,7 +1246,7 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
       return reply.send({ success: true, data: alerts });
     });
 
-    fastify.patch('/alerts/:id/read', async (req, reply) => {
+    fastify.patch('/alerts/:id/read', { preHandler: requirePlatformPermission('alerts:manage') }, async (req, reply) => {
       const { id } = req.params as { id: string };
       await db.withSuperAdmin(async (client) => {
         await client.query(`UPDATE platform_notifications SET is_read = true WHERE id = $1`, [id]);
@@ -1250,7 +1254,7 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
       return reply.send({ success: true });
     });
 
-    fastify.get('/voice-bot-usage', async (_req, reply) => {
+    fastify.get('/voice-bot-usage', { preHandler: requirePlatformPermission('voice_bot:manage_tenants') }, async (_req, reply) => {
       const rows = await db.withSuperAdmin(async (client) => {
         const r = await client.query(
           `SELECT t.id AS tenant_id, t.name AS tenant_name,
@@ -1279,7 +1283,7 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
       });
     });
 
-    fastify.get('/platform-roles', async (_req, reply) => {
+    fastify.get('/platform-roles', { preHandler: requirePlatformPermission('roles:manage') }, async (_req, reply) => {
       const rows = await db.withSuperAdmin(async (client) => {
         const r = await client.query(
           `SELECT id, name, description, color, permissions, created_at FROM platform_roles ORDER BY created_at`,
@@ -1290,7 +1294,7 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
     });
 
     // POST /super-admin/platform-roles
-    fastify.post('/platform-roles', async (req, reply) => {
+    fastify.post('/platform-roles', { preHandler: requirePlatformPermission('roles:manage') }, async (req, reply) => {
       const { name, description, color, permissions } = z.object({
         name:        z.string().min(1),
         description: z.string().optional(),
@@ -1309,7 +1313,7 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
     });
 
     // PATCH /super-admin/platform-roles/:id
-    fastify.patch('/platform-roles/:id', async (req, reply) => {
+    fastify.patch('/platform-roles/:id', { preHandler: requirePlatformPermission('roles:manage') }, async (req, reply) => {
       const { id } = req.params as { id: string };
       const { name, description, color, permissions } = z.object({
         name:        z.string().min(1).optional(),
@@ -1335,7 +1339,7 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
     });
 
     // DELETE /super-admin/platform-roles/:id
-    fastify.delete('/platform-roles/:id', async (req, reply) => {
+    fastify.delete('/platform-roles/:id', { preHandler: requirePlatformPermission('roles:manage') }, async (req, reply) => {
       const { id } = req.params as { id: string };
       await db.withSuperAdmin(async (client) => {
         // Unlink sub-admins before deleting
@@ -1348,7 +1352,7 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
     // ── Sub-Admin Users ───────────────────────────────────────────────────────
 
     // GET /super-admin/sub-admins
-    fastify.get('/sub-admins', async (_req, reply) => {
+    fastify.get('/sub-admins', { preHandler: requirePlatformPermission('sub_admins:manage') }, async (_req, reply) => {
       const rows = await db.withSuperAdmin(async (client) => {
         const r = await client.query(
           `SELECT u.id, u.name, u.email, u.role, u.is_active, u.created_at,
@@ -1364,7 +1368,7 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
     });
 
     // POST /super-admin/sub-admins — invite a new sub-admin
-    fastify.post('/sub-admins', async (req, reply) => {
+    fastify.post('/sub-admins', { preHandler: requirePlatformPermission('sub_admins:manage') }, async (req, reply) => {
       const { name, email, platform_role_id, tenant_id } = z.object({
         name:             z.string().min(1),
         email:            z.string().email(),
@@ -1391,7 +1395,7 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
     });
 
     // PATCH /super-admin/sub-admins/:id — update role assignment or active status
-    fastify.patch('/sub-admins/:id', async (req, reply) => {
+    fastify.patch('/sub-admins/:id', { preHandler: requirePlatformPermission('sub_admins:manage') }, async (req, reply) => {
       const { id } = req.params as { id: string };
       const body = z.object({
         platform_role_id: z.string().uuid().nullable().optional(),
@@ -1414,7 +1418,7 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
     });
 
     // DELETE /super-admin/sub-admins/:id
-    fastify.delete('/sub-admins/:id', async (req, reply) => {
+    fastify.delete('/sub-admins/:id', { preHandler: requirePlatformPermission('sub_admins:manage') }, async (req, reply) => {
       const { id } = req.params as { id: string };
       await db.withSuperAdmin(async (client) => {
         await client.query(`DELETE FROM users WHERE id = $1 AND role = 'platform_admin'`, [id]);
@@ -1426,7 +1430,7 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
 
     // GET /super-admin/sync-entitlements/preview
     // Returns: modules to add per tenant (plan-based) + roles with missing permission keys
-    fastify.get('/sync-entitlements/preview', async (_req, reply) => {
+    fastify.get('/sync-entitlements/preview', { preHandler: requirePlatformPermission('entitlements:sync') }, async (_req, reply) => {
       const { defaultPermissions, MODULE_DEFS } = await import('./roles');
       const allPermissionKeys = MODULE_DEFS.flatMap((m) => m.actions.map((a) => a.key));
 
@@ -1484,7 +1488,7 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
     });
 
     // POST /super-admin/sync-entitlements/apply
-    fastify.post('/sync-entitlements/apply', async (req, reply) => {
+    fastify.post('/sync-entitlements/apply', { preHandler: requirePlatformPermission('entitlements:sync') }, async (req, reply) => {
       const { apply_modules, apply_permissions } = z.object({
         apply_modules:     z.boolean().default(true),
         apply_permissions: z.boolean().default(true),
@@ -1574,7 +1578,7 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
     });
 
     // Platform-wide metrics (dashboard)
-    fastify.get('/metrics', async (_req, reply) => {
+    fastify.get('/metrics', { preHandler: requirePlatformPermission('metrics:view') }, async (_req, reply) => {
       const PLAN_MRR: Record<string, number> = {
         free: 0, starter: 49, professional: 149, enterprise: 499,
       };
@@ -1629,7 +1633,7 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
     // ── Platform Invoices (super admin → tenant billing) ──────────────────────
 
     // GET /super-admin/platform-invoices
-    fastify.get('/platform-invoices', async (req, reply) => {
+    fastify.get('/platform-invoices', { preHandler: requirePlatformPermission('billing:view') }, async (req, reply) => {
       const { tenant_id, status, page = 1, pageSize = 20 } = req.query as any;
       const offset = (Number(page) - 1) * Number(pageSize);
 
@@ -1664,7 +1668,7 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
     });
 
     // POST /super-admin/platform-invoices
-    fastify.post('/platform-invoices', async (req, reply) => {
+    fastify.post('/platform-invoices', { preHandler: requirePlatformPermission('billing:manage') }, async (req, reply) => {
       const body = z.object({
         tenant_id:    z.string().uuid(),
         period_start: z.string(),
@@ -1701,7 +1705,7 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
     });
 
     // PATCH /super-admin/platform-invoices/:id — update status or send
-    fastify.patch('/platform-invoices/:id', async (req, reply) => {
+    fastify.patch('/platform-invoices/:id', { preHandler: requirePlatformPermission('billing:manage') }, async (req, reply) => {
       const { id } = req.params as { id: string };
       const body = z.object({
         status: z.enum(['draft','sent','paid','overdue','cancelled']).optional(),
@@ -1727,7 +1731,7 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
     });
 
     // DELETE /super-admin/platform-invoices/:id (draft only)
-    fastify.delete('/platform-invoices/:id', async (req, reply) => {
+    fastify.delete('/platform-invoices/:id', { preHandler: requirePlatformPermission('billing:manage') }, async (req, reply) => {
       const { id } = req.params as { id: string };
       await db.withSuperAdmin(async (client) => {
         await client.query(`DELETE FROM platform_invoices WHERE id = $1 AND status = 'draft'`, [id]);
@@ -1736,7 +1740,7 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
     });
 
     // POST /super-admin/platform-invoices/:id/payments — record a payment
-    fastify.post('/platform-invoices/:id/payments', async (req, reply) => {
+    fastify.post('/platform-invoices/:id/payments', { preHandler: requirePlatformPermission('billing:manage') }, async (req, reply) => {
       const { id } = req.params as { id: string };
       const body = z.object({
         amount:       z.number().positive(),
@@ -1777,7 +1781,7 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
     });
 
     // GET /super-admin/platform-invoices/:id/payments
-    fastify.get('/platform-invoices/:id/payments', async (req, reply) => {
+    fastify.get('/platform-invoices/:id/payments', { preHandler: requirePlatformPermission('billing:view') }, async (req, reply) => {
       const { id } = req.params as { id: string };
       const rows = await db.withSuperAdmin(async (client) => {
         const r = await client.query(
@@ -1790,7 +1794,7 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
     });
 
     // PATCH /super-admin/tenants/:id — edit workspace name / slug / sector / status
-    fastify.patch('/tenants/:id', async (req, reply) => {
+    fastify.patch('/tenants/:id', { preHandler: requirePlatformPermission('tenants:create') }, async (req, reply) => {
       const { id } = req.params as { id: string };
       const EditSchema = z.object({
         name:   z.string().min(2).optional(),
@@ -1817,7 +1821,7 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
     });
 
     // DELETE /super-admin/tenants/:id — delete workspace
-    fastify.delete('/tenants/:id', async (req, reply) => {
+    fastify.delete('/tenants/:id', { preHandler: requirePlatformPermission('tenants:suspend') }, async (req, reply) => {
       const { id } = req.params as { id: string };
       await db.withSuperAdmin(async (client) => {
         await client.query('DELETE FROM tenants WHERE id = $1', [id]);
@@ -1827,7 +1831,7 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
     });
 
     // GET /super-admin/tenants/:id/users — list all users in a tenant
-    fastify.get('/tenants/:id/users', async (req, reply) => {
+    fastify.get('/tenants/:id/users', { preHandler: requirePlatformPermission('tenants:manage_users') }, async (req, reply) => {
       const { id } = req.params as { id: string };
       const rows = await db.withSuperAdmin(async (client) => {
         const r = await client.query(
@@ -1840,7 +1844,7 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
     });
 
     // POST /super-admin/tenants/:id/users — create a user (tenant_admin) in a workspace
-    fastify.post('/tenants/:id/users', async (req, reply) => {
+    fastify.post('/tenants/:id/users', { preHandler: requirePlatformPermission('tenants:manage_users') }, async (req, reply) => {
       const { id } = req.params as { id: string };
       const CreateUserSchema = z.object({
         name:     z.string().min(1),
@@ -1870,7 +1874,7 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
     });
 
     // PATCH /super-admin/users/:uid — edit user (name, email, role, password)
-    fastify.patch('/users/:uid', async (req, reply) => {
+    fastify.patch('/users/:uid', { preHandler: requirePlatformPermission('tenants:manage_users') }, async (req, reply) => {
       const { uid } = req.params as { uid: string };
       const EditUserSchema = z.object({
         name:     z.string().min(1).optional(),
@@ -1915,7 +1919,7 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
     });
 
     // DELETE /super-admin/users/:uid — delete any user
-    fastify.delete('/users/:uid', async (req, reply) => {
+    fastify.delete('/users/:uid', { preHandler: requirePlatformPermission('tenants:manage_users') }, async (req, reply) => {
       const { uid } = req.params as { uid: string };
       await db.withSuperAdmin(async (client) => {
         await client.query('DELETE FROM users WHERE id = $1', [uid]);
@@ -1924,7 +1928,7 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
     });
 
     // GET /super-admin/password-log?tenant_id= — password change history
-    fastify.get('/password-log', async (req, reply) => {
+    fastify.get('/password-log', { preHandler: requirePlatformPermission('tenants:manage_users') }, async (req, reply) => {
       const { tenant_id } = req.query as { tenant_id?: string };
       const rows = await db.withSuperAdmin(async (client) => {
         // Create table if it doesn't exist yet
@@ -1959,7 +1963,7 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
     });
 
     // GET /super-admin/reports/workspaces — workspace / tenant details report
-    fastify.get('/reports/workspaces', async (req, reply) => {
+    fastify.get('/reports/workspaces', { preHandler: requirePlatformPermission('reports:view') }, async (req, reply) => {
       const { from, to } = req.query as { from?: string; to?: string };
       const rows = await db.withSuperAdmin(async (client) => {
         const r = await client.query(`
@@ -1988,7 +1992,7 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
     });
 
     // GET /super-admin/reports/backups — backup status report (highlights stale > 5 days)
-    fastify.get('/reports/backups', async (_req, reply) => {
+    fastify.get('/reports/backups', { preHandler: requirePlatformPermission('reports:view') }, async (_req, reply) => {
       const rows = await db.withSuperAdmin(async (client) => {
         const r = await client.query(`
           SELECT
@@ -2009,7 +2013,7 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
     });
 
     // GET /super-admin/reports/invoices — invoice report with date range + optional tenant filter
-    fastify.get('/reports/invoices', async (req, reply) => {
+    fastify.get('/reports/invoices', { preHandler: requirePlatformPermission('billing:view') }, async (req, reply) => {
       const { from, to, tenant_id } = req.query as { from?: string; to?: string; tenant_id?: string };
       const rows = await db.withSuperAdmin(async (client) => {
         const r = await client.query(`
@@ -2047,7 +2051,7 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
     });
 
     // GET /super-admin/reports/payments — payment report with date range
-    fastify.get('/reports/payments', async (req, reply) => {
+    fastify.get('/reports/payments', { preHandler: requirePlatformPermission('billing:view') }, async (req, reply) => {
       const { from, to } = req.query as { from?: string; to?: string };
       const rows = await db.withSuperAdmin(async (client) => {
         const r = await client.query(`
@@ -2068,7 +2072,7 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
     });
 
     // GET /super-admin/reports/audit — cross-tenant audit log
-    fastify.get('/reports/audit', async (req, reply) => {
+    fastify.get('/reports/audit', { preHandler: requirePlatformPermission('reports:view') }, async (req, reply) => {
       const { limit = '200', action } = req.query as Record<string, string>;
       const rows = await db.withSuperAdmin(async (client) => {
         const r = await client.query(`

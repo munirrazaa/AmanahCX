@@ -42,4 +42,8 @@ export interface AuthToken {
   permissions?: Record<string, string>;
   /** policy_admin only: which ticket departments this user governs */
   governed_departments?: string[];
+  /** platform_admin (sub-admin) only: assigned platform_roles.id, or null/absent for the true unrestricted super admin */
+  platformRoleId?: string | null;
+  /** platform_admin (sub-admin) only: permission matrix from platform_roles.permissions (e.g. { 'tenants:view': true }) */
+  platformPermissions?: Record<string, boolean>;
 }
