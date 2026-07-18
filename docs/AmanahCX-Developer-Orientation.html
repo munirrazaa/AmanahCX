@@ -144,6 +144,7 @@
         <li><a class="sub-link" href="#nadia-pipeline">4.2 The Call Pipeline, Step by Step</a></li>
         <li><a class="sub-link" href="#nadia-crm-contract">4.3 The CRM Connector Contract</a></li>
         <li><a class="sub-link" href="#nadia-connect">4.4 Connecting Nadia to a Different CRM</a></li>
+        <li><a class="sub-link" href="#nadia-agent-builder">4.5 Agent Builder — Reusable Templates &amp; Auto-Provisioning</a></li>
       </ol>
     </li>
     <li><a href="#mobile-arch">5. Mobile App Architecture</a>
@@ -905,6 +906,31 @@
   <div class="callout">Nadia currently lives inside the AmanahCX repo as a convenience, but architecturally it is
   already a standalone product (comparable to Retell AI / Vapi) — the connector pattern above is exactly what
   makes that possible without a rewrite.</div>
+
+  <h3 id="nadia-agent-builder">4.5 Agent Builder — Reusable Templates &amp; Auto-Provisioning (2026-07-18)</h3>
+  <p>Before this, every tenant's bot was configured by hand-editing that tenant's <code>voice_bot_configs</code>
+  row directly. Three additions make this reusable and (for licensed tenants) automatic:</p>
+  <ul class="clean">
+    <li><strong>Agent Templates</strong> (<code>voice_bot_agent_templates</code>, Super Admin → Agent Templates)
+    — a reusable "recipe" (name, sector, company name, department, tone, character, language, guardrails, voice,
+    call direction, bot engine) created once and assigned to any workspace. Assigning is a <em>one-time copy</em>
+    into that tenant's <code>voice_bot_configs</code> row — not a live binding — so it stays independently
+    editable afterward. Assigning also auto-grants the <code>voice_bot</code> module (+ the LiveKit provider
+    feature) if the tenant wasn't already licensed for it.</li>
+    <li><strong>Multi-source knowledge base at the Super Admin level</strong> — the same 3-way ingestion the
+    tenant-side page already had (typed text, URL crawl-and-extract, PDF/DOCX upload with server-side text
+    extraction) is now also available when Super Admin manages a tenant's KB directly.</li>
+    <li><strong>Auto-provisioning on tenant creation</strong> — in <code>POST /super-admin/tenants</code>, if the
+    new tenant is licensed for <code>voice_bot</code>, a working config is seeded immediately: a sector-matched
+    template if one exists (falls back to a generic template, then to bare defaults), greeting auto-filled with
+    the tenant's real name, and IVR menu segments derived from what was actually licensed — Inquiry/FAQ
+    self-service is always included, Complaint appears if <code>ticketing</code> is licensed, Sales appears if
+    <code>sales</code> is licensed.</li>
+  </ul>
+  <div class="callout gold">All three were live-tested against disposable test tenants/templates, not real
+  client workspaces, with test data deleted afterward — except one self-caught slip: the agent-template assign
+  endpoint was first tested against the real Haier Electronics tenant, briefly overwriting its greeting/tone/
+  language/system prompt with test values before the mistake was caught and the original values restored.</div>
 </section>
 
 <section id="mobile-arch">
