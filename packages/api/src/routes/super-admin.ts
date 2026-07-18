@@ -1004,6 +1004,33 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
         (await c.query(`SELECT * FROM voice_bot_agent_templates WHERE id = $1`, [id])).rows);
       if (!template) return reply.code(404).send({ error: 'template_not_found' });
 
+      // Assigning an agent template is, itself, the decision to give this
+      // tenant a working voice bot — so if they weren't already licensed
+      // for the Voice Bot module, grant it (and its Nadia/LiveKit provider
+      // feature) as part of the same action, rather than silently leaving
+      // a bot configured that the tenant isn't actually licensed to use.
+      let moduleGranted = false;
+      await db.withSuperAdmin(async (c) => {
+        const [cur] = (await c.query(
+          `SELECT active_modules, entitled_features FROM tenants WHERE id = $1`, [tenantId],
+        )).rows;
+        const activeModules: string[] = cur?.active_modules ?? [];
+        if (!activeModules.includes('voice_bot')) {
+          moduleGranted = true;
+          const entitledFeatures: string[] = Array.isArray(cur?.entitled_features) ? cur.entitled_features : [];
+          const nextFeatures = entitledFeatures.length > 0
+            ? Array.from(new Set([...entitledFeatures, 'voice_bot.calls', 'voice_bot.config', 'voice_bot.provider.livekit']))
+            : entitledFeatures; // legacy tenants with an empty list stay empty — middleware allows everything for them
+          await c.query(
+            `UPDATE tenants SET active_modules = array_append(active_modules, 'voice_bot'),
+                                 entitled_features = $1, updated_at = NOW()
+             WHERE id = $2`,
+            [JSON.stringify(nextFeatures), tenantId],
+          );
+        }
+      });
+      if (moduleGranted) await tenantService.invalidateCache(tenantId);
+
       const [cfg] = await db.withSuperAdmin(async (c) =>
         (await c.query(
           `INSERT INTO voice_bot_configs
@@ -1025,7 +1052,7 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
            template.system_prompt, template.tone, template.voice_id, template.language,
            template.guardrails, id],
         )).rows);
-      return reply.send({ success: true, data: cfg });
+      return reply.send({ success: true, data: cfg, moduleGranted });
     });
 
     // Knowledge base — same table as the tenant-side page, scoped by an
