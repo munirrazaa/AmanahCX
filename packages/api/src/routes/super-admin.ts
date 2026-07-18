@@ -1056,6 +1056,19 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
         (await c.query(`SELECT * FROM voice_bot_agent_templates WHERE id = $1`, [id])).rows);
       if (!template) return reply.code(404).send({ error: 'template_not_found' });
 
+      // A shared template's own name (e.g. "Electronics Retail Support &
+      // Sales") is a category label, not a company name — never spoken to
+      // a caller. bot_name should be the template's explicit companyName
+      // override if set, otherwise the ACTUAL tenant's real name, never
+      // the template's own name (a bug found and fixed 2026-07-18: it was
+      // falling back to template.name, so an assigned tenant's bot
+      // introduced itself using the template's generic label instead of
+      // the tenant's real company name).
+      const [tenantRow] = await db.withSuperAdmin(async (c) =>
+        (await c.query(`SELECT name FROM tenants WHERE id = $1`, [tenantId])).rows);
+      if (!tenantRow) return reply.code(404).send({ error: 'tenant_not_found' });
+      const botName = template.company_name || tenantRow.name;
+
       // Assigning an agent template is, itself, the decision to give this
       // tenant a working voice bot — so if they weren't already licensed
       // for the Voice Bot module, grant it (and its Nadia/LiveKit provider
@@ -1100,7 +1113,7 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
              source_template_id  = EXCLUDED.source_template_id,
              updated_at          = NOW()
            RETURNING *`,
-          [tenantId, template.company_name || template.name, template.greeting_message,
+          [tenantId, botName, template.greeting_message,
            template.system_prompt, template.tone, template.voice_id, template.language,
            template.guardrails, id],
         )).rows);

@@ -1936,6 +1936,32 @@ export function voiceBotRoutes(db: DatabaseClient, eventBus: EventBus) {
       return (req.headers['authorization'] || '') === `Bearer ${secret}`;
     };
 
+    // Nadia's actual config fetch at the start of every call. The tenant-
+    // side GET /config (above) requires a real logged-in user (requireScope)
+    // and sits behind the global tenant-auth wall — Nadia has neither, so
+    // every call to it was silently failing and falling back to
+    // AgentSettings() defaults (bot_name "Nadia", the hardcoded HBL system
+    // prompt) for EVERY tenant, discovered 2026-07-18 while verifying the
+    // Agent Builder actually reaches a real call. Same public pattern as
+    // the other /livekit/* routes — checked via the shared secret instead.
+    fastify.get('/livekit/config', async (req, reply) => {
+      const { tenantId } = req.query as { tenantId?: string };
+      if (!tenantId) return reply.code(400).send({ error: 'tenantId query param required' });
+      if (!checkSecret(req)) return reply.code(401).send({ error: 'unauthorized' });
+
+      const configs = await db.withSuperAdmin(async (c) => {
+        const r = await c.query(
+          `SELECT vbc.*, tq.name AS queue_name
+             FROM voice_bot_configs vbc
+             LEFT JOIN ticket_queues tq ON vbc.default_queue_id = tq.id
+            WHERE vbc.tenant_id = $1`,
+          [tenantId],
+        );
+        return r.rows;
+      });
+      return reply.send({ success: true, data: configs });
+    });
+
     // Mid-call: create the complaint ticket from structured fields, return the TKT number.
     fastify.post('/livekit/complaint', async (req, reply) => {
       const { tenantId } = req.query as { tenantId?: string };

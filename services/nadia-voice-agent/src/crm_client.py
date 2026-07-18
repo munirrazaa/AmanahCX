@@ -68,11 +68,17 @@ class AmanahCXConnector:
         return {"Authorization": f"Bearer {self._secret}"} if self._secret else {}
 
     async def get_config(self, tenant_id: str) -> dict[str, Any] | None:
+        # Uses /livekit/config, NOT the tenant-side /config — that one sits
+        # behind the global tenant-auth wall (requires a real logged-in
+        # user) and silently rejected every call from here, meaning every
+        # tenant's config was falling back to hardcoded defaults the whole
+        # time this session. Fixed 2026-07-18 — see the route's own comment.
         async with httpx.AsyncClient(timeout=10) as client:
             try:
                 resp = await client.get(
-                    f"{self.base_url}/api/v1/voice-bot/config",
-                    headers={"X-Tenant-Id": tenant_id},
+                    f"{self.base_url}/api/v1/voice-bot/livekit/config",
+                    params={"tenantId": tenant_id},
+                    headers=self._bearer(),
                 )
                 resp.raise_for_status()
                 configs = resp.json()["data"]
