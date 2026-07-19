@@ -872,6 +872,7 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
       outboundTransport:    z.enum(['TCP', 'UDP']).optional(),
       maxConcurrentCalls:   z.coerce.number().int().positive().optional(),
       humanTransferDestination: z.string().optional(),
+      holdMessage:          z.string().max(300).optional(),
     });
 
     fastify.put('/tenants/:id/voice-bot-config', { preHandler: requirePlatformPermission('voice_bot:manage_tenants') }, async (req, reply) => {
@@ -883,8 +884,9 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
              (tenant_id, provider, bot_name, greeting_message, system_prompt, tone, speaking_rate, voice_id,
               language, guardrails, is_active, recording_enabled, self_service_intents,
               sip_trunk_provider, sip_trunk_number, sip_uri, sip_trunk_username, sip_trunk_password,
-              sip_trunk_nickname, outbound_transport, max_concurrent_calls, human_transfer_destination)
-           VALUES ($1,'livekit',$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
+              sip_trunk_nickname, outbound_transport, max_concurrent_calls, human_transfer_destination,
+              hold_message)
+           VALUES ($1,'livekit',$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
            ON CONFLICT (tenant_id, provider) DO UPDATE SET
              bot_name            = COALESCE(EXCLUDED.bot_name, voice_bot_configs.bot_name),
              greeting_message    = COALESCE(EXCLUDED.greeting_message, voice_bot_configs.greeting_message),
@@ -906,6 +908,7 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
              outbound_transport  = COALESCE(EXCLUDED.outbound_transport, voice_bot_configs.outbound_transport),
              max_concurrent_calls = COALESCE(EXCLUDED.max_concurrent_calls, voice_bot_configs.max_concurrent_calls),
              human_transfer_destination = COALESCE(EXCLUDED.human_transfer_destination, voice_bot_configs.human_transfer_destination),
+             hold_message        = COALESCE(EXCLUDED.hold_message, voice_bot_configs.hold_message),
              updated_at          = NOW()
            RETURNING *`,
           [id, body.botName ?? 'Nadia', body.greetingMessage ?? null, body.systemPrompt ?? null,
@@ -915,7 +918,7 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
            body.sipTrunkProvider ?? null, body.sipTrunkNumber ?? null, body.sipUri ?? null,
            body.sipTrunkUsername ?? null, body.sipTrunkPassword ?? null, body.sipTrunkNickname ?? null,
            body.outboundTransport ?? 'TCP', body.maxConcurrentCalls ?? null,
-           body.humanTransferDestination ?? null],
+           body.humanTransferDestination ?? null, body.holdMessage ?? null],
         );
         return r.rows;
       });
@@ -956,6 +959,7 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
       guardrails:       z.string().optional(),
       systemPrompt:     z.string().optional(),
       greetingMessage:  z.string().optional(),
+      holdMessage:      z.string().max(300).optional(),
     });
 
     fastify.get('/agent-templates', { preHandler: requirePlatformPermission('voice_bot:manage_agents') }, async (_req, reply) => {
@@ -993,13 +997,14 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
         (await c.query(
           `INSERT INTO voice_bot_agent_templates
              (name, sector, description, company_name, department, bot_engine, voice_id,
-              tone, character, language, call_direction, guardrails, system_prompt, greeting_message, created_by)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+              tone, character, language, call_direction, guardrails, system_prompt, greeting_message,
+              hold_message, created_by)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
            RETURNING *`,
           [body.name, body.sector ?? null, body.description ?? null, body.companyName ?? null,
            body.department ?? null, body.botEngine, body.voiceId ?? null, body.tone, body.character,
            body.language, body.callDirection, body.guardrails ?? null, body.systemPrompt ?? null,
-           body.greetingMessage ?? null, userId],
+           body.greetingMessage ?? null, body.holdMessage ?? null, userId],
         )).rows);
       return reply.code(201).send({ success: true, data: created });
     });
@@ -1024,13 +1029,15 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
              guardrails       = COALESCE($13, guardrails),
              system_prompt    = COALESCE($14, system_prompt),
              greeting_message = COALESCE($15, greeting_message),
+             hold_message     = COALESCE($16, hold_message),
              updated_at       = NOW()
            WHERE id = $1
            RETURNING *`,
           [id, body.name ?? null, body.sector ?? null, body.description ?? null, body.companyName ?? null,
            body.department ?? null, body.botEngine ?? null, body.voiceId ?? null, body.tone ?? null,
            body.character ?? null, body.language ?? null, body.callDirection ?? null,
-           body.guardrails ?? null, body.systemPrompt ?? null, body.greetingMessage ?? null],
+           body.guardrails ?? null, body.systemPrompt ?? null, body.greetingMessage ?? null,
+           body.holdMessage ?? null],
         )).rows);
       if (!updated) return reply.code(404).send({ error: 'not_found' });
       return reply.send({ success: true, data: updated });
@@ -1100,8 +1107,8 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
         (await c.query(
           `INSERT INTO voice_bot_configs
              (tenant_id, provider, bot_name, greeting_message, system_prompt, tone, voice_id,
-              language, guardrails, source_template_id)
-           VALUES ($1,'livekit',$2,$3,$4,$5,$6,$7,$8,$9)
+              language, guardrails, hold_message, source_template_id)
+           VALUES ($1,'livekit',$2,$3,$4,$5,$6,$7,$8,$9,$10)
            ON CONFLICT (tenant_id, provider) DO UPDATE SET
              bot_name            = EXCLUDED.bot_name,
              greeting_message    = COALESCE(EXCLUDED.greeting_message, voice_bot_configs.greeting_message),
@@ -1110,14 +1117,72 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
              voice_id            = COALESCE(EXCLUDED.voice_id, voice_bot_configs.voice_id),
              language            = EXCLUDED.language,
              guardrails          = COALESCE(EXCLUDED.guardrails, voice_bot_configs.guardrails),
+             hold_message        = COALESCE(EXCLUDED.hold_message, voice_bot_configs.hold_message),
              source_template_id  = EXCLUDED.source_template_id,
              updated_at          = NOW()
            RETURNING *`,
           [tenantId, botName, template.greeting_message,
            template.system_prompt, template.tone, template.voice_id, template.language,
-           template.guardrails, id],
+           template.guardrails, template.hold_message, id],
         )).rows);
       return reply.send({ success: true, data: cfg, moduleGranted });
+    });
+
+    // Branded hold audio — an uploaded clip (e.g. a bank's product jingle)
+    // played to the caller while Nadia does back-office work mid-call, and
+    // stopped the instant she's ready to speak. Bytes live in the DB (clips
+    // are small); Nadia fetches via the shared-secret /livekit/hold-audio
+    // route and caches per call.
+    fastify.post('/tenants/:id/voice-bot-hold-audio', { preHandler: requirePlatformPermission('voice_bot:manage_tenants') }, async (req, reply) => {
+      const { id } = req.params as { id: string };
+      const parts = req.parts();
+      let fileBuffer: Buffer | null = null;
+      let filename = '';
+      let mimetype = '';
+      for await (const part of parts) {
+        if (part.type === 'file') {
+          fileBuffer = await part.toBuffer();
+          filename = part.filename;
+          mimetype = part.mimetype;
+        }
+      }
+      if (!fileBuffer) return reply.code(400).send({ success: false, error: 'No file uploaded' });
+      const okType = mimetype.startsWith('audio/')
+        || /\.(mp3|wav|ogg|m4a)$/i.test(filename);
+      if (!okType) return reply.code(400).send({ success: false, error: 'Only audio files (mp3, wav, ogg, m4a) are supported' });
+      if (fileBuffer.length > 5 * 1024 * 1024) {
+        return reply.code(400).send({ success: false, error: 'Audio file must be under 5 MB' });
+      }
+
+      await db.withSuperAdmin(async (c) => {
+        await c.query(
+          `INSERT INTO voice_bot_hold_audio (tenant_id, filename, mimetype, data)
+           VALUES ($1, $2, $3, $4)
+           ON CONFLICT (tenant_id) DO UPDATE SET
+             filename = EXCLUDED.filename, mimetype = EXCLUDED.mimetype,
+             data = EXCLUDED.data, updated_at = NOW()`,
+          [id, filename, mimetype || 'audio/mpeg', fileBuffer],
+        );
+        await c.query(
+          `UPDATE voice_bot_configs SET hold_audio_filename = $2, updated_at = NOW()
+            WHERE tenant_id = $1 AND provider = 'livekit'`,
+          [id, filename],
+        );
+      });
+      return reply.send({ success: true, data: { filename } });
+    });
+
+    fastify.delete('/tenants/:id/voice-bot-hold-audio', { preHandler: requirePlatformPermission('voice_bot:manage_tenants') }, async (req, reply) => {
+      const { id } = req.params as { id: string };
+      await db.withSuperAdmin(async (c) => {
+        await c.query(`DELETE FROM voice_bot_hold_audio WHERE tenant_id = $1`, [id]);
+        await c.query(
+          `UPDATE voice_bot_configs SET hold_audio_filename = NULL, updated_at = NOW()
+            WHERE tenant_id = $1 AND provider = 'livekit'`,
+          [id],
+        );
+      });
+      return reply.send({ success: true });
     });
 
     // Knowledge base — same table as the tenant-side page, scoped by an

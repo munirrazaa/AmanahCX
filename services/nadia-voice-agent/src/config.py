@@ -43,6 +43,11 @@ class AgentSettings:
     recording_enabled: bool = False                      # record call audio to storage + play consent
     default_queue_id: str | None = None
     default_priority: str = "medium"
+    hold_message: str | None = None                      # spoken while creating a ticket; falls
+                                                           # back to agent.py's HOLD_LINE default
+    hold_audio_filename: str | None = None               # set when the tenant uploaded a branded
+                                                           # hold clip — played instead of the
+                                                           # spoken hold line, stopped when ready
     human_transfer_destination: str | None = None        # SIP URI or number Nadia hands calls
                                                            # to when she can't take one herself
                                                            # (minutes exhausted / over capacity).
@@ -78,6 +83,8 @@ async def load_settings(tenant_id: str) -> AgentSettings:
         recording_enabled=bool(cfg.get("recording_enabled")),
         default_queue_id=cfg.get("default_queue_id"),
         default_priority=cfg.get("default_priority") or "medium",
+        hold_message=cfg.get("hold_message"),
+        hold_audio_filename=cfg.get("hold_audio_filename"),
         human_transfer_destination=cfg.get("human_transfer_destination"),
     )
 

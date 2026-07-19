@@ -1164,7 +1164,7 @@ function ConfigOwnershipModal({ tenant, onClose }: { tenant: any; onClose: () =>
     voiceId: 'helpdesk-agent', language: 'ur-PK', guardrails: '', isActive: true, recordingEnabled: false,
     selfServiceIntents: [] as string[], sipTrunkProvider: '', sipTrunkNumber: '', sipUri: '',
     sipTrunkUsername: '', sipTrunkPassword: '', sipTrunkNickname: '', outboundTransport: 'TCP',
-    maxConcurrentCalls: '', humanTransferDestination: '',
+    maxConcurrentCalls: '', humanTransferDestination: '', holdMessage: '',
   };
   useEffect(() => {
     if (botConfig) {
@@ -1189,6 +1189,7 @@ function ConfigOwnershipModal({ tenant, onClose }: { tenant: any; onClose: () =>
         outboundTransport: botConfig.outbound_transport ?? 'TCP',
         maxConcurrentCalls: botConfig.max_concurrent_calls != null ? String(botConfig.max_concurrent_calls) : '',
         humanTransferDestination: botConfig.human_transfer_destination ?? '',
+        holdMessage: botConfig.hold_message ?? '',
       });
     } else if (voiceBotOwnership === 'super_admin' && botForm === null) {
       setBotForm(blankBotForm);
@@ -1262,6 +1263,24 @@ function ConfigOwnershipModal({ tenant, onClose }: { tenant: any; onClose: () =>
   const smsGatewayMut = useMutation({
     mutationFn: (enabled: boolean) => api.patch(`/super-admin/tenants/${tenant.id}/sms-gateway`, { enabled }),
     onSuccess: (_data, enabled) => { setSmsGatewayEnabled(enabled); qc.invalidateQueries({ queryKey: ['sa-tenants'] }); },
+  });
+
+  // Branded hold audio — played to the caller while the bot does back-office
+  // work mid-call (e.g. creating a ticket), stopped the instant it's ready.
+  const [holdAudioFile, setHoldAudioFile] = useState<File | null>(null);
+  const uploadHoldAudioMut = useMutation({
+    mutationFn: () => {
+      const fd = new FormData();
+      fd.append('file', holdAudioFile!);
+      return api.post(`/super-admin/tenants/${tenant.id}/voice-bot-hold-audio`, fd, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['sa-voice-bot-config', tenant.id] }); setHoldAudioFile(null); },
+  });
+  const removeHoldAudioMut = useMutation({
+    mutationFn: () => api.delete(`/super-admin/tenants/${tenant.id}/voice-bot-hold-audio`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['sa-voice-bot-config', tenant.id] }),
   });
 
   const saveBotConfigMut = useMutation({
@@ -1442,6 +1461,39 @@ function ConfigOwnershipModal({ tenant, onClose }: { tenant: any; onClose: () =>
                     provider — a live call is transferred here immediately, so it must be the
                     call center's own real inbound address, not a random number.
                   </p>
+                </div>
+
+                <div className="pt-2 border-t border-gray-50">
+                  <p className="text-xs font-semibold text-gray-500 mb-1.5">Hold Experience</p>
+                  <input value={botForm.holdMessage}
+                    onChange={e => setBotForm((f: any) => ({ ...f, holdMessage: e.target.value }))}
+                    placeholder='Hold message (e.g. "Please wait while I create your ticket")'
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm" />
+                  <p className="text-[11px] text-gray-400 mt-1 mb-2">
+                    Spoken while the bot creates a ticket. If a hold audio clip is uploaded below,
+                    the clip plays instead and stops the moment the bot is ready to speak.
+                  </p>
+                  {botConfig?.hold_audio_filename ? (
+                    <div className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2">
+                      <p className="text-xs text-gray-700 truncate">🎵 {botConfig.hold_audio_filename}</p>
+                      <button onClick={() => removeHoldAudioMut.mutate()}
+                        className="text-xs text-red-600 hover:underline shrink-0">Remove</button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <input type="file" accept="audio/*,.mp3,.wav,.ogg,.m4a"
+                        onChange={e => setHoldAudioFile(e.target.files?.[0] ?? null)}
+                        className="flex-1 text-xs text-gray-600 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-medium file:bg-gray-100 file:text-gray-700" />
+                      <button onClick={() => uploadHoldAudioMut.mutate()}
+                        disabled={!holdAudioFile || uploadHoldAudioMut.isPending}
+                        className="px-3 py-1.5 text-xs font-semibold text-white bg-blue-600 rounded-lg disabled:opacity-50 shrink-0">
+                        {uploadHoldAudioMut.isPending ? 'Uploading…' : 'Upload'}
+                      </button>
+                    </div>
+                  )}
+                  {uploadHoldAudioMut.isError && <p className="text-[11px] text-red-600 mt-1">
+                    {(uploadHoldAudioMut.error as any)?.response?.data?.error || 'Upload failed — audio files only, max 5 MB.'}
+                  </p>}
                 </div>
 
                 <button onClick={() => saveBotConfigMut.mutate()} disabled={saveBotConfigMut.isPending}
@@ -2526,6 +2578,7 @@ function AgentTemplateModal({ template, voices, onClose, onSaved }: {
     guardrails: template?.guardrails ?? '',
     systemPrompt: template?.system_prompt ?? '',
     greetingMessage: template?.greeting_message ?? '',
+    holdMessage: template?.hold_message ?? '',
   });
   const mut = useMutation({
     mutationFn: () => template
@@ -2583,6 +2636,9 @@ function AgentTemplateModal({ template, voices, onClose, onSaved }: {
 
         <textarea value={form.greetingMessage} onChange={(e) => set('greetingMessage', e.target.value)}
           placeholder="Greeting message" rows={2}
+          className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm" />
+        <input value={form.holdMessage} onChange={(e) => set('holdMessage', e.target.value)}
+          placeholder='Hold message (e.g. "Please wait while I create your ticket")'
           className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm" />
         <textarea value={form.guardrails} onChange={(e) => set('guardrails', e.target.value)}
           placeholder="Guardrails — hard limits" rows={2}

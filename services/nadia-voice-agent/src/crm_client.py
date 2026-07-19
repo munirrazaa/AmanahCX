@@ -45,6 +45,8 @@ class CRMConnector(Protocol):
         self, tenant_id: str, phone: str | None, nic: str | None, email: str | None,
     ) -> dict[str, Any]: ...
 
+    async def get_hold_audio(self, tenant_id: str) -> bytes | None: ...
+
     async def call_started(self, tenant_id: str, call_id: str) -> dict[str, Any]: ...
 
     async def get_minutes_status(self, tenant_id: str) -> dict[str, Any]: ...
@@ -136,6 +138,20 @@ class AmanahCXConnector:
                 return resp.json() if resp.status_code == 200 else {"found": False}
         except Exception:
             return {"found": False}
+
+    async def get_hold_audio(self, tenant_id: str) -> bytes | None:
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                resp = await client.get(
+                    f"{self.base_url}/api/v1/voice-bot/livekit/hold-audio",
+                    params={"tenantId": tenant_id},
+                    headers=self._bearer(),
+                )
+                if resp.status_code != 200:
+                    return None
+                return resp.content
+        except Exception:
+            return None
 
     async def call_started(self, tenant_id: str, call_id: str) -> dict[str, Any]:
         try:

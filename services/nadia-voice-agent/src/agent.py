@@ -38,6 +38,7 @@ from livekit import agents, rtc
 from livekit.agents import (
     Agent,
     AgentSession,
+    BackgroundAudioPlayer,
     ModelSettings,
     RoomInputOptions,
     RunContext,
@@ -82,6 +83,12 @@ class NadiaAgent(Agent):
         self.settings = settings
         self.tenant_id = tenant_id
         self.call_id = call_id
+        # Branded hold audio — set by the entrypoint after session start when
+        # the tenant has an uploaded clip; raise_ticket plays it while the
+        # CRM round-trip is in flight (instead of the spoken hold line) and
+        # stops it the instant the result is back.
+        self.bg_audio = None
+        self.hold_audio_path: str | None = None
         # STT_PROVIDER=openai → hosted transcription via the session-level
         # openai.STT (fast, ~$0.006/min) — required on small CPU hosts like
         # Railway, where local Whisper maxes the CPU and the job process gets
@@ -276,24 +283,38 @@ class NadiaAgent(Agent):
         # flight, not before it. allow_interruptions=False so a caller talking over
         # it (common — they're often still adding detail) doesn't cut it short or
         # confuse the turn-taking state.
-        context.session.say(HOLD_LINE, allow_interruptions=False)
+        hold_handle = None
+        if self.bg_audio is not None and self.hold_audio_path:
+            # Branded hold clip (e.g. the client's product jingle) — played
+            # while the CRM call is in flight, stopped the moment it's done
+            # so the reply isn't spoken over the music.
+            try:
+                hold_handle = self.bg_audio.play(self.hold_audio_path)
+            except Exception:
+                hold_handle = None
+        if hold_handle is None:
+            context.session.say(self.settings.hold_message or HOLD_LINE, allow_interruptions=False)
 
-        data = await get_client().create_ticket(
-            self.tenant_id, self.call_id,
-            {
-                "reporterName": reporter_name,
-                "reporterPhone": reporter_phone,
-                "category": category,
-                "priority": priority,
-                "subject": subject,
-                "description": description,
-                "fraudAmount": fraud_amount,
-                "reporterEmail": reporter_email,
-                "reporterNic": reporter_nic,
-                "reporterAddress": reporter_address,
-                "reporterCity": reporter_city,
-            },
-        )
+        try:
+            data = await get_client().create_ticket(
+                self.tenant_id, self.call_id,
+                {
+                    "reporterName": reporter_name,
+                    "reporterPhone": reporter_phone,
+                    "category": category,
+                    "priority": priority,
+                    "subject": subject,
+                    "description": description,
+                    "fraudAmount": fraud_amount,
+                    "reporterEmail": reporter_email,
+                    "reporterNic": reporter_nic,
+                    "reporterAddress": reporter_address,
+                    "reporterCity": reporter_city,
+                },
+            )
+        finally:
+            if hold_handle is not None:
+                hold_handle.stop()
         return f"Ticket {data['ticketNumber']} created."
 
 
@@ -544,6 +565,27 @@ async def entrypoint(ctx: agents.JobContext) -> None:
                             "Voice Bot minutes ran out.",
             )
             return
+
+        # Branded hold audio: if this tenant uploaded a clip, fetch it once
+        # and stand up a background player so raise_ticket can play it while
+        # the CRM round-trip runs (stopped the instant the result is back).
+        # Any failure here just means the spoken hold line is used instead —
+        # never breaks the call.
+        if settings.hold_audio_filename:
+            try:
+                audio_bytes = await get_client().get_hold_audio(tenant_id)
+                if audio_bytes:
+                    ext = os.path.splitext(settings.hold_audio_filename)[1] or ".mp3"
+                    hold_path = f"/tmp/nadia_hold_{tenant_id[:8]}{ext}"
+                    with open(hold_path, "wb") as f:
+                        f.write(audio_bytes)
+                    bg_audio = BackgroundAudioPlayer()
+                    await bg_audio.start(room=ctx.room, agent_session=session)
+                    nadia.bg_audio = bg_audio
+                    nadia.hold_audio_path = hold_path
+                    dbg(f"hold audio ready ({len(audio_bytes)} bytes)")
+            except Exception as e:
+                dbg(f"hold audio setup FAILED (using spoken hold line): {type(e).__name__}: {e}")
 
         # If recording is enabled AND storage is configured, start the audio
         # egress first (so the consent notice itself is captured), then say the

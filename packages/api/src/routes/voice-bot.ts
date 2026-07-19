@@ -2010,6 +2010,22 @@ export function voiceBotRoutes(db: DatabaseClient, eventBus: EventBus) {
       return reply.send({ success: true, data: configs });
     });
 
+    // Branded hold audio bytes — Nadia downloads this once per call (when
+    // the tenant has one uploaded) and plays it while doing back-office
+    // work mid-call, stopping the instant she's ready to speak again.
+    fastify.get('/livekit/hold-audio', async (req, reply) => {
+      const { tenantId } = req.query as { tenantId?: string };
+      if (!tenantId) return reply.code(400).send({ error: 'tenantId query param required' });
+      if (!checkSecret(req)) return reply.code(401).send({ error: 'unauthorized' });
+
+      const [row] = await db.withSuperAdmin(async (c) =>
+        (await c.query(`SELECT filename, mimetype, data FROM voice_bot_hold_audio WHERE tenant_id = $1`, [tenantId])).rows);
+      if (!row) return reply.code(404).send({ error: 'no_hold_audio' });
+      reply.header('Content-Type', row.mimetype || 'audio/mpeg');
+      reply.header('Content-Disposition', `attachment; filename="${row.filename}"`);
+      return reply.send(row.data);
+    });
+
     // Mid-call: create the complaint ticket from structured fields, return the TKT number.
     fastify.post('/livekit/complaint', async (req, reply) => {
       const { tenantId } = req.query as { tenantId?: string };
