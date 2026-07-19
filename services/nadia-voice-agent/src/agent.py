@@ -71,7 +71,9 @@ def dbg(msg: str) -> None:
 
 # Played (non-blocking) while raise_ticket's ~2s API call is in flight, so the
 # caller hears something instead of dead air. Requested 2026-07-13, built 2026-07-17.
-HOLD_LINE = "ایک لمحہ، میں یہ درج کر رہی ہوں۔"
+# Spoken the instant ticket creation starts, per user wording request
+# 2026-07-19: "please wait while I create the ticket".
+HOLD_LINE = "براہ کرم انتظار کریں، میں آپ کا ٹکٹ بنا رہی ہوں۔"
 
 
 class NadiaAgent(Agent):
