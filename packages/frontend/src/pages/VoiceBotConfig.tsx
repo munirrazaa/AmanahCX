@@ -456,12 +456,16 @@ export function VoiceBotConfig() {
   const [editMode, setEditMode] = useState(false);
   const [saveMsg, setSaveMsg] = useState('');
 
-  const { data: configResponse } = useQuery<{ data: BotConfig[]; ownership: 'super_admin' | 'tenant_admin' }>({
+  const { data: configResponse } = useQuery<{ data: BotConfig[]; ownership: 'super_admin' | 'tenant_admin'; canConfigure?: boolean }>({
     queryKey: ['voice-bot-configs'],
     queryFn: async () => { const r = await api.get('/api/v1/voice-bot/config'); return r.data; },
   });
   const configs = configResponse?.data;
   const isCentrallyManaged = configResponse?.ownership === 'super_admin';
+  // Without the delegated voicebot:configure capability, this user (even a
+  // tenant admin) may only change the bot's name and greeting — the server
+  // enforces this; the flag drives the banner and the limited save payload.
+  const canConfigure = configResponse?.canConfigure !== false;
 
   const { data: webhookUrls } = useQuery<WebhookUrls>({
     queryKey: ['voice-bot-webhook-urls'],
@@ -523,6 +527,17 @@ export function VoiceBotConfig() {
 
   const saveMut = useMutation({
     mutationFn: async (body: Partial<BotConfig>) => {
+      if (!canConfigure) {
+        // Restricted access: send ONLY the fields this user may change —
+        // anything else in the form is ignored (the banner says so), and
+        // the server would reject a fuller payload anyway.
+        const r = await api.put('/api/v1/voice-bot/config', {
+          provider:        body.provider,
+          botName:         body.bot_name,
+          greetingMessage: body.greeting_message,
+        });
+        return r.data;
+      }
       const r = await api.put('/api/v1/voice-bot/config', {
         provider:         body.provider,
         isActive:         body.is_active,
@@ -781,6 +796,17 @@ export function VoiceBotConfig() {
                     <Info className="w-4 h-4 text-gray-500 mt-0.5 shrink-0" />
                     <p className="text-xs text-gray-600">
                       This bot is centrally managed by your platform provider. You can see its current settings below, but changes must be requested from them.
+                    </p>
+                  </div>
+                )}
+
+                {!isCentrallyManaged && !canConfigure && (
+                  <div className="mb-4 p-3 rounded-lg bg-amber-50 border border-amber-200 flex items-start gap-2.5">
+                    <Info className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
+                    <p className="text-xs text-amber-800">
+                      Limited access: you can change the bot's <strong>name</strong> and <strong>greeting message</strong> only.
+                      Edits to any other field will not be saved. Full configuration requires the
+                      "Configure IVR flows &amp; bot settings" permission — ask your administrator (or platform provider) to allocate it.
                     </p>
                   </div>
                 )}

@@ -880,44 +880,53 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
       const body = SuperAdminVoiceBotConfigSchema.parse(req.body);
       const [cfg] = await db.withSuperAdmin(async (client) => {
         const r = await client.query(
+          // Params are NULL when the field wasn't provided. On INSERT the
+          // COALESCE in VALUES supplies sensible defaults; on UPDATE each
+          // column COALESCEs the raw param against the EXISTING value — a
+          // partial save (e.g. hold message only) can no longer silently
+          // reset unspecified fields to defaults (real drift seen
+          // 2026-07-19: a hold-message-only save reset a tenant's tone
+          // from 'friendly' back to 'professional').
           `INSERT INTO voice_bot_configs
              (tenant_id, provider, bot_name, greeting_message, system_prompt, tone, speaking_rate, voice_id,
               language, guardrails, is_active, recording_enabled, self_service_intents,
               sip_trunk_provider, sip_trunk_number, sip_uri, sip_trunk_username, sip_trunk_password,
               sip_trunk_nickname, outbound_transport, max_concurrent_calls, human_transfer_destination,
               hold_message)
-           VALUES ($1,'livekit',$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
+           VALUES ($1,'livekit',COALESCE($2::text,'Nadia'),$3::text,$4::text,COALESCE($5::text,'professional'),COALESCE($6::numeric,0.9),
+                   COALESCE($7::text,'helpdesk-agent'),COALESCE($8::text,'ur-PK'),$9::text,COALESCE($10::boolean,true),
+                   COALESCE($11::boolean,false),COALESCE($12::text[],'{}'::text[]),$13::text,$14::text,$15::text,$16::text,$17::text,$18::text,COALESCE($19::text,'TCP'),$20::integer,$21::text,$22::text)
            ON CONFLICT (tenant_id, provider) DO UPDATE SET
-             bot_name            = COALESCE(EXCLUDED.bot_name, voice_bot_configs.bot_name),
-             greeting_message    = COALESCE(EXCLUDED.greeting_message, voice_bot_configs.greeting_message),
-             system_prompt       = COALESCE(EXCLUDED.system_prompt, voice_bot_configs.system_prompt),
-             tone                = COALESCE(EXCLUDED.tone, voice_bot_configs.tone),
-             speaking_rate       = COALESCE(EXCLUDED.speaking_rate, voice_bot_configs.speaking_rate),
-             voice_id            = COALESCE(EXCLUDED.voice_id, voice_bot_configs.voice_id),
-             language            = COALESCE(EXCLUDED.language, voice_bot_configs.language),
-             guardrails          = COALESCE(EXCLUDED.guardrails, voice_bot_configs.guardrails),
-             is_active           = COALESCE(EXCLUDED.is_active, voice_bot_configs.is_active),
-             recording_enabled   = COALESCE(EXCLUDED.recording_enabled, voice_bot_configs.recording_enabled),
-             self_service_intents = COALESCE(EXCLUDED.self_service_intents, voice_bot_configs.self_service_intents),
-             sip_trunk_provider  = COALESCE(EXCLUDED.sip_trunk_provider, voice_bot_configs.sip_trunk_provider),
-             sip_trunk_number    = COALESCE(EXCLUDED.sip_trunk_number, voice_bot_configs.sip_trunk_number),
-             sip_uri             = COALESCE(EXCLUDED.sip_uri, voice_bot_configs.sip_uri),
-             sip_trunk_username  = COALESCE(EXCLUDED.sip_trunk_username, voice_bot_configs.sip_trunk_username),
-             sip_trunk_password  = COALESCE(EXCLUDED.sip_trunk_password, voice_bot_configs.sip_trunk_password),
-             sip_trunk_nickname  = COALESCE(EXCLUDED.sip_trunk_nickname, voice_bot_configs.sip_trunk_nickname),
-             outbound_transport  = COALESCE(EXCLUDED.outbound_transport, voice_bot_configs.outbound_transport),
-             max_concurrent_calls = COALESCE(EXCLUDED.max_concurrent_calls, voice_bot_configs.max_concurrent_calls),
-             human_transfer_destination = COALESCE(EXCLUDED.human_transfer_destination, voice_bot_configs.human_transfer_destination),
-             hold_message        = COALESCE(EXCLUDED.hold_message, voice_bot_configs.hold_message),
+             bot_name            = COALESCE($2::text, voice_bot_configs.bot_name),
+             greeting_message    = COALESCE($3::text, voice_bot_configs.greeting_message),
+             system_prompt       = COALESCE($4::text, voice_bot_configs.system_prompt),
+             tone                = COALESCE($5::text, voice_bot_configs.tone),
+             speaking_rate       = COALESCE($6::numeric, voice_bot_configs.speaking_rate),
+             voice_id            = COALESCE($7::text, voice_bot_configs.voice_id),
+             language            = COALESCE($8::text, voice_bot_configs.language),
+             guardrails          = COALESCE($9::text, voice_bot_configs.guardrails),
+             is_active           = COALESCE($10::boolean, voice_bot_configs.is_active),
+             recording_enabled   = COALESCE($11::boolean, voice_bot_configs.recording_enabled),
+             self_service_intents = COALESCE($12::text[], voice_bot_configs.self_service_intents),
+             sip_trunk_provider  = COALESCE($13::text, voice_bot_configs.sip_trunk_provider),
+             sip_trunk_number    = COALESCE($14::text, voice_bot_configs.sip_trunk_number),
+             sip_uri             = COALESCE($15::text, voice_bot_configs.sip_uri),
+             sip_trunk_username  = COALESCE($16::text, voice_bot_configs.sip_trunk_username),
+             sip_trunk_password  = COALESCE($17::text, voice_bot_configs.sip_trunk_password),
+             sip_trunk_nickname  = COALESCE($18::text, voice_bot_configs.sip_trunk_nickname),
+             outbound_transport  = COALESCE($19::text, voice_bot_configs.outbound_transport),
+             max_concurrent_calls = COALESCE($20::integer, voice_bot_configs.max_concurrent_calls),
+             human_transfer_destination = COALESCE($21::text, voice_bot_configs.human_transfer_destination),
+             hold_message        = COALESCE($22::text, voice_bot_configs.hold_message),
              updated_at          = NOW()
            RETURNING *`,
-          [id, body.botName ?? 'Nadia', body.greetingMessage ?? null, body.systemPrompt ?? null,
-           body.tone ?? 'professional', body.speakingRate ?? 0.9, body.voiceId ?? 'helpdesk-agent',
-           body.language ?? 'ur-PK', body.guardrails ?? null, body.isActive ?? true,
-           body.recordingEnabled ?? false, body.selfServiceIntents ?? [],
+          [id, body.botName ?? null, body.greetingMessage ?? null, body.systemPrompt ?? null,
+           body.tone ?? null, body.speakingRate ?? null, body.voiceId ?? null,
+           body.language ?? null, body.guardrails ?? null, body.isActive ?? null,
+           body.recordingEnabled ?? null, body.selfServiceIntents ?? null,
            body.sipTrunkProvider ?? null, body.sipTrunkNumber ?? null, body.sipUri ?? null,
            body.sipTrunkUsername ?? null, body.sipTrunkPassword ?? null, body.sipTrunkNickname ?? null,
-           body.outboundTransport ?? 'TCP', body.maxConcurrentCalls ?? null,
+           body.outboundTransport ?? null, body.maxConcurrentCalls ?? null,
            body.humanTransferDestination ?? null, body.holdMessage ?? null],
         );
         return r.rows;

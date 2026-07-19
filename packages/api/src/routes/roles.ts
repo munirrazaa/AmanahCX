@@ -172,7 +172,14 @@ export function defaultPermissions(baseRole: string): Record<string, boolean> {
   const all  = Object.fromEntries(MODULE_DEFS.flatMap((m) => m.actions.map((a) => [a.key, true])));
 
   switch (baseRole) {
-    case 'tenant_admin': return all;
+    // Full Voice Bot configuration is deliberately NOT part of the default
+    // admin grant (product decision 2026-07-19): a tenant admin can change
+    // the bot's name and greeting out of the box, but the complete
+    // configuration (voice, tone, script, guardrails, knowledge base, …)
+    // requires the platform to allocate voicebot:configure to this
+    // workspace's Admin role (Super Admin → Manage Role Permissions).
+    // Once allocated, the tenant admin can delegate it to their own users.
+    case 'tenant_admin': return { ...all, 'voicebot:configure': false };
 
     case 'manager': return {
       ...none,

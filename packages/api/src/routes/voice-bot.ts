@@ -1057,6 +1057,48 @@ export function voiceBotRoutes(db: DatabaseClient, eventBus: EventBus) {
 
     // ── Bot configuration ──────────────────────────────────────────────
 
+    // Whether this user holds the delegated "Configure IVR flows & bot
+    // settings" capability (voicebot:configure). Per product decision
+    // 2026-07-19: WITHOUT it, a workspace user — including the tenant
+    // admin — may only change the bot's name and greeting message. The
+    // capability is allocated per workspace by the platform (Super Admin →
+    // Manage Role Permissions → Admin role → Voice Bot), and a tenant
+    // admin holding it can delegate it to their own users via Roles.
+    // Checked live against the roles table (not the JWT) so an allocation
+    // takes effect without re-login. Handles both permission shapes:
+    // granular booleans ('voicebot:configure') and the legacy module map
+    // ('voicebot': 'none'|'view'|'full').
+    const readVoicebotConfigure = (p: any): boolean | null => {
+      if (!p || typeof p !== 'object') return null;
+      if (typeof p['voicebot:configure'] === 'boolean') return p['voicebot:configure'];
+      if (typeof p['voicebot'] === 'string') return p['voicebot'] === 'full' || p['voicebot'] === 'write';
+      return null;
+    };
+    const canConfigureVoicebot = async (req: any): Promise<boolean> => {
+      if (req.user.role === 'super_admin') return true;
+      const rows = await db.withTenant(req.tenant.id, async (c) =>
+        (await c.query(
+          `SELECT permissions, is_system FROM roles
+            WHERE tenant_id = $1 AND (
+              id = (SELECT custom_role_id FROM users WHERE id = $2)
+              OR (is_system = true AND base_role = (SELECT role FROM users WHERE id = $2))
+            )
+            ORDER BY is_system ASC
+            LIMIT 1`,
+          [req.tenant.id, req.user.sub],
+        )).rows);
+      const fromRole = rows.length ? readVoicebotConfigure(rows[0].permissions) : null;
+      if (fromRole !== null) return fromRole;
+      return readVoicebotConfigure(req.user.permissions) ?? false;
+    };
+    const CONFIGURE_REQUIRED = {
+      success: false,
+      error: {
+        code: 'VOICEBOT_CONFIGURE_REQUIRED',
+        message: "Your account can change the bot's name and greeting only. Full Voice Bot configuration requires the 'Configure IVR flows & bot settings' permission — ask your administrator (or platform provider) to allocate it.",
+      },
+    };
+
     fastify.get('/config', { preHandler: requireScope('settings:read') }, async (req, reply) => {
       const configs = await db.withTenant(req.tenant.id, async (c) => {
         const r = await c.query(
@@ -1069,7 +1111,8 @@ export function voiceBotRoutes(db: DatabaseClient, eventBus: EventBus) {
       // "super_admin" ownership means this workspace's bot is centrally held —
       // the tenant admin's screen shows current values but can't save changes.
       const ownership = (req.tenant.settings as any)?.voice_bot_ownership ?? 'tenant_admin';
-      return reply.send({ success: true, data: configs, ownership });
+      const canConfigure = await canConfigureVoicebot(req);
+      return reply.send({ success: true, data: configs, ownership, canConfigure });
     });
 
     const ConfigSchema = z.object({
@@ -1129,6 +1172,29 @@ export function voiceBotRoutes(db: DatabaseClient, eventBus: EventBus) {
         });
       }
       const body = ConfigSchema.parse(req.body);
+
+      // Without the voicebot:configure capability, only the bot's name and
+      // greeting may be changed — a separate limited UPDATE that touches
+      // nothing else, so a restricted save can never blank other fields.
+      if (!(await canConfigureVoicebot(req))) {
+        const allowed = new Set(['provider', 'botName', 'greetingMessage']);
+        const disallowed = Object.entries(body)
+          .filter(([k, v]) => v !== undefined && !allowed.has(k))
+          .map(([k]) => k);
+        if (disallowed.length > 0) return reply.code(403).send(CONFIGURE_REQUIRED);
+        const [limited] = await db.withTenant(req.tenant.id, async (c) =>
+          (await c.query(
+            `UPDATE voice_bot_configs SET
+               bot_name         = COALESCE($3, bot_name),
+               greeting_message = COALESCE($4, greeting_message),
+               updated_at       = NOW()
+             WHERE tenant_id = $1 AND provider = $2
+             RETURNING *`,
+            [req.tenant.id, body.provider, (body as any).botName ?? null, body.greetingMessage ?? null],
+          )).rows);
+        if (!limited) return reply.code(404).send({ success: false, error: { code: 'NOT_CONFIGURED', message: 'This workspace has no voice bot set up yet — contact your platform provider.' } });
+        return reply.send({ success: true, data: limited });
+      }
 
       // Licensing the Voice Bot module alone doesn't grant every provider —
       // each one must be individually allocated to the tenant.
@@ -1292,6 +1358,7 @@ export function voiceBotRoutes(db: DatabaseClient, eventBus: EventBus) {
     });
 
     fastify.post('/custom-intents', { preHandler: requireRole('tenant_admin', 'super_admin') }, async (req, reply) => {
+      if (!(await canConfigureVoicebot(req))) return reply.code(403).send(CONFIGURE_REQUIRED);
       const body = z.object({
         label:    z.string().min(1).max(80),
         keywords: z.array(z.string().min(1)).min(1),
@@ -1315,6 +1382,7 @@ export function voiceBotRoutes(db: DatabaseClient, eventBus: EventBus) {
     });
 
     fastify.delete('/custom-intents/:id', { preHandler: requireRole('tenant_admin', 'super_admin') }, async (req, reply) => {
+      if (!(await canConfigureVoicebot(req))) return reply.code(403).send(CONFIGURE_REQUIRED);
       const { id } = req.params as { id: string };
       await db.withTenant(req.tenant.id, async (c) => {
         await c.query(`DELETE FROM voice_bot_custom_intents WHERE id = $1 AND tenant_id = $2`, [id, req.tenant.id]);
@@ -1348,6 +1416,7 @@ export function voiceBotRoutes(db: DatabaseClient, eventBus: EventBus) {
     // Add a plain-text entry: tenant admin types a title, the answer content,
     // and a few keywords a caller might say that should trigger this entry.
     fastify.post('/knowledge-base', { preHandler: requireRole('tenant_admin', 'super_admin') }, async (req, reply) => {
+      if (!(await canConfigureVoicebot(req))) return reply.code(403).send(CONFIGURE_REQUIRED);
       const body = z.object({
         title:    z.string().min(1).max(120),
         content:  z.string().min(1).max(5000),
@@ -1370,6 +1439,7 @@ export function voiceBotRoutes(db: DatabaseClient, eventBus: EventBus) {
     // Import from a URL: fetch the page, strip HTML down to plain text,
     // store the first chunk as content. Caller still sets title + keywords.
     fastify.post('/knowledge-base/import-url', { preHandler: requireRole('tenant_admin', 'super_admin') }, async (req, reply) => {
+      if (!(await canConfigureVoicebot(req))) return reply.code(403).send(CONFIGURE_REQUIRED);
       const body = z.object({
         title:    z.string().min(1).max(120),
         url:      z.string().url(),
@@ -1410,6 +1480,7 @@ export function voiceBotRoutes(db: DatabaseClient, eventBus: EventBus) {
     // Upload a PDF or DOCX: extract its text, caller sets title + keywords
     // as separate multipart fields alongside the file.
     fastify.post('/knowledge-base/upload', { preHandler: requireRole('tenant_admin', 'super_admin') }, async (req, reply) => {
+      if (!(await canConfigureVoicebot(req))) return reply.code(403).send(CONFIGURE_REQUIRED);
       const parts = req.parts();
       let fileBuffer: Buffer | null = null;
       let filename = '';
@@ -1464,6 +1535,7 @@ export function voiceBotRoutes(db: DatabaseClient, eventBus: EventBus) {
     });
 
     fastify.put('/knowledge-base/:id', { preHandler: requireRole('tenant_admin', 'super_admin') }, async (req, reply) => {
+      if (!(await canConfigureVoicebot(req))) return reply.code(403).send(CONFIGURE_REQUIRED);
       const { id } = req.params as { id: string };
       const body = z.object({
         title:     z.string().min(1).max(120).optional(),
@@ -1491,6 +1563,7 @@ export function voiceBotRoutes(db: DatabaseClient, eventBus: EventBus) {
     });
 
     fastify.delete('/knowledge-base/:id', { preHandler: requireRole('tenant_admin', 'super_admin') }, async (req, reply) => {
+      if (!(await canConfigureVoicebot(req))) return reply.code(403).send(CONFIGURE_REQUIRED);
       const { id } = req.params as { id: string };
       await db.withTenant(req.tenant.id, async (c) => {
         await c.query(`DELETE FROM voice_bot_knowledge_entries WHERE id = $1 AND tenant_id = $2`, [id, req.tenant.id]);
