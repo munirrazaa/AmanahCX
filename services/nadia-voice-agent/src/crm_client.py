@@ -87,7 +87,13 @@ class AmanahCXConnector:
         return next((c for c in configs if c.get("provider") == "livekit"), None)
 
     async def create_ticket(self, tenant_id: str, call_id: str, ticket: dict[str, Any]) -> dict[str, Any]:
-        async with httpx.AsyncClient(timeout=10) as client:
+        # 20s (was 10s): production Railway→Supabase round-trips can spike past
+        # 10s, and a client-side timeout here loses a ticket confirmation the
+        # server actually completed — the caller then hears "it failed" for a
+        # ticket that exists. Retries are idempotent server-side now (same
+        # call + same category returns the original ticket), but a longer
+        # timeout avoids the spurious failure in the first place.
+        async with httpx.AsyncClient(timeout=20) as client:
             resp = await client.post(
                 f"{self.base_url}/api/v1/voice-bot/livekit/complaint",
                 params={"tenantId": tenant_id},

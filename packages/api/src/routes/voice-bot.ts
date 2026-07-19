@@ -639,6 +639,32 @@ async function createComplaintFromStructured(
     const subject = (s.subject || s.description || 'Voice complaint').slice(0, 120);
     const description = s.description || s.subject || '';
 
+    // Idempotent retry: if THIS call already produced a ticket in the SAME
+    // category, return that existing ticket instead of creating a duplicate.
+    // Found live 2026-07-18: the first attempt's success response can get
+    // lost mid-conversation (turn interrupted/cancelled), so the bot retries
+    // an already-created ticket — the retry should hand back the original
+    // ticket number, not mint a second ticket for the same issue. A retry
+    // with a DIFFERENT category is treated as a genuinely separate issue
+    // (the script explicitly supports multiple tickets per call).
+    if (s.callId && s.category) {
+      const [dup] = await db.withSuperAdmin(async (c) =>
+        (await c.query(
+          `SELECT t.id, t.ticket_number, vbc.id AS voice_call_id
+             FROM tickets t
+             JOIN voice_bot_calls vbc
+               ON vbc.provider = 'livekit' AND vbc.provider_call_id = $2 AND vbc.tenant_id = t.tenant_id
+            WHERE t.tenant_id = $1
+              AND t.custom_fields->>'call_id' = $2
+              AND t.custom_fields->>'category' = $3
+            LIMIT 1`,
+          [tenantId, s.callId, s.category],
+        )).rows);
+      if (dup) {
+        return { ticketId: dup.id, ticketNumber: dup.ticket_number, voiceCallId: dup.voice_call_id };
+      }
+    }
+
     // These five lookups/inserts are mutually independent — none needs
     // another's result — so run them concurrently instead of one at a time.
     // Each `db.withSuperAdmin` round-trips to a REMOTE (Supabase) database;
@@ -782,7 +808,7 @@ async function createComplaintFromStructured(
          // (tickets.ts POST /:id/accept). Now persists the actual computed type.
          ticketType,
          [s.category ?? 'other'],
-         JSON.stringify({ category: s.category, fraud_amount: s.fraudAmount, agent: 'nadia' })],
+         JSON.stringify({ category: s.category, fraud_amount: s.fraudAmount, agent: 'nadia', call_id: s.callId ?? null })],
       )).rows);
 
     await db.withSuperAdmin(async (c) => {
