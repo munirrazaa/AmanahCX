@@ -1913,41 +1913,6 @@ _Operational note: ran the solution locally — API on `:3000` (healthy) and fro
 
 ---
 
-## Change Log - 2026-07-20 (Push 2 — Critical: Cross-Tenant Voice Bot Identity Leak + Minutes Enforcement)
-
-### Fixed — Severity: Critical
-**Voice Bot was serving one real client's confidential script to every other tenant, across every sector**
-- Discovered live: Haier Electronics' voice bot introduced itself as "HBL Microfinance Bank's Complaint and
-  Resolution specialist" instead of representing Haier. Root cause: `services/nadia-voice-agent/src/config.py`
-  had a real client's (HBL Microfinance Bank) actual confidential complaint-handling script hardcoded as the
-  **default fallback** used whenever a tenant's own `system_prompt` was empty. A live audit of all 8 tenants
-  found every single one — every sector — was exposed to this same fallback; only Haier had a partial override,
-  and even that had gone missing (see below).
-- Fixed by removing the hardcoded fallback entirely. Any tenant without its own configured script now safely
-  falls back to a solid, brand-neutral base prompt (already existed in `build_system_prompt()`, just never
-  reached because the risky fallback took priority) — greets the caller, determines intent, and raises a
-  ticket, with no company-specific claims at all. HBL's own material stays in the codebase, clearly marked as
-  usable only for HBL's own tenant configuration, never as anyone else's default.
-- Also fixed the specific data gap that caused Haier to hit the fallback in the first place: its `system_prompt`
-  had gone missing despite a template being assigned (`source_template_id` was set, but the field itself was
-  empty) — re-ran the template assignment to properly populate it with the correct "Electronics Retail Support
-  & Sales" script, verified Haier now correctly represents itself.
-- Verified via direct simulation: a tenant with no configured script now produces a script with no company-name
-  claims and no HBL/Microfinance references at all, correctly using its own bot name throughout.
-
-**Voice Bot answered calls for tenants with zero allocated minutes, instead of routing to a human**
-- `GET /livekit/minutes-status` (`packages/api/src/routes/voice-bot.ts`) explicitly treated "no minutes quota
-  row at all" as *unlimited* access — a deliberate prior design choice, now reversed per product decision: the
-  Voice Bot must only be functional up to what's actually been allocated, and any tenant with nothing allocated
-  (or fully consumed) must have every call routed to a human, with no exception, for every tenant in every
-  sector. Verified live: a tenant with no quota row and a tenant with an explicit zero-minute allocation both
-  now correctly return `exhausted: true`, which the agent already uses to hand off to a human with an urgent
-  ticket raised first.
-- Files: `services/nadia-voice-agent/src/config.py`, `services/nadia-voice-agent/src/agent.py` (comment fix),
-  `services/nadia-voice-agent/src/prompts.py` (warning header added), `packages/api/src/routes/voice-bot.ts`.
-
----
-
 ## Change Log - 2026-07-20 (Sector Fields Backfilled, Full Dept/Queue Test Coverage, API Crash Resilience)
 
 ### Fixed

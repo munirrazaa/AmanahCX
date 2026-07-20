@@ -608,8 +608,8 @@ async def entrypoint(ctx: agents.JobContext) -> None:
             await session.generate_reply(instructions=f"Greet the caller with: {settings.greeting_message}")
         else:
             # No per-tenant override — follow the greeting already specified in
-            # the system prompt's "Call structure" step 1 (see prompts.py for
-            # HBL MFB's exact wording).
+            # the base system prompt's "Your job on every call" step 1
+            # (see config.py build_system_prompt).
             await session.generate_reply(instructions="Greet the caller now, following your instructions.")
         dbg("greeting dispatched")
     except Exception as e:

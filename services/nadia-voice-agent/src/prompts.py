@@ -1,4 +1,11 @@
 """
+⚠️ HBL Microfinance Bank's OWN confidential training material — only ever appropriate
+as HBL MFB's own tenant system_prompt, set explicitly for that tenant. NEVER wire this
+in as a fallback/default for any other tenant (it was, until 2026-07-20, and every
+tenant across every sector was serving it to callers as their own bot's script — see
+config.py's top-of-file note). Every other tenant should get its own generic or
+sector-appropriate template instead.
+
 HBL Microfinance Bank — Nadia (Complaint) training material.
 
 Adapted from the client's own prior Retell AI conversation-flow export

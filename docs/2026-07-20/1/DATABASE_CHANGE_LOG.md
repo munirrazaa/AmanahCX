@@ -3,18 +3,6 @@ _Most recent at top. Tracks structural and security-relevant changes to the live
 
 ---
 
-## 2026-07-20 (2) — Haier Electronics voice_bot_configs.system_prompt re-populated (no schema change)
-
-- **Data only, no schema change.** `voice_bot_configs.system_prompt` for Haier Electronics was empty despite
-  `source_template_id` already pointing at the "Electronics Retail Support & Sales" template — re-invoked the
-  existing template-assignment logic (`POST /agent-templates/:id/assign`) to properly populate it. Confirmed
-  correct via a direct query afterward.
-- Companion code fix (not a DB change): removed a hardcoded fallback that had been serving a real client's
-  (HBL Microfinance Bank) confidential script to any tenant with an empty `system_prompt` — this affected all
-  8 tenants, not just Haier. See `docs/CHANGE_LOG.md` 2026-07-20 (Push 2) for full detail.
-
----
-
 ## 2026-07-20 — Sector custom fields backfilled + full dept/queue test data (no schema change)
 
 - **No new migration** — `custom_field_definitions` already existed. 183 missing rows inserted across 7 tenants by re-running the existing sector-seeding logic against each tenant's current sector config (`ON CONFLICT DO NOTHING`, idempotent). Only Haier Electronics previously had its full sector field set; the sector config had been expanded since the other 7 tenants were created and nothing had ever backfilled them.

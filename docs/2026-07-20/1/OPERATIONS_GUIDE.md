@@ -7,24 +7,6 @@ Last updated: 2026-07-20
 
 ---
 
-## Voice Bot Was Speaking Another Client's Script — Fixed (2026-07-20)
-
-**Who this affects:** every workspace using the Voice Bot.
-
-**What was wrong:** if a workspace hadn't been given its own voice bot script yet, it fell back to a real
-client's actual confidential complaint-handling script instead of a safe, generic one — meaning the bot could
-introduce itself as a completely different business. This affected every workspace, not just one.
-
-**What's fixed:** every workspace without its own script now safely falls back to a general-purpose script that
-never claims to be any specific company. The one workspace found actually using the wrong script now has its
-own correct one.
-
-**Also fixed:** a workspace with no voice minutes allocated at all was still able to take calls with no limit.
-Now, no allocated minutes means the bot won't take the call at all — it's handed straight to a real person
-instead, with a ticket already raised so nothing is lost. This applies to every workspace, in every industry.
-
----
-
 ## Every Workspace Now Has Full Sector Fields, Sales/Support/Complaints Teams, and Working Ticket Routing (2026-07-20)
 
 **Who this affects:** anyone testing or demoing a workspace other than the main "demo" one.

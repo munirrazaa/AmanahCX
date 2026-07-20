@@ -8,7 +8,15 @@ Retell AI or Vapi dashboard, except here the CRM *is* the dashboard.
 from dataclasses import dataclass, field
 
 from crm_client import get_client
-from prompts import HBL_MFB_SYSTEM_PROMPT
+# NOTE: prompts.HBL_MFB_SYSTEM_PROMPT is one real client's (HBL Microfinance
+# Bank) actual confidential training material. It must NEVER be used as a
+# default/fallback for any tenant other than that one — it was previously
+# wired in as the system-wide fallback when a tenant's own system_prompt was
+# empty, which meant every tenant without their own configured prompt (found
+# 2026-07-20: this was ALL 8 tenants, across every sector) had their Voice
+# Bot introduce itself using another real client's bank-complaint script.
+# The generic base prompt built in build_system_prompt() below is safe and
+# brand-neutral on its own — nothing needs to be appended to it by default.
 
 
 @dataclass
@@ -36,7 +44,8 @@ class AgentSettings:
         default_factory=lambda: ["اللہ حافظ", "خدا حافظ", "شکریہ، اللہ حافظ"]
     )
     greeting_message: str | None = None
-    system_prompt: str | None = HBL_MFB_SYSTEM_PROMPT   # client's training material, see prompts.py
+    system_prompt: str | None = None   # per-tenant supplementary material, layered on top of the
+                                        # generic base prompt below — safe to leave empty
     guardrails: str | None = None                        # hard behavioral limits, kept separate from
                                                           # system_prompt so the LLM treats it as a
                                                           # strict boundary, not general guidance
@@ -78,7 +87,7 @@ async def load_settings(tenant_id: str) -> AgentSettings:
         max_call_duration_sec=int(cfg.get("max_call_duration_sec") or 600),
         end_call_phrases=cfg.get("end_call_phrases") or ["اللہ حافظ", "خدا حافظ", "شکریہ، اللہ حافظ"],
         greeting_message=cfg.get("greeting_message"),
-        system_prompt=cfg.get("system_prompt") or HBL_MFB_SYSTEM_PROMPT,
+        system_prompt=cfg.get("system_prompt"),
         guardrails=cfg.get("guardrails"),
         recording_enabled=bool(cfg.get("recording_enabled")),
         default_queue_id=cfg.get("default_queue_id"),

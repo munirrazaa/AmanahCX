@@ -2231,11 +2231,14 @@ export function voiceBotRoutes(db: DatabaseClient, eventBus: EventBus) {
 
       const [quota] = await db.withSuperAdmin(async (c) =>
         (await c.query(`SELECT minutes_allocated FROM voice_bot_quotas WHERE tenant_id = $1`, [tenantId])).rows);
-      // No quota row at all = no allocation configured yet — treat as
-      // unlimited (matches today's behaviour before this feature existed)
-      // rather than silently blocking every tenant that hasn't been
-      // allocated minutes.
-      if (!quota) return reply.send({ success: true, exhausted: false, remainingMinutes: null });
+      // No quota row at all = no minutes have ever been allocated to this
+      // tenant — treat as exhausted (zero available), not unlimited. The
+      // voice bot must only be functional up to what's actually allocated;
+      // with nothing allocated, every call hands off to a human. Reversed
+      // 2026-07-20 — the previous "no row = unlimited" behaviour meant any
+      // tenant a platform admin hadn't gotten around to allocating minutes
+      // for got a fully working bot anyway, for every sector.
+      if (!quota) return reply.send({ success: true, exhausted: true, remainingMinutes: 0 });
 
       const [consumed] = await db.withSuperAdmin(async (c) =>
         (await c.query(`SELECT COALESCE(SUM(duration_seconds), 0) AS total_seconds FROM voice_bot_calls WHERE tenant_id = $1`, [tenantId])).rows);
