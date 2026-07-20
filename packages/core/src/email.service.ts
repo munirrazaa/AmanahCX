@@ -11,7 +11,7 @@
  *  • SendGrid — v3 Mail Send REST API via native fetch (no SDK needed)
  */
 
-import type { DatabaseClient } from './database';
+import type { DatabaseClient } from './database/client';
 import { logger } from './config/logger';
 
 // ── Types ─────────────────────────────────────────────────────────────────

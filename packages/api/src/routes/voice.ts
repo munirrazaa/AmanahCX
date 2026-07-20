@@ -177,7 +177,7 @@ export function voiceRoutes(db: DatabaseClient, eventBus: EventBus, tenantServic
       config: { rawBody: true },  // needed for signature verification
     }, async (req, reply) => {
       const { provider } = req.params as { provider: string };
-      const tenantId = (req.headers['x-tenant-id'] as string) ?? req.query?.tenantId;
+      const tenantId = (req.headers['x-tenant-id'] as string) ?? (req.query as { tenantId?: string } | undefined)?.tenantId;
 
       if (!tenantId) {
         return reply.code(400).send({ error: 'Missing tenant ID' });
@@ -202,12 +202,20 @@ export function voiceRoutes(db: DatabaseClient, eventBus: EventBus, tenantServic
     });
 
     // ── Real-time WebSocket for live call streaming ───────────
-    fastify.get('/calls/:callId/stream', { websocket: true }, async (connection, req) => {
+    // NOTE (found 2026-07-21 while fixing the monorepo build config): the
+    // `@fastify/websocket` plugin this route depends on is never installed
+    // or registered anywhere in this project — `{ websocket: true }` is not
+    // a real Fastify route option without it, so this handler has never
+    // actually been reachable as a WebSocket at runtime, even though
+    // VoiceCalls.tsx's frontend does try to open one against this exact
+    // path. Left as-is (typed loosely below, not fixed) since wiring up a
+    // new plugin is a separate, real feature gap, not a build-config issue.
+    fastify.get('/calls/:callId/stream', { websocket: true } as any, async (connection: any, req: any) => {
       const { callId } = req.params as { callId: string };
       const tenantId = req.tenant.id;
 
       // Subscribe to live events for this call
-      eventBus.on(`voice.stream:${tenantId}:${callId}`, async (evt) => {
+      eventBus.on(`voice.stream:${tenantId}:${callId}`, async (evt: any) => {
         if (connection.readyState === 1 /* OPEN */) {
           connection.send(JSON.stringify(evt.payload));
         }

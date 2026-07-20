@@ -15,7 +15,7 @@
  * The "http_sms" connector is a generic adapter for all of them.
  */
 
-import type { DatabaseClient } from './database';
+import type { DatabaseClient } from './database/client';
 import { logger } from './config/logger';
 
 // ── Types ──────────────────────────────────────────────────────────────────

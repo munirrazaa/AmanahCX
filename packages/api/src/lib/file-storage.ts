@@ -66,6 +66,8 @@ function localStorage(rootDir: string): FileStorage {
 function s3Storage(bucket: string): FileStorage {
   return {
     async save(stream, originalName, folder) {
+      // @ts-expect-error — @aws-sdk/client-s3 is an optional runtime dependency,
+      // only installed when STORAGE_BACKEND=s3 (see comment above s3Storage()).
       const { S3Client, PutObjectCommand } = await import('@aws-sdk/client-s3');
       const ext = originalName.split('.').pop() ?? 'bin';
       const key = `${folder}/${randomUUID()}.${ext}`;
@@ -87,6 +89,7 @@ function s3Storage(bucket: string): FileStorage {
     },
 
     async load(key) {
+      // @ts-expect-error — optional runtime dependency, see s3Storage() comment.
       const { S3Client, GetObjectCommand } = await import('@aws-sdk/client-s3');
       const client = buildS3Client();
       const resp = await client.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
@@ -96,6 +99,7 @@ function s3Storage(bucket: string): FileStorage {
     },
 
     async remove(key) {
+      // @ts-expect-error — optional runtime dependency, see s3Storage() comment.
       const { S3Client, DeleteObjectCommand } = await import('@aws-sdk/client-s3');
       const client = buildS3Client();
       await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));

@@ -64,12 +64,11 @@ export function emailRoutes(db: DatabaseClient, eventBus: EventBus) {
 
       const result = await emailSvc.send(req.tenant.id, {
         ...body,
-        sentBy: req.user.id,
+        sentBy: req.user.sub,
       });
 
       if (result.status === 'delivered') {
-        eventBus.publish(CRM_EVENTS.ACTIVITY_CREATED, {
-          tenantId: req.tenant.id,
+        eventBus.publish(req.tenant.id, CRM_EVENTS.ACTIVITY_CREATED, {
           type: 'email',
           emailId: result.emailId,
         }).catch(() => {});
@@ -190,7 +189,7 @@ export function emailRoutes(db: DatabaseClient, eventBus: EventBus) {
         contactId: email.contact_id,
         dealId: email.deal_id,
         ticketId: email.ticket_id,
-        sentBy: req.user.id,
+        sentBy: req.user.sub,
       });
 
       return reply.send({ success: result.status === 'delivered', data: result });
@@ -228,7 +227,7 @@ export function emailRoutes(db: DatabaseClient, eventBus: EventBus) {
         const r = await client.query(
           `INSERT INTO email_templates (tenant_id, name, subject, body_html, body_text, category, created_by)
            VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
-          [req.tenant.id, body.name, body.subject, body.bodyHtml, body.bodyText ?? null, body.category, req.user.id],
+          [req.tenant.id, body.name, body.subject, body.bodyHtml, body.bodyText ?? null, body.category, req.user.sub],
         );
         return r.rows;
       });

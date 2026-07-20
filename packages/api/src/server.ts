@@ -370,7 +370,7 @@ async function buildServer() {
   await fastify.register(attachmentRoutes(db), { prefix: '/api/v1/attachments' });
   await fastify.register(superAdminRoutes(db, tenantService), { prefix: '/super-admin' });
   await fastify.register(companyRoutes(db, eventBus), { prefix: '/api/v1/companies' });
-  await fastify.register(settingsRoutes(db), { prefix: '/api/v1/settings' });
+  await fastify.register(settingsRoutes(db, redis), { prefix: '/api/v1/settings' });
   await fastify.register(billingRoutes(db, eventBus), { prefix: '/api/v1/billing' });
   await fastify.register(modulesRoute(moduleRegistry), { prefix: '/api/v1/modules' });
   await fastify.register(connectorRoutes(db), { prefix: '/api/v1/connectors' });

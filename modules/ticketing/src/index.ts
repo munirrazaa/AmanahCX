@@ -11,13 +11,20 @@
 
 import type { FastifyInstance } from 'fastify';
 import type { PlatformModule, ModuleContext } from '@crm/shared';
+import type { DatabaseClient, EventBus } from '@crm/core';
 import { logger, EmailService } from '@crm/core';
 
 const SLA_WORKER_INTERVAL_MS = 5 * 60 * 1000; // every 5 minutes
 
 // ── Inline SLA worker (no circular deps) ──────────────────────────────────
+// ModuleContext.db/.eventBus are typed `unknown` in @crm/shared to keep that
+// package from depending on @crm/core's concrete classes (which would create
+// a circular package dependency, since core already depends on shared). This
+// module already depends on core directly (see EmailService import above),
+// so it's safe to narrow them to their real types locally.
 async function runSlaWorker(ctx: ModuleContext): Promise<void> {
-  const { db, eventBus } = ctx;
+  const db = ctx.db as DatabaseClient;
+  const eventBus = ctx.eventBus as EventBus;
   const emailSvc = new EmailService(db);
   try {
     const activeTickets = await db.withSuperAdmin(async (client) => {

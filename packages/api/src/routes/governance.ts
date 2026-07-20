@@ -24,6 +24,48 @@ import type { FastifyInstance } from 'fastify';
 import type { DatabaseClient } from '@crm/core';
 import { MODULE_CATALOG } from './super-admin';
 
+// Row shapes matching migrations/042_governance_orders.sql — used as db.query<T>
+// generic args below so column access type-checks instead of falling back to '{}'.
+interface RetentionPolicyRow {
+  id: number;
+  tenant_id: string;
+  policy_name: string;
+  retention_days: number;
+  legal_basis: string;
+  processing_purpose: string;
+  data_categories: string[];
+  third_party_transfers: boolean;
+  third_parties: string | null;
+  policy_status: 'draft' | 'published';
+  published_at: string | null;
+  published_by: string | null;
+  expires_at: string | null;
+  last_warned_at: string | null;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+interface TenantOrderRow {
+  id: number;
+  tenant_id: string;
+  order_type: 'storage_extension' | 'new_module' | 'feature_request' | 'plan_upgrade';
+  status: 'pending' | 'under_review' | 'approved' | 'rejected' | 'cancelled';
+  requested_module: string | null;
+  requested_features: string[] | null;
+  requested_days: number | null;
+  description: string;
+  quoted_amount: number | null;
+  currency: string | null;
+  payment_confirmed: boolean;
+  payment_ref: string | null;
+  admin_note: string | null;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  requested_by: string;
+  requested_at: string;
+}
+
 // ── helpers ───────────────────────────────────────────────────────────────────
 
 async function sendSystemEmail(opts: {
@@ -105,7 +147,7 @@ export function governanceRoutes(db: DatabaseClient) {
     // ══════════════════════════════════════════════════════════════════════
 
     fastify.get('/retention-policies', async (req, reply) => {
-      const rows = await db.query(
+      const rows = await db.query<RetentionPolicyRow & { created_by_name: string | null; published_by_name: string | null }>(
         `SELECT rrp.*, u.name AS created_by_name, p.name AS published_by_name
          FROM recording_retention_policies rrp
          LEFT JOIN users u ON u.id = rrp.created_by
@@ -120,7 +162,7 @@ export function governanceRoutes(db: DatabaseClient) {
     fastify.post('/retention-policies', async (req, reply) => {
       if (!isPolicyAdmin(req)) return reply.status(403).send({ error: 'Policy admin or above required' });
       const b = req.body as any;
-      const rows = await db.query(
+      const rows = await db.query<RetentionPolicyRow>(
         `INSERT INTO recording_retention_policies
            (tenant_id, policy_name, retention_days, legal_basis, processing_purpose,
             data_categories, third_party_transfers, third_parties, created_by)
@@ -147,7 +189,7 @@ export function governanceRoutes(db: DatabaseClient) {
       const b = req.body as any;
 
       // Block edits on published policies — must unpublish first
-      const existing = await db.query(
+      const existing = await db.query<Pick<RetentionPolicyRow, 'policy_status'>>(
         `SELECT policy_status FROM recording_retention_policies WHERE id = $1 AND tenant_id = $2`,
         [id, tenantId(req)],
       );
@@ -156,7 +198,7 @@ export function governanceRoutes(db: DatabaseClient) {
         return reply.status(409).send({ error: 'Cannot edit a published policy. Unpublish it first.' });
       }
 
-      const rows = await db.query(
+      const rows = await db.query<RetentionPolicyRow>(
         `UPDATE recording_retention_policies SET
            policy_name          = COALESCE($1, policy_name),
            retention_days       = COALESCE($2, retention_days),
@@ -186,7 +228,7 @@ export function governanceRoutes(db: DatabaseClient) {
     fastify.patch('/retention-policies/:id/publish', async (req, reply) => {
       if (!isPolicyAdmin(req)) return reply.status(403).send({ error: 'Policy admin or above required' });
       const { id } = req.params as any;
-      const rows = await db.query(
+      const rows = await db.query<RetentionPolicyRow>(
         `SELECT * FROM recording_retention_policies WHERE id = $1 AND tenant_id = $2`,
         [id, tenantId(req)],
       );
@@ -196,7 +238,7 @@ export function governanceRoutes(db: DatabaseClient) {
       const expiresAt = nowPublished
         ? new Date(Date.now() + p.retention_days * 24 * 60 * 60 * 1000).toISOString()
         : null;
-      const updated = await db.query(
+      const updated = await db.query<RetentionPolicyRow>(
         `UPDATE recording_retention_policies SET
            policy_status = $1, published_at = $2, published_by = $3,
            expires_at = $4, updated_at = NOW()
@@ -216,7 +258,7 @@ export function governanceRoutes(db: DatabaseClient) {
     fastify.delete('/retention-policies/:id', async (req, reply) => {
       if (!isTenantAdmin(req)) return reply.status(403).send({ error: 'Tenant admin required' });
       const { id } = req.params as any;
-      const rows = await db.query(
+      const rows = await db.query<Pick<RetentionPolicyRow, 'policy_status'>>(
         `SELECT policy_status FROM recording_retention_policies WHERE id = $1 AND tenant_id = $2`,
         [id, tenantId(req)],
       );
@@ -278,7 +320,7 @@ export function governanceRoutes(db: DatabaseClient) {
       if (!b.order_type || !b.description) {
         return reply.status(400).send({ error: 'order_type and description are required' });
       }
-      const rows = await db.query(
+      const rows = await db.query<TenantOrderRow>(
         `INSERT INTO tenant_orders
            (tenant_id, order_type, description, requested_module, requested_features,
             requested_days, requested_by)
@@ -325,7 +367,7 @@ export function governanceRoutes(db: DatabaseClient) {
       if (!isSuperAdmin(req)) return reply.status(403).send({ error: 'Super admin only' });
       const { id } = req.params as any;
       const b = req.body as any;
-      const rows = await db.query(
+      const rows = await db.query<TenantOrderRow & { tenant_name: string | null }>(
         `UPDATE tenant_orders SET
            status = 'under_review', quoted_amount = $1, currency = COALESCE($2, currency),
            admin_note = $3, reviewed_by = $4, reviewed_at = NOW(), updated_at = NOW()
@@ -343,7 +385,7 @@ export function governanceRoutes(db: DatabaseClient) {
       const { id } = req.params as any;
       const b = req.body as any;
       // Fetch order + tenant
-      const orderRows = await db.query(
+      const orderRows = await db.query<TenantOrderRow & { entitled_features: string[]; active_modules: string[] }>(
         `SELECT o.*, t.entitled_features, t.active_modules
          FROM tenant_orders o
          JOIN tenants t ON t.id = o.tenant_id
@@ -431,7 +473,7 @@ export function governanceRoutes(db: DatabaseClient) {
       if (!isSuperAdmin(req)) return reply.status(403).send({ error: 'Super admin only' });
       const { id } = req.params as any;
       const b = req.body as any;
-      const rows = await db.query(
+      const rows = await db.query<TenantOrderRow & { req_by: string | null }>(
         `UPDATE tenant_orders SET
            status = 'rejected', admin_note = $1, reviewed_by = $2,
            reviewed_at = NOW(), updated_at = NOW()
@@ -467,7 +509,7 @@ export function governanceRoutes(db: DatabaseClient) {
     fastify.patch('/orders/:id/cancel', async (req, reply) => {
       if (!isTenantAdmin(req)) return reply.status(403).send({ error: 'Tenant admin required' });
       const { id } = req.params as any;
-      const rows = await db.query(
+      const rows = await db.query<TenantOrderRow>(
         `UPDATE tenant_orders SET status = 'cancelled', updated_at = NOW()
          WHERE id = $1 AND tenant_id = $2 AND status = 'pending'
          RETURNING *`,

@@ -39,6 +39,7 @@ export interface NormalizedPaymentEvent {
   amount: number;
   currency: Currency;
   fee?: number;
+  net?: number;
   metadata?: Record<string, unknown>;
 }
 

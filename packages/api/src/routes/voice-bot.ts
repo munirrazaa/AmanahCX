@@ -33,7 +33,12 @@ import type { DatabaseClient, EventBus } from '@crm/core';
 import { CRM_EVENTS } from '@crm/core';
 import { requireScope, requireRole, requireEntitlement } from '../middlewares/auth.middleware';
 import { AccessToken, AgentDispatchClient } from 'livekit-server-sdk';
-import pdfParse from 'pdf-parse';
+// pdf-parse's own type declarations expose its CJS module namespace as the
+// default export's type rather than a callable function signature — a
+// package-authored type declaration bug, not a real runtime issue (it is
+// genuinely callable at runtime under esModuleInterop). Cast once here.
+import pdfParseImport from 'pdf-parse';
+const pdfParse = pdfParseImport as unknown as (data: Buffer) => Promise<{ text: string }>;
 import mammoth from 'mammoth';
 
 // ── Default IVR menu ─────────────────────────────────────────────────────
@@ -139,13 +144,14 @@ interface NormalisedCall {
 
 function normaliseVapi(body: Record<string, unknown>): NormalisedCall | null {
   // Vapi sends a top-level "type" field; we care about "end-of-call-report"
-  const type   = (body.type ?? body.message?.type ?? '') as string;
-  const call   = (body.call ?? body.message?.call ?? body) as any;
-  const analysis = (body.analysis ?? body.message?.analysis ?? {}) as any;
+  const message = body.message as any;
+  const type   = (body.type ?? message?.type ?? '') as string;
+  const call   = (body.call ?? message?.call ?? body) as any;
+  const analysis = (body.analysis ?? message?.analysis ?? {}) as any;
 
   if (!['end-of-call-report', 'call-ended', 'call.ended'].includes(type) && !call?.id) return null;
 
-  const transcript = (body.transcript ?? body.message?.transcript ?? call?.transcript ?? '') as string;
+  const transcript = (body.transcript ?? message?.transcript ?? call?.transcript ?? '') as string;
   const summary    = (analysis?.summary ?? call?.summary ?? '') as string;
 
   return {
@@ -206,8 +212,8 @@ function normaliseBland(body: Record<string, unknown>): NormalisedCall | null {
     transcript,
     summary: summary || transcript.slice(0, 500),
     recordingUrl: (body.recording_url) as string | undefined,
-    extractedName:  (body.variables?.customer_name ?? body.metadata?.customer_name) as string | undefined,
-    extractedEmail: (body.variables?.customer_email ?? body.metadata?.customer_email) as string | undefined,
+    extractedName:  ((body.variables as any)?.customer_name ?? (body.metadata as any)?.customer_name) as string | undefined,
+    extractedEmail: ((body.variables as any)?.customer_email ?? (body.metadata as any)?.customer_email) as string | undefined,
     startedAt: body.start_time ? new Date(body.start_time as string) : undefined,
     endedAt:   body.end_time   ? new Date(body.end_time   as string) : undefined,
     rawPayload: body,
@@ -1647,7 +1653,7 @@ export function voiceBotRoutes(db: DatabaseClient, eventBus: EventBus) {
         transcript:          body.transcript,
         summary:             body.summary,
         extractedName:       'Test Caller',
-        extractedEmail:      null,
+        extractedEmail:      undefined,
         startedAt:           new Date(Date.now() - 60000),
         endedAt:             new Date(),
         rawPayload:          { test: true, provider: body.provider },

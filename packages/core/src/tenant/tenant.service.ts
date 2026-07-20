@@ -43,15 +43,6 @@ export class TenantService {
     return tenant;
   }
 
-  // Bust the 5-minute cache for a tenant immediately after any direct
-  // (non-service-method) write to the tenants row — e.g. super-admin
-  // settings patches — so the change takes effect on the very next
-  // request instead of silently waiting out the TTL.
-  async invalidateCache(id: string, slug?: string): Promise<void> {
-    await this.redis.del(`tenant:${id}`);
-    if (slug) await this.redis.del(`tenant:slug:${slug}`);
-  }
-
   async findById(id: string): Promise<Tenant | null> {
     const cacheKey = `tenant:${id}`;
     const cached = await this.redis.get(cacheKey);
@@ -145,7 +136,9 @@ export class TenantService {
     // through updatePlan()) have no settings.limits — fall back to their plan's
     // defaults instead of crashing. Root-caused 2026-07-17: 7 of 8 remaining
     // tenants had no settings.limits, breaking outbound voice calling for all of them.
-    const limits = (tenant.settings.limits as Record<string, number>) ?? PLAN_LIMITS[tenant.plan as Plan] ?? PLAN_LIMITS.free;
+    const limits = (tenant.settings.limits as unknown as Record<string, number>)
+      ?? (PLAN_LIMITS[tenant.plan as Plan] as unknown as Record<string, number>)
+      ?? (PLAN_LIMITS.free as unknown as Record<string, number>);
     const limit = limits[metric] ?? 0;
     if (limit === -1) return { allowed: true, current: 0, limit: -1 }; // unlimited
 
@@ -186,7 +179,13 @@ export class TenantService {
     return this.invalidateCache(tenantId);
   }
 
-  private async invalidateCache(tenantId: string): Promise<void> {
+  // Bust every cache key for a tenant immediately after any direct
+  // (non-service-method) write to the tenants row — e.g. super-admin
+  // settings patches — so the change takes effect on the very next
+  // request instead of silently waiting out the TTL. Looks the tenant up
+  // first so it can bust its slug and custom-domain keys too, not just
+  // the id-keyed one.
+  async invalidateCache(tenantId: string): Promise<void> {
     const tenant = await this.findById(tenantId);
     if (!tenant) return;
     await Promise.all([

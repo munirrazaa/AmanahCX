@@ -6,7 +6,12 @@ import { getSector } from '@crm/shared';
 import { requireRole, requirePlatformPermission } from '../middlewares/auth.middleware';
 import { defaultPermissions } from './roles';
 import { ensureDefaultPipeline } from '../lib/default-pipeline';
-import pdfParse from 'pdf-parse';
+// pdf-parse's own type declarations expose its CJS module namespace as the
+// default export's type rather than a callable function signature — a
+// package-authored type declaration bug, not a real runtime issue (it is
+// genuinely callable at runtime under esModuleInterop). Cast once here.
+import pdfParseImport from 'pdf-parse';
+const pdfParse = pdfParseImport as unknown as (data: Buffer) => Promise<{ text: string }>;
 import mammoth from 'mammoth';
 
 // The four standard roles auto-seeded into every new workspace. Their default

@@ -416,7 +416,7 @@ export function invoiceRoutes(db: DatabaseClient) {
         subject,
         bodyHtml,
         bodyText,
-        sentBy: req.user.id,
+        sentBy: req.user.sub,
       });
 
       // Update invoice status to 'sent' if it was still a draft

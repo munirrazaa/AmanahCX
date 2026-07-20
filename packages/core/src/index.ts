@@ -1,5 +1,6 @@
 export { DatabaseClient } from './database/client';
 export { EventBus, CRM_EVENTS } from './events/event-bus';
+export type { CRMEvent } from './events/event-bus';
 export { ModuleRegistry } from './modules/module-registry';
 export { TenantService } from './tenant/tenant.service';
 export { logger } from './config/logger';

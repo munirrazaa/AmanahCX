@@ -4,9 +4,22 @@ import { DatabaseClient, RedisClient } from '@crm/core';
 import crypto from 'node:crypto';
 import { isTokenRevoked, getUserRevokedAt } from '../routes/auth';
 
+// @fastify/jwt already declares FastifyRequest.user itself (typed via its own
+// FastifyJWT.user extension point) — redeclaring it directly on FastifyRequest
+// here conflicted with that declaration (TS2717: "Subsequent property
+// declarations must have the same type"), which meant req.user silently fell
+// back to @fastify/jwt's untyped default (string | object | Buffer) everywhere
+// in the app, masking real typos for years since nothing else in this tsconfig
+// ever compiled far enough to surface it. Augmenting FastifyJWT.user instead is
+// the documented pattern and lets UserType resolve to AuthToken correctly.
+declare module '@fastify/jwt' {
+  interface FastifyJWT {
+    user: AuthToken;
+  }
+}
+
 declare module 'fastify' {
   interface FastifyRequest {
-    user: AuthToken;
     apiKey?: { id: string; scopes: ApiScope[] };
   }
 }
@@ -266,7 +279,7 @@ export function requirePlatformPermission(key: string) {
 // Feature flag guard
 export function requireFeature(feature: keyof import('@crm/shared').FeatureFlags) {
   return async (req: FastifyRequest, reply: FastifyReply): Promise<void> => {
-    const flags = req.tenant?.settings?.features as Record<string, boolean>;
+    const flags = req.tenant?.settings?.features as unknown as Record<string, boolean>;
     if (!flags?.[feature]) {
       return reply.code(402).send({
         success: false,
