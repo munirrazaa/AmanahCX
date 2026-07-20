@@ -487,13 +487,29 @@ async def entrypoint(ctx: agents.JobContext) -> None:
             itself fails, falls back to the original behaviour: apologise and
             end the call, relying on the ticket for the follow-up.
             """
+            # The caller's number, when this is a real SIP call — so the
+            # follow-up team knows who to call back. Browser test calls have
+            # no number (that's why those tickets show an anonymous "Caller").
+            caller_phone = None
+            try:
+                attrs = getattr(caller_participant, "attributes", None) or {}
+                caller_phone = attrs.get("sip.phoneNumber") or attrs.get("sip.trunkPhoneNumber") or None
+            except Exception:
+                caller_phone = None
+
             try:
                 await get_client().create_ticket(
                     tenant_id, call_id,
                     {
                         "priority": "urgent",
-                        "category": "other",
+                        # 'inquiry' on purpose: nobody knows yet whether the
+                        # caller had a complaint, a sales need or a question —
+                        # undecided cases belong with the Support/Inquiry team
+                        # (product decision 2026-07-20), not Complaints, which
+                        # is where the old 'other' category keyword-defaulted.
+                        "category": "inquiry",
                         "subject": subject,
+                        "reporterPhone": caller_phone,
                         "description": (
                             description + "\n\nConversation so far:\n" + "\n".join(transcript_parts)
                             if transcript_parts else description
