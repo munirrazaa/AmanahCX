@@ -70,6 +70,21 @@ import { startWebhookDispatcher } from './lib/webhook-dispatcher';
 import { startAnalyticsRefreshWorker } from './lib/analytics-refresh-worker';
 import { startRetentionExpiryWorker } from './lib/retention-expiry-worker';
 
+// A transient socket error on a checked-out pg connection (e.g. a Supabase pooler
+// blip) surfaces as an 'error' event on the raw pg Client that isn't always
+// caught by the query's own promise rejection — Node's default behavior for an
+// unhandled EventEmitter 'error' is to crash the entire process. `pool.on('error')`
+// in DatabaseClient only covers clients sitting IDLE in the pool, not ones mid-query,
+// so a single flaky read/write can take down the whole API. Log and keep running —
+// the in-flight request will fail with a normal 500/timeout instead of killing every
+// other in-flight request too.
+process.on('uncaughtException', (err) => {
+  logger.error('Uncaught exception — server continuing', { error: err.message, stack: err.stack });
+});
+process.on('unhandledRejection', (reason) => {
+  logger.error('Unhandled rejection — server continuing', { reason: reason instanceof Error ? reason.message : String(reason) });
+});
+
 async function buildServer() {
   const fastify = Fastify({
     logger: false, // We use winston
