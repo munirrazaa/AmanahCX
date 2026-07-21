@@ -21,7 +21,7 @@ const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
 
 // ── Profile ──────────────────────────────────────────────────────────────────
 
-function ProfileSettings() {
+export function ProfileSettings() {
   const { user } = useAuthStore();
   const qc = useQueryClient();
   const [name, setName]   = useState(user?.name ?? '');
@@ -89,7 +89,7 @@ function ProfileSettings() {
 
 // ── Appearance ────────────────────────────────────────────────────────────────
 
-function AppearanceSettings() {
+export function AppearanceSettings() {
   const {
     theme, setTheme, density, setDensity,
     fontFamily, setFontFamily, fontSize, setFontSize,
@@ -246,7 +246,7 @@ const NOTIFICATION_DEFAULTS = {
   weeklyReport: true, monthlyReport: false, systemAlerts: true,
 };
 
-function NotificationSettings() {
+export function NotificationSettings() {
   const { data: saved, isLoading } = useQuery<{ personal?: typeof NOTIFICATION_DEFAULTS }>({
     queryKey: ['notification-preferences'],
     queryFn: async () => (await api.get('/api/v1/settings/notification-preferences')).data.data,
@@ -333,7 +333,7 @@ function relativeTime(iso: string): string {
   return `${Math.floor(hrs / 24)}d ago`;
 }
 
-function SecuritySettings() {
+export function SecuritySettings() {
   const isSuperAdmin = useIsSuperAdmin();
   const { logout } = useAuthStore();
   const qc = useQueryClient();

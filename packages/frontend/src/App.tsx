@@ -31,7 +31,6 @@ import { VoiceAnalytics }   from './pages/VoiceAnalytics';
 import { Tickets }          from './pages/Tickets';
 import { TicketQueues }     from './pages/TicketQueues';
 import { Wallboard }        from './pages/Wallboard';
-import { TicketSla }        from './pages/TicketSla';
 import { Emails }           from './pages/Emails';
 import { VoiceBotConfig }  from './pages/VoiceBotConfig';
 import { VoiceBotCalls }   from './pages/VoiceBotCalls';
@@ -63,7 +62,7 @@ import { EmailAnalytics }    from './pages/EmailAnalytics';
 import { IntegrationHealth } from './pages/IntegrationHealth';
 import { TeamMessaging }     from './pages/TeamMessaging';
 import CsatSurvey            from './pages/CsatSurvey';
-import { GovernancePage }    from './pages/Governance';
+import { GovernanceHub }    from './pages/Governance';
 import { OrdersPage }        from './pages/Orders';
 import { CustomFieldsPage }  from './pages/CustomFields';
 
@@ -310,6 +309,14 @@ function Sidebar() {
                 style={({ isActive }) => isActive ? { background: 'linear-gradient(135deg, rgba(41,171,226,0.25) 0%, rgba(77,139,60,0.15) 100%)', borderLeft: '2px solid #29ABE2' } : {}}
               ><Bot className="w-4 h-4 shrink-0" />Voice Bot</NavLink>
             )}
+            {/* Sales Demo — typed conversation demo for prospects, admin-only,
+                separate from the real Voice Bot call widget above. */}
+            {isSuperAdmin && (
+              <NavLink to="/sales-demo"
+                className={({ isActive }) => `flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm transition-all ${isActive ? 'text-white font-semibold' : 'text-white/60 hover:text-white hover:bg-white/10'}`}
+                style={({ isActive }) => isActive ? { background: 'linear-gradient(135deg, rgba(41,171,226,0.25) 0%, rgba(77,139,60,0.15) 100%)', borderLeft: '2px solid #29ABE2' } : {}}
+              ><Bot className="w-4 h-4 shrink-0" />Sales Demo</NavLink>
+            )}
             <NavLink to="/settings"
               end
               className={({ isActive }) => `flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm transition-all ${isActive ? 'text-white font-semibold' : 'text-white/60 hover:text-white hover:bg-white/10'}`}
@@ -318,7 +325,7 @@ function Sidebar() {
             <NavLink to="/admin/routing"
               className={({ isActive }) => `flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm transition-all ${isActive ? 'text-white font-semibold' : 'text-white/60 hover:text-white hover:bg-white/10'}`}
               style={({ isActive }) => isActive ? { background: 'linear-gradient(135deg, rgba(41,171,226,0.25) 0%, rgba(77,139,60,0.15) 100%)', borderLeft: '2px solid #29ABE2' } : {}}
-            ><Clock className="w-4 h-4 shrink-0" />Routing & SLA</NavLink>
+            ><Clock className="w-4 h-4 shrink-0" />Routing</NavLink>
             <NavLink to="/admin/custom-fields"
               className={({ isActive }) => `flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm transition-all ${isActive ? 'text-white font-semibold' : 'text-white/60 hover:text-white hover:bg-white/10'}`}
               style={({ isActive }) => isActive ? { background: 'linear-gradient(135deg, rgba(41,171,226,0.25) 0%, rgba(77,139,60,0.15) 100%)', borderLeft: '2px solid #29ABE2' } : {}}
@@ -328,27 +335,23 @@ function Sidebar() {
               style={({ isActive }) => isActive ? { background: 'linear-gradient(135deg, rgba(41,171,226,0.25) 0%, rgba(77,139,60,0.15) 100%)', borderLeft: '2px solid #29ABE2' } : {}}
             ><LifeBuoy className="w-4 h-4 shrink-0" />Tickets</NavLink>
 
-            {/* Governance & Orders section */}
-            <p className="px-3 pt-3 pb-1 text-[10px] font-bold text-brand-300/60 uppercase tracking-widest">Governance</p>
-            <NavLink to="/governance"
-              className={({ isActive }) => `flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm transition-all ${isActive ? 'text-white font-semibold' : 'text-white/60 hover:text-white hover:bg-white/10'}`}
-              style={({ isActive }) => isActive ? { background: 'linear-gradient(135deg, rgba(41,171,226,0.25) 0%, rgba(77,139,60,0.15) 100%)', borderLeft: '2px solid #29ABE2' } : {}}
-            ><BookOpen className="w-4 h-4 shrink-0" />Data & Privacy Policies</NavLink>
+            {/* Data & Privacy Policies, SLA Policies, and Milestones consolidated
+                into one "Governance" hub/link 2026-07-21 (see the
+                (isPolicyAdmin || isTenantAdmin || isManager) NavLink further down
+                in this sidebar) — no separate tenant-admin-only entry needed here
+                since that broader condition already includes tenant_admin. */}
+            <p className="px-3 pt-3 pb-1 text-[10px] font-bold text-brand-300/60 uppercase tracking-widest">Orders</p>
             <NavLink to="/orders"
               className={({ isActive }) => `flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm transition-all ${isActive ? 'text-white font-semibold' : 'text-white/60 hover:text-white hover:bg-white/10'}`}
               style={({ isActive }) => isActive ? { background: 'linear-gradient(135deg, rgba(41,171,226,0.25) 0%, rgba(77,139,60,0.15) 100%)', borderLeft: '2px solid #29ABE2' } : {}}
             ><ShoppingCart className="w-4 h-4 shrink-0" />Orders & Upgrades</NavLink>
 
-            {/* Security section */}
-            <p className="px-3 pt-3 pb-1 text-[10px] font-bold text-brand-300/60 uppercase tracking-widest">Security</p>
-            <NavLink to="/settings/personal"
-              className={({ isActive }) => `flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm transition-all ${isActive ? 'text-white font-semibold' : 'text-white/60 hover:text-white hover:bg-white/10'}`}
-              style={({ isActive }) => isActive ? { background: 'linear-gradient(135deg, rgba(41,171,226,0.25) 0%, rgba(77,139,60,0.15) 100%)', borderLeft: '2px solid #29ABE2' } : {}}
-            ><Lock className="w-4 h-4 shrink-0" />Security & Password</NavLink>
-            <NavLink to="/settings/notifications"
-              className={({ isActive }) => `flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm transition-all ${isActive ? 'text-white font-semibold' : 'text-white/60 hover:text-white hover:bg-white/10'}`}
-              style={({ isActive }) => isActive ? { background: 'linear-gradient(135deg, rgba(41,171,226,0.25) 0%, rgba(77,139,60,0.15) 100%)', borderLeft: '2px solid #29ABE2' } : {}}
-            ><Bell className="w-4 h-4 shrink-0" />Notifications</NavLink>
+            {/* Profile/Appearance/Notifications/Security tabs moved into General
+                Settings itself (2026-07-21) — this sidebar entry is gone, those
+                tabs live at /settings now. The old standalone Notifications page
+                (NotificationsPage, /settings/notifications) was also removed —
+                it crashed on render (called useMutation without importing it)
+                and duplicated the working tab now in General Settings. */}
           </>
         )}
 
@@ -610,9 +613,11 @@ function Sidebar() {
           </div>
         )}
 
-        {/* SLA Policies — policy_admin (governance role), tenant admin, or manager */}
+        {/* Governance — policy_admin (governance role), tenant admin, or manager.
+            Consolidates Data & Privacy Policies, SLA Policies, and Milestones
+            into one hub (see GovernanceHub in pages/Governance.tsx), 2026-07-21. */}
         {(isPolicyAdmin || isTenantAdmin || isManager) && (
-          <NavLink to="/tickets/sla"
+          <NavLink to="/governance"
             className={({ isActive }) =>
               `flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm transition-all ${
                 isActive ? 'text-white font-semibold' : 'text-white/60 hover:text-white hover:bg-white/10'
@@ -623,12 +628,12 @@ function Sidebar() {
               borderLeft: '2px solid #29ABE2',
             } : {}}
           >
-            <Clock className="w-4 h-4" />
-            SLA Policies
+            <Shield className="w-4 h-4" />
+            Governance
           </NavLink>
         )}
 
-        {/* Routing & SLA — managers only (tenant admins have it in their own sidebar) */}
+        {/* Routing — managers only (tenant admins have it in their own sidebar) */}
         {isManager && !isTenantAdmin && (
           <NavLink to="/admin/routing"
             className={({ isActive }) =>
@@ -642,7 +647,7 @@ function Sidebar() {
             } : {}}
           >
             <Clock className="w-4 h-4" />
-            Routing & SLA
+            Routing
           </NavLink>
         )}
 
@@ -681,99 +686,12 @@ function AdminPageWrapper({ title, subtitle, children }: { title: string; subtit
   );
 }
 
-// ── Notifications page ────────────────────────────────────────────────────────
-function NotificationsPage() {
-  const categories = [
-    { id: 'tickets',  label: 'Tickets',           items: ['New ticket assigned to me', 'Ticket status changed', 'Ticket SLA breached', 'Ticket resolved'] },
-    { id: 'contacts', label: 'Contacts & Deals',  items: ['New contact added', 'Deal stage changed', 'Deal won / lost'] },
-    { id: 'team',     label: 'Team',               items: ['New user invited', 'User activated / deactivated', 'Role changed'] },
-    { id: 'system',   label: 'System',             items: ['Module enabled / disabled', 'Integration connected / disconnected'] },
-  ];
-  const defaults = React.useMemo(() =>
-    Object.fromEntries(categories.map(c => [c.id, Object.fromEntries(c.items.map(i => [i, { email: true, inApp: true }]))])),
-    [],
-  );
-
-  const { data: saved, isLoading } = useQuery<Record<string, Record<string, { email: boolean; inApp: boolean }>>>({
-    queryKey: ['notification-preferences'],
-    queryFn: async () => (await api.get('/api/v1/settings/notification-preferences')).data.data,
-  });
-
-  const [prefs, setPrefs] = React.useState(defaults);
-  React.useEffect(() => {
-    if (!saved) return;
-    // Merge saved values over the defaults so newly-added notification types
-    // (added after the user last saved) still default to on.
-    setPrefs(p => {
-      const merged = { ...p };
-      for (const cat of Object.keys(merged)) {
-        for (const item of Object.keys(merged[cat])) {
-          if (saved[cat]?.[item]) merged[cat] = { ...merged[cat], [item]: saved[cat][item] };
-        }
-      }
-      return merged;
-    });
-  }, [saved]);
-
-  const toggle = (cat: string, item: string, channel: 'email' | 'inApp') =>
-    setPrefs(p => ({ ...p, [cat]: { ...p[cat], [item]: { ...p[cat][item], [channel]: !p[cat][item][channel] } } }));
-
-  const saveMutation = useMutation({
-    mutationFn: () => api.patch('/api/v1/settings/notification-preferences', prefs),
-  });
-
-  if (isLoading) return <div className="max-w-2xl text-sm text-gray-400">Loading…</div>;
-
-  return (
-    <div className="max-w-2xl space-y-6">
-      <div className="flex items-center gap-6 text-xs font-semibold text-gray-500 uppercase tracking-wide justify-end pr-2">
-        <span className="w-14 text-center">Email</span>
-        <span className="w-14 text-center">In-App</span>
-      </div>
-      {categories.map(cat => (
-        <div key={cat.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-          <div className="px-5 py-3 bg-gray-50 border-b border-gray-100">
-            <p className="text-xs font-bold text-gray-600 uppercase tracking-wide">{cat.label}</p>
-          </div>
-          <div className="divide-y divide-gray-50">
-            {cat.items.map(item => (
-              <div key={item} className="flex items-center px-5 py-3 gap-4">
-                <span className="flex-1 text-sm text-gray-700">{item}</span>
-                <div className="flex gap-6 shrink-0">
-                  {(['email', 'inApp'] as const).map(ch => (
-                    <div key={ch} className="w-14 flex justify-center">
-                      <button
-                        onClick={() => toggle(cat.id, item, ch)}
-                        className={`w-9 h-5 rounded-full transition-colors ${prefs[cat.id][item][ch] ? 'bg-blue-500' : 'bg-gray-200'}`}
-                      >
-                        <span className={`block w-3.5 h-3.5 bg-white rounded-full shadow transition-transform mx-0.5 ${prefs[cat.id][item][ch] ? 'translate-x-4' : 'translate-x-0'}`} />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      ))}
-      <button
-        onClick={() => saveMutation.mutate()}
-        disabled={saveMutation.isPending}
-        className="px-5 py-2.5 text-sm font-semibold text-white rounded-xl disabled:opacity-50"
-        style={{ background: 'linear-gradient(135deg,#29ABE2,#1a8cbf)' }}
-      >
-        {saveMutation.isPending ? 'Saving…' : saveMutation.isSuccess ? 'Saved' : 'Save Preferences'}
-      </button>
-      {saveMutation.isError && <p className="text-xs text-red-500">Failed to save. Please try again.</p>}
-    </div>
-  );
-}
-
 function AppLayout() {
   const { isAuthenticated, tenant } = useAuthStore();
   const isSuperAdmin = useIsSuperAdmin();
   const isTenantAdmin = useIsTenantAdmin();
   const isManager = useHasRole('manager');
+  const isPolicyAdmin = useIsPolicyAdmin();
   useApplyAppearance();
   if (!isAuthenticated) return <Navigate to="/login" replace />;
 
@@ -794,7 +712,7 @@ function AppLayout() {
           <Route path="/admin"         element={isTenantAdmin ? <TenantAdminDashboard /> : <Navigate to="/dashboard" replace />} />
           <Route path="/admin/users"   element={isTenantAdmin ? <AdminUsers /> : <Navigate to="/dashboard" replace />} />
           <Route path="/admin/modules" element={isTenantAdmin ? <AdminPageWrapper title="Modules" subtitle="Enable or disable features for your workspace"><ModulesSettings /></AdminPageWrapper> : <Navigate to="/dashboard" replace />} />
-          <Route path="/admin/routing" element={(isTenantAdmin || isManager) ? <AdminPageWrapper title="Routing & SLA" subtitle="Configure how tickets and calls are assigned to your team"><RoutingSettings /></AdminPageWrapper> : <Navigate to="/dashboard" replace />} />
+          <Route path="/admin/routing" element={(isTenantAdmin || isManager) ? <AdminPageWrapper title="Routing" subtitle="Configure how tickets and calls are assigned to your team"><RoutingSettings /></AdminPageWrapper> : <Navigate to="/dashboard" replace />} />
           <Route path="/admin/custom-fields" element={isTenantAdmin ? <AdminPageWrapper title="Custom Fields" subtitle="Add sector-specific fields to contacts, tickets, and deals"><CustomFieldsPage /></AdminPageWrapper> : <Navigate to="/dashboard" replace />} />
           <Route path="/dashboard"    element={isSuperAdmin ? <Navigate to="/super-admin" replace /> : op(<Dashboard />)} />
           <Route path="/contacts"     element={op(<Contacts />)} />
@@ -805,9 +723,9 @@ function AppLayout() {
           {/* Tickets: tenant admin gets read-only observer access (backend enforces OBSERVER_ONLY on writes) */}
           <Route path="/tickets"         element={<Tickets />} />
           <Route path="/tickets/queues"  element={op(<TicketQueues />)} />
-          {/* SLA policy configuration is settings work (like Voice Bot config), not
-              operational ticket data — tenant admins and managers both need it. */}
-          <Route path="/tickets/sla"     element={<TicketSla />} />
+          {/* SLA Policies, Data & Privacy, and Milestones consolidated into one
+              Governance hub 2026-07-21 — old direct link redirects there. */}
+          <Route path="/tickets/sla"     element={<Navigate to="/governance" replace />} />
           <Route path="/emails"            element={op(<Emails />)} />
           <Route path="/emails/analytics" element={op(<EmailAnalytics />)} />
           <Route path="/messages"        element={<TeamMessaging />} />
@@ -830,7 +748,6 @@ function AppLayout() {
           <Route path="/integrations/health" element={((tenant as any)?.active_modules ?? []).includes('integrations') ? <IntegrationHealth /> : <Navigate to="/dashboard" replace />} />
           <Route path="/settings"          element={<Settings />} />
           <Route path="/settings/personal" element={<PersonalSettings />} />
-          <Route path="/settings/notifications" element={<AdminPageWrapper title="Notifications" subtitle="Control which alerts and emails you receive"><NotificationsPage /></AdminPageWrapper>} />
           <Route path="/departments"       element={<Departments />} />
           <Route path="/roles"        element={<RolesPage />} />
           <Route path="/super-admin" element={<SuperAdmin />} />
@@ -845,7 +762,7 @@ function AppLayout() {
           <Route path="/sales/templates"  element={op(<SalesTemplates />)} />
           <Route path="/sales/builder"    element={op(<SalesBuilder />)} />
           <Route path="/sales/settings"   element={op(<SalesSettingsPage />)} />
-          <Route path="/governance"   element={isTenantAdmin ? <GovernancePage /> : <Navigate to="/dashboard" replace />} />
+          <Route path="/governance"   element={(isPolicyAdmin || isTenantAdmin || isManager) ? <GovernanceHub /> : <Navigate to="/dashboard" replace />} />
           <Route path="/orders"       element={isTenantAdmin ? <OrdersPage /> : <Navigate to="/dashboard" replace />} />
           <Route path="*"            element={<Navigate to={homePath} replace />} />
         </Routes>

@@ -18,6 +18,18 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.SmsService = void 0;
 const logger_1 = require("./config/logger");
+// AmanahCX's own shared SMS gateway (opt-in per tenant via Super Admin — see
+// PATCH /super-admin/tenants/:id/sms-gateway). Requires a real provider account;
+// these env vars are unset by default, so the fallback silently does nothing until
+// they're configured — no behavior change for tenants who never opt in.
+function getPlatformGatewayConfig() {
+    const accountSid = process.env.PLATFORM_SMS_ACCOUNT_SID;
+    const authToken = process.env.PLATFORM_SMS_AUTH_TOKEN;
+    const fromNumber = process.env.PLATFORM_SMS_FROM_NUMBER;
+    if (!accountSid || !authToken || !fromNumber)
+        return null;
+    return { accountSid, authToken, fromNumber };
+}
 // ── SmsService ────────────────────────────────────────────────────────────
 class SmsService {
     db;
@@ -61,6 +73,15 @@ class SmsService {
                         },
                     };
                 }
+            }
+        }
+        // Tenant has no working connector of their own — fall back to the shared platform
+        // gateway if Super Admin has granted this tenant access to it AND the platform
+        // account is actually configured (env vars set).
+        if (connectors.platform_sms?.enabled) {
+            const platformConfig = getPlatformGatewayConfig();
+            if (platformConfig) {
+                return { provider: 'platform', config: platformConfig };
             }
         }
         return { provider: null, config: null };
@@ -114,17 +135,29 @@ class SmsService {
             return { success: false, error: 'No SMS gateway configured' };
         }
         try {
-            if (provider === 'twilio') {
-                return await this.sendViaTwilio(config, opts);
+            const result = provider === 'twilio' || provider === 'platform'
+                ? await this.sendViaTwilio(config, opts)
+                : await this.sendViaHttp(config, opts);
+            if (result.success && provider === 'platform') {
+                // Meter usage for future billing — tenant is using AmanahCX's own gateway, not their own.
+                this.recordPlatformGatewayUsage(tenantId).catch(() => { });
             }
-            else {
-                return await this.sendViaHttp(config, opts);
-            }
+            return result;
         }
         catch (err) {
             logger_1.logger.error('SmsService send error', { tenantId, error: err.message });
             return { success: false, error: err.message };
         }
+    }
+    // ── Usage metering for the shared platform gateway ─────────────────────
+    async recordPlatformGatewayUsage(tenantId) {
+        const period = new Date().toISOString().slice(0, 7); // 'YYYY-MM'
+        await this.db.withSuperAdmin(async (client) => {
+            await client.query(`INSERT INTO usage_metrics (tenant_id, metric, value, period)
+         VALUES ($1, 'sms_sent_platform', 1, $2)
+         ON CONFLICT (tenant_id, metric, period)
+         DO UPDATE SET value = usage_metrics.value + 1, updated_at = NOW()`, [tenantId, period]);
+        });
     }
     // ── Twilio SMS ────────────────────────────────────────────────────────
     async sendViaTwilio(config, opts) {

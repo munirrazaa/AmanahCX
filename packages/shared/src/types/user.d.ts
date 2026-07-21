@@ -1,4 +1,4 @@
-export type UserRole = 'super_admin' | 'tenant_admin' | 'manager' | 'agent' | 'readonly';
+export type UserRole = 'super_admin' | 'platform_admin' | 'tenant_admin' | 'operations_admin' | 'policy_admin' | 'manager' | 'agent' | 'collaborator' | 'viewer' | 'readonly';
 export interface User {
     id: string;
     tenantId: string;
@@ -36,5 +36,11 @@ export interface AuthToken {
     sector?: string;
     /** Module-level permission map from users.permissions column (e.g. { deals: "view", tickets: "full" }) */
     permissions?: Record<string, string>;
+    /** policy_admin only: which ticket departments this user governs */
+    governed_departments?: string[];
+    /** platform_admin (sub-admin) only: assigned platform_roles.id, or null/absent for the true unrestricted super admin */
+    platformRoleId?: string | null;
+    /** platform_admin (sub-admin) only: permission matrix from platform_roles.permissions (e.g. { 'tenants:view': true }) */
+    platformPermissions?: Record<string, boolean>;
 }
 //# sourceMappingURL=user.d.ts.map

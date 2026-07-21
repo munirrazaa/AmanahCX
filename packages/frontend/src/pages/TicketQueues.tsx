@@ -392,7 +392,7 @@ function QueueMembersPanel({
       {members.length > 0 && (
         <p className="text-[10px] text-gray-400 mt-2.5 flex items-center gap-1">
           <AlertCircle className="w-3 h-3 shrink-0" />
-          Tickets in this queue are routed only to these agents. Go to Settings → Routing & SLA to set per-agent limits.
+          Tickets in this queue are routed only to these agents. Go to Settings → Routing to set per-agent limits.
         </p>
       )}
 
@@ -543,7 +543,7 @@ export function TicketQueues() {
         <p className="text-xs text-blue-700 leading-relaxed">
           Assign agents to a queue so tickets in that queue are only routed to those agents.
           If a queue has no members, the router falls back to all active agents in your workspace.
-          The per-agent ticket limit and routing method are configured in <strong>Settings → Routing & SLA</strong>.
+          The per-agent ticket limit and routing method are configured in <strong>Settings → Routing</strong>.
         </p>
       </div>
 

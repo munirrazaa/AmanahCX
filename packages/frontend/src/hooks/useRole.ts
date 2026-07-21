@@ -88,8 +88,10 @@ export function useCan() {
   const rank = getRank(user?.role);
 
   return {
-    /** Create / edit / delete contacts, deals, companies, activities */
-    writeRecords: rank >= ROLE_RANK.agent,
+    /** Create / edit / delete contacts, deals, companies, activities.
+     *  policy_admin ranks above agent but is a governance-only, view-only role —
+     *  explicitly excluded here since rank alone doesn't capture that. */
+    writeRecords: rank >= ROLE_RANK.agent && user?.role !== 'policy_admin',
     /** Delete contacts / deals (agent+ but managers can restrict) */
     deleteRecords: rank >= ROLE_RANK.manager,
     /** Invite / remove team members */
@@ -99,8 +101,8 @@ export function useCan() {
     /** Create / revoke API keys and webhooks */
     manageIntegrations: rank >= ROLE_RANK.manager,
     manageSla: user?.role === 'policy_admin' || rank >= ROLE_RANK.manager,
-    /** View analytics and reports */
-    viewAnalytics: rank >= ROLE_RANK.agent,
+    /** View analytics and reports (policy_admin's permission set has analytics: 'none') */
+    viewAnalytics: rank >= ROLE_RANK.agent && user?.role !== 'policy_admin',
     /** Manage all workspaces on the platform */
     superAdminAccess: user?.role === 'super_admin',
     /** Raw role for conditional rendering */

@@ -493,6 +493,11 @@ interface StructuredComplaint {
   fraudAmount?: string;
   transcript?: string;
   callId?: string;
+  // Set only by the Sales Demo module (routes/sales-demo.ts) so its
+  // contacts/tickets can be found and deleted on "Reset Demo" without
+  // touching real data. Absent on every real Nadia call.
+  demoSessionId?: string;
+  demoTag?: string;
 }
 
 // Checks a tenant's Voice Bot minute usage against 70/90/100% of its
@@ -717,14 +722,20 @@ async function createComplaintFromStructured(
           firstName = parts[0] ?? 'Caller';
           lastName = parts.slice(1).join(' ') || null;
         }
-        const tags = s.reporterName ? ['voice_bot'] : ['voice_bot', 'anonymous'];
+        const tags = [
+          ...(s.reporterName ? ['voice_bot'] : ['voice_bot', 'anonymous']),
+          ...(s.demoTag ? [s.demoTag] : []),
+        ];
+        const contactCustomFields = s.demoSessionId
+          ? { ...(addressFields ?? {}), demo_session_id: s.demoSessionId }
+          : (addressFields ?? {});
         const created = await c.query(
           `INSERT INTO contacts
              (tenant_id, first_name, last_name, phone, email, nic_number, source, tags, custom_fields)
            VALUES ($1, $2, $3, $4, $5, $6, 'voice_bot', $7, $8::jsonb)
            RETURNING id`,
           [tenantId, firstName, lastName, s.reporterPhone ?? null, s.reporterEmail ?? null,
-           s.reporterNic ?? null, tags, JSON.stringify(addressFields ?? {})],
+           s.reporterNic ?? null, tags, JSON.stringify(contactCustomFields)],
         );
         return created.rows;
       }),
@@ -813,8 +824,11 @@ async function createComplaintFromStructured(
          // `ticket.ticket_type === 'sales'` check that creates a pipeline deal
          // (tickets.ts POST /:id/accept). Now persists the actual computed type.
          ticketType,
-         [s.category ?? 'other'],
-         JSON.stringify({ category: s.category, fraud_amount: s.fraudAmount, agent: 'nadia', call_id: s.callId ?? null })],
+         [s.category ?? 'other', ...(s.demoTag ? [s.demoTag] : [])],
+         JSON.stringify({
+           category: s.category, fraud_amount: s.fraudAmount, agent: 'nadia', call_id: s.callId ?? null,
+           ...(s.demoSessionId ? { demo_session_id: s.demoSessionId } : {}),
+         })],
       )).rows);
 
     await db.withSuperAdmin(async (c) => {

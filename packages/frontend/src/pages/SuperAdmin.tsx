@@ -19,6 +19,7 @@ import {
   ToggleLeft, ToggleRight, Bell, Bot,
 } from 'lucide-react';
 import { api } from '../services/api';
+import { SECTORS } from '@crm/shared';
 import { useIsSuperAdmin } from '../hooks/useRole';
 import { Navigate } from 'react-router-dom';
 import { PermissionsMatrix } from '../components/PermissionsMatrix';
@@ -63,6 +64,10 @@ const PLAN_COLORS: Record<string, string> = {
   professional: 'bg-brand-50 text-brand-700',
   enterprise: 'bg-purple-50 text-purple-700',
 };
+function formatModuleLabel(m: string): string {
+  return m === 'crm' ? 'CRM' : m.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 const STATUS_COLORS: Record<string, string> = {
   active: 'bg-green-50 text-green-700',
   trial: 'bg-amber-50 text-amber-700',
@@ -153,7 +158,8 @@ const CATALOGUE_MODULES: Array<{
 
 // ── Catalogue tab ─────────────────────────────────────────────────────────────
 function CatalogueTab() {
-  const [subTab, setSubTab] = useState<'modules' | 'plans' | 'builder'>('modules');
+  const [subTab, setSubTab] = useState<'modules' | 'plans' | 'builder' | 'sector-presets'>('modules');
+  const [expandedSector, setExpandedSector] = useState<string | null>(null);
   const [builderModules, setBuilderModules] = useState<string[]>(['crm']);
 
   const toggleBuilder = (key: string) => {
@@ -185,9 +191,10 @@ function CatalogueTab() {
       {/* Sub-tabs */}
       <div className="flex gap-1 border-b border-gray-100 pb-0">
         {([
-          { key: 'modules', label: 'Module Catalogue' },
-          { key: 'plans',   label: 'Pricing Plans' },
-          { key: 'builder', label: 'Deal Builder' },
+          { key: 'modules',         label: 'Module Catalogue' },
+          { key: 'plans',           label: 'Pricing Plans' },
+          { key: 'builder',         label: 'Deal Builder' },
+          { key: 'sector-presets',  label: 'Sector Presets' },
         ] as const).map(({ key, label }) => (
           <button key={key} onClick={() => setSubTab(key)}
             className={`px-4 py-2 text-sm rounded-t-lg border-b-2 transition-colors ${
@@ -360,6 +367,70 @@ function CatalogueTab() {
               </p>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Sector Presets — read-only reference. Each tenant only ever sees its
+          OWN sector's preset (picked once at workspace creation, restorable
+          from Custom Fields → Restore Defaults) — this cross-sector catalog
+          view is a Super Admin reference/support tool only. Moved here from
+          the tenant admin's Custom Fields page 2026-07-21, since a tenant
+          browsing other industries' regulatory fields (SBP, PTA, SECP, NEPRA…)
+          made no sense for them. */}
+      {subTab === 'sector-presets' && (
+        <div className="space-y-3">
+          <p className="text-sm text-gray-500">
+            Every sector's default custom fields, seeded automatically into a tenant's workspace when that sector
+            is picked at creation (or re-applied any time via that tenant's Custom Fields → Restore Defaults).
+            Reference / support use only — not editable here.
+          </p>
+          {SECTORS.map(s => {
+            const open = expandedSector === s.id;
+            const totalFields = s.fields.length + s.companyFields.length + s.dealFields.length + s.ticketFields.length;
+            return (
+              <div key={s.id} className="border border-gray-200 rounded-xl overflow-hidden">
+                <button onClick={() => setExpandedSector(open ? null : s.id)}
+                  className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors">
+                  <div className="flex items-center gap-3">
+                    <span className="text-lg">{s.icon}</span>
+                    <div className="text-left">
+                      <p className="text-sm font-semibold text-gray-900">{s.label}</p>
+                      <p className="text-xs text-gray-400">{s.description}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 shrink-0">
+                    <span className="text-xs text-gray-400">{totalFields} fields</span>
+                    <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} />
+                  </div>
+                </button>
+                {open && (
+                  <div className="border-t border-gray-100 divide-y divide-gray-50">
+                    {([
+                      { label: 'Contact fields', fields: s.fields },
+                      { label: 'Company fields', fields: s.companyFields },
+                      { label: 'Deal fields',    fields: s.dealFields },
+                      { label: 'Ticket fields',  fields: s.ticketFields },
+                    ] as const).map(group => group.fields.length > 0 && (
+                      <div key={group.label} className="px-4 py-3">
+                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">{group.label}</p>
+                        <div className="space-y-1.5">
+                          {group.fields.map(f => (
+                            <div key={f.name} className="flex items-center gap-2 text-xs">
+                              <span className="font-mono text-gray-400 w-40 shrink-0 truncate">{f.name}</span>
+                              <span className="text-gray-300">→</span>
+                              <span className="text-gray-700">{f.label}</span>
+                              <span className="ml-auto text-gray-400 capitalize shrink-0">{f.field_type}</span>
+                              {f.is_required && <span className="text-[9px] font-bold text-red-500 border border-red-200 bg-red-50 px-1 py-0.5 rounded shrink-0">Required</span>}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
@@ -2041,7 +2112,9 @@ function DashboardTab() {
               const pct = totalActive > 0 ? Math.round((parseInt(row.cnt) / totalActive) * 100) : 0;
               return (
                 <div key={row.module} className="flex items-center gap-3">
-                  <span className="text-xs font-medium text-gray-600 w-24 capitalize shrink-0">{row.module}</span>
+                  <span className="text-xs font-medium text-gray-600 w-24 shrink-0">
+                    {formatModuleLabel(String(row.module))}
+                  </span>
                   <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
                     <div className="h-full bg-brand-400 rounded-full" style={{ width: `${pct}%` }} />
                   </div>
@@ -3540,7 +3613,7 @@ function SuperAdminReports() {
                     <td className={tdCls}>
                       <div className="flex gap-1 flex-wrap">
                         {(w.active_modules ?? []).map((m: string) => (
-                          <span key={m} className="text-[10px] bg-brand-50 text-brand-600 px-1 py-0.5 rounded capitalize">{m}</span>
+                          <span key={m} className="text-[10px] bg-brand-50 text-brand-600 px-1 py-0.5 rounded">{formatModuleLabel(m)}</span>
                         ))}
                       </div>
                     </td>
@@ -3705,6 +3778,20 @@ function SuperAdminSettings() {
   const [showCreateUser, setShowCreateUser] = useState(false);
   const [editUser, setEditUser] = useState<any>(null);
   const [confirmDel, setConfirmDel] = useState<string | null>(null);
+  const [confirmRedeploy, setConfirmRedeploy] = useState(false);
+  const [redeployResult, setRedeployResult] = useState<any>(null);
+
+  const { data: redeployStatus } = useQuery({
+    queryKey: ['redeploy-status'],
+    queryFn: () => api.get('/super-admin/platform/redeploy-status').then(r => r.data.data),
+    retry: false,
+  });
+
+  const redeployMutation = useMutation({
+    mutationFn: () => api.post('/super-admin/platform/redeploy'),
+    onSuccess: (res) => { setRedeployResult(res.data); setConfirmRedeploy(false); },
+    onError: (err: any) => { setRedeployResult({ success: false, error: err?.response?.data?.error }); setConfirmRedeploy(false); },
+  });
 
   const { data: tenantList = [] } = useQuery<any[]>({
     queryKey: ['sa-tenants-list-settings'],
@@ -3731,6 +3818,52 @@ function SuperAdminSettings() {
 
   return (
     <div className="space-y-6">
+      {/* Push to Production */}
+      <div className="bg-white rounded-xl border border-gray-100 px-5 py-4">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-sm font-semibold text-gray-900 flex items-center gap-2">🚀 Push to Production</p>
+            <p className="text-xs text-gray-400 mt-1 max-w-md">
+              Redeploys the code currently on <code className="bg-gray-100 px-1 rounded">main</code> to every
+              live workspace. Does not push new or unreviewed code — only re-runs what's already approved and live.
+            </p>
+            {redeployStatus && (
+              <div className="flex items-center gap-3 mt-2">
+                <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${redeployStatus.vercel ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-400'}`}>
+                  Vercel {redeployStatus.vercel ? 'configured' : 'not configured'}
+                </span>
+                <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${redeployStatus.railway ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-400'}`}>
+                  Railway {redeployStatus.railway ? 'configured' : 'not configured'}
+                </span>
+              </div>
+            )}
+          </div>
+          {confirmRedeploy ? (
+            <div className="flex items-center gap-2 shrink-0">
+              <button onClick={() => setConfirmRedeploy(false)} className="text-xs px-3 py-2 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50">Cancel</button>
+              <button onClick={() => redeployMutation.mutate()} disabled={redeployMutation.isPending}
+                className="text-xs px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 flex items-center gap-1.5">
+                {redeployMutation.isPending && <Loader2 className="w-3 h-3 animate-spin" />} Confirm Redeploy
+              </button>
+            </div>
+          ) : (
+            <button onClick={() => { setConfirmRedeploy(true); setRedeployResult(null); }}
+              className="shrink-0 text-xs px-3 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 font-medium">
+              Push to Production
+            </button>
+          )}
+        </div>
+        {redeployResult && (
+          <div className={`mt-3 rounded-lg px-3 py-2 text-xs ${redeployResult.success ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-600'}`}>
+            {redeployResult.error
+              ? redeployResult.error.message
+              : Object.entries(redeployResult.data ?? {}).map(([k, v]: any) => (
+                  <div key={k}>{v.ok ? '✓' : '✗'} {k}: {v.message}</div>
+                ))}
+          </div>
+        )}
+      </div>
+
       {/* Tenant selector */}
       <div className="bg-white rounded-xl border border-gray-100 px-5 py-4 flex items-end gap-4">
         <div className="flex-1 max-w-xs">
@@ -4253,7 +4386,7 @@ export function SuperAdmin() {
                     <td className="px-4 py-3">
                       <div className="flex gap-1 flex-wrap">
                         {(t.active_modules ?? ['crm']).map((m: string) => (
-                          <span key={m} className="text-xs bg-brand-50 text-brand-600 px-1.5 py-0.5 rounded capitalize">{m}</span>
+                          <span key={m} className="text-xs bg-brand-50 text-brand-600 px-1.5 py-0.5 rounded">{formatModuleLabel(m)}</span>
                         ))}
                       </div>
                     </td>

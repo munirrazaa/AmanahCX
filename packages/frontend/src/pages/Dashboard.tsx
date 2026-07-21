@@ -1294,17 +1294,27 @@ const DEPT_CONFIG: Record<string, { label: string; color: string; bg: string; bo
 export function Dashboard() {
   const { user } = useAuthStore();
   const role       = user?.role ?? 'agent';
-  const department = user?.department?.toLowerCase() ?? null;
-  const deptType   = (user as any)?.department_type ?? null;
+  const isOperationsAdmin = role === 'operations_admin';
+  // Operations Admin is a cross-department, org-wide observer (COO / Head of
+  // Contact Centre) — never scoped to a single department, unlike agents/managers.
+  const department = isOperationsAdmin ? null : (user?.department?.toLowerCase() ?? null);
+  const deptType   = isOperationsAdmin ? null : ((user as any)?.department_type ?? null);
   const deptCfg    = department ? (DEPT_CONFIG[department] ?? null) : null;
 
   const isViewer = role === 'viewer';
+  // Policy Admin is a governance-only role — view-only on tickets, no calls/CRM
+  // access, and never assigned tickets — so the agent-style "my calls / my
+  // tickets" personal framing never applies to them. Treat like isViewer below.
+  const isPolicyAdmin = role === 'policy_admin';
+  // Collaborator is view + internal-notes-only — never assigned tickets/calls,
+  // no ticket writes — so it gets the same read-only treatment as viewer/policy_admin.
+  const isCollaborator = role === 'collaborator';
 
   const { data, isLoading, isError, dataUpdatedAt, refetch, isFetching } = useQuery({
     queryKey: ['ops-dashboard'],
     queryFn: () => api.get('/api/v1/analytics/ops-dashboard').then(r => r.data.data),
     refetchInterval: 30_000,
-    enabled: !isViewer,
+    enabled: !isViewer && !isPolicyAdmin && !isCollaborator,
     retry: false,
   });
 
@@ -1320,6 +1330,9 @@ export function Dashboard() {
   const isManager     = ['manager','super_admin'].includes(role);
 
   const roleLabel = role === 'tenant_admin' ? 'Admin View'
+    : role === 'operations_admin' ? 'Operations View (read-only)'
+    : role === 'policy_admin' ? 'Policy Admin View (governance)'
+    : role === 'collaborator' ? 'Collaborator View (read-only)'
     : role === 'manager'     ? 'Manager View'
     : role === 'super_admin' ? 'Super Admin View'
     : role === 'agent'       ? 'Agent View'
@@ -1334,7 +1347,7 @@ export function Dashboard() {
         { label: 'Voice Bot',      to: '/voice-bot',      icon: Bot,    color: C.purple, requiresModule: 'voice' },
         { label: 'Email Logs',     to: '/emails',         icon: Mail,   color: C.green  },
       ]
-    : isViewer
+    : isViewer || isOperationsAdmin || isPolicyAdmin || isCollaborator
     ? []
     : isManager
     ? [
@@ -1413,11 +1426,17 @@ export function Dashboard() {
         )}
 
         {/* Role-aware content */}
-        {isViewer
+        {isViewer || isPolicyAdmin || isCollaborator
           ? <div className="flex flex-col items-center py-24 gap-3 text-gray-400">
               <Shield className="w-10 h-10 opacity-30" />
               <p className="text-base font-medium text-gray-500">View-only access</p>
-              <p className="text-sm text-gray-400">Dashboard analytics aren't available for your account. Use the menu on the left to view the records you have access to, or contact your admin to request more.</p>
+              <p className="text-sm text-gray-400">
+                {isPolicyAdmin
+                  ? 'Governance is a policy role, not an operational one — ticket/call volume dashboards don’t apply. Use Governance in the menu to manage data & privacy, SLA policies, and milestones.'
+                  : isCollaborator
+                  ? 'Collaborators have view + internal-notes access only — you\'re never assigned tickets or calls, so personal activity dashboards don\'t apply. Use the menu on the left to view the records you have access to.'
+                  : 'Dashboard analytics aren’t available for your account. Use the menu on the left to view the records you have access to, or contact your admin to request more.'}
+              </p>
             </div>
           : isLoading
           ? <Skeleton />
@@ -1425,8 +1444,8 @@ export function Dashboard() {
           ? <div className="flex flex-col items-center py-20 gap-3 text-gray-400"><Loader2 className="w-8 h-8 animate-spin" /><p className="text-sm">Loading dashboard…</p></div>
           : isTenantAdmin
           ? <TenantAdminDashboard d={data} />
-          : isManager
-          ? <ManagerDashboard d={data} department={department} deptType={deptType} departmentName={user?.department ?? null} />
+          : isManager || isOperationsAdmin
+          ? <ManagerDashboard d={data} department={department} deptType={deptType} departmentName={isOperationsAdmin ? null : (user?.department ?? null)} />
           : <AgentDashboard d={data} department={department} deptType={deptType} departmentName={user?.department ?? null} />
         }
 

@@ -15,6 +15,7 @@ const CreateCompanySchema = z.object({
   phone: z.string().optional(),
   tags: z.array(z.string()).optional(),
   ownerId: z.string().uuid().optional(),
+  customFields: z.record(z.unknown()).optional(),
 });
 
 export function companyRoutes(db: DatabaseClient, eventBus: EventBus) {
@@ -83,13 +84,13 @@ export function companyRoutes(db: DatabaseClient, eventBus: EventBus) {
       const [company] = await db.withTenant(req.tenant.id, async (client) => {
         const result = await client.query(
           `INSERT INTO companies
-             (tenant_id, name, domain, industry, size, annual_revenue, country, city, website, phone, tags, owner_id)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+             (tenant_id, name, domain, industry, size, annual_revenue, country, city, website, phone, tags, owner_id, custom_fields)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
            RETURNING *`,
           [
             req.tenant.id, body.name, body.domain, body.industry, body.size,
             body.annualRevenue, body.country, body.city, body.website, body.phone,
-            body.tags ?? [], body.ownerId ?? req.user.sub,
+            body.tags ?? [], body.ownerId ?? req.user.sub, JSON.stringify(body.customFields ?? {}),
           ],
         );
         return result.rows;
@@ -111,6 +112,12 @@ export function companyRoutes(db: DatabaseClient, eventBus: EventBus) {
       };
       for (const [k, col] of Object.entries(map)) {
         if (k in body) { sets.push(`${col} = $${i++}`); vals.push((body as any)[k]); }
+      }
+      // Merge (not replace) so a partial custom-fields save doesn't wipe out
+      // values from fields the caller didn't include — same pattern as contacts.ts.
+      if (body.customFields) {
+        sets.push(`custom_fields = custom_fields || $${i++}::jsonb`);
+        vals.push(JSON.stringify(body.customFields));
       }
       if (!sets.length) return reply.send({ success: true, data: null });
       vals.push(id);

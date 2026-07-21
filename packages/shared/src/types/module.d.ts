@@ -43,6 +43,11 @@ export interface NavItem {
     badge?: number;
     /** Child items for nested menus */
     children?: NavItem[];
+    /**
+     * Permission key required to show this item in the sidebar.
+     * If absent the item is always shown. E.g. "contacts:read".
+     */
+    permissionKey?: string;
 }
 export interface PlatformModule {
     /** Unique machine-readable id, e.g. "crm" | "voice" | "ticketing" */

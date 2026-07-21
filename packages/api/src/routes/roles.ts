@@ -286,9 +286,11 @@ export function rolesRoutes(db: DatabaseClient) {
 
       const SYSTEM_ROLES = [
         { id: 'tenant_admin',  defaultName: 'Admin',          description: 'Full workspace access',         color: '#dc2626', is_system: true, base_role: 'tenant_admin' },
+        { id: 'operations_admin', defaultName: 'Operations Admin', description: 'Read-only observer across all operational data', color: '#0891b2', is_system: true, base_role: 'operations_admin' },
         { id: 'manager',       defaultName: 'Manager',        description: 'Team management & records',     color: '#d97706', is_system: true, base_role: 'manager' },
         { id: 'policy_admin',  defaultName: 'Policy Admin',   description: 'SLA policy governance (independent)', color: '#7c3aed', is_system: true, base_role: 'policy_admin' },
         { id: 'agent',         defaultName: 'Agent',          description: 'Day-to-day CRM operations',    color: '#2563eb', is_system: true, base_role: 'agent' },
+        { id: 'collaborator',  defaultName: 'Collaborator',   description: 'View + internal notes only — no ticket writes', color: '#059669', is_system: true, base_role: 'collaborator' },
         { id: 'viewer',        defaultName: 'Viewer',         description: 'Read-only access',             color: '#6b7280', is_system: true, base_role: 'viewer' },
       ].map((r) => ({
         ...r,

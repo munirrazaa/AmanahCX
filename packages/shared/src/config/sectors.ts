@@ -134,6 +134,9 @@ export const SECTORS: SectorConfig[] = [
       { name: 'customer_since',    label: 'Customer Since',     field_type: 'date',   is_required: false, sort_order: 7, group: 'Account Details' },
       { name: 'preferred_contact', label: 'Preferred Contact',  field_type: 'select', is_required: false, sort_order: 8, group: 'Preferences', options: ['Phone', 'Email', 'Branch', 'App', 'SMS'] },
       { name: 'national_id',       label: 'National ID / PAN',  field_type: 'text',   is_required: false, sort_order: 9, group: 'Identity', placeholder: 'Government-issued ID' },
+      { name: 'occupation',        label: 'Occupation / Employer', field_type: 'text', is_required: false, sort_order: 10, group: 'Compliance', placeholder: 'Standard KYC field' },
+      { name: 'annual_income',     label: 'Annual Income',      field_type: 'number', is_required: false, sort_order: 11, group: 'Compliance' },
+      { name: 'pep_status',        label: 'Politically Exposed Person (PEP)', field_type: 'boolean', is_required: false, sort_order: 12, group: 'Compliance' },
     ],
   },
 
@@ -197,6 +200,8 @@ export const SECTORS: SectorConfig[] = [
       { name: 'data_usage_gb',     label: 'Monthly Data Usage (GB)',  field_type: 'number', is_required: false, sort_order: 7, group: 'Usage' },
       { name: 'contract_end_date', label: 'Contract End Date',        field_type: 'date',   is_required: false, sort_order: 8, group: 'Service Details' },
       { name: 'roaming_enabled',   label: 'Roaming Enabled',          field_type: 'boolean',is_required: false, sort_order: 9, group: 'Service Details' },
+      { name: 'porting_status',    label: 'Number Porting (MNP) Status', field_type: 'select', is_required: false, sort_order: 10, group: 'Service Details', options: ['Not Ported', 'Ported In', 'Ported Out', 'Port Pending'] },
+      { name: 'device_model',      label: 'Device Model',             field_type: 'text',   is_required: false, sort_order: 11, group: 'Technical' },
     ],
   },
 
@@ -258,6 +263,8 @@ export const SECTORS: SectorConfig[] = [
       { name: 'passenger_count',    label: 'Number of Passengers',    field_type: 'number', is_required: false, sort_order: 9, group: 'Journey Details' },
       { name: 'loyalty_card',       label: 'Loyalty Card / Pass No',  field_type: 'text',   is_required: false, sort_order: 10, group: 'Identity' },
       { name: 'accessibility_needs',label: 'Accessibility Requirements', field_type: 'textarea', is_required: false, sort_order: 11, group: 'Special Requirements', placeholder: 'Wheelchair, visual impairment, etc.' },
+      { name: 'emergency_contact',  label: 'Emergency Contact Number', field_type: 'phone', is_required: false, sort_order: 12, group: 'Special Requirements' },
+      { name: 'loyalty_tier',       label: 'Frequent Traveler Tier',   field_type: 'select', is_required: false, sort_order: 13, group: 'Identity', options: ['None', 'Silver', 'Gold', 'Platinum'] },
     ],
   },
 
@@ -322,6 +329,8 @@ export const SECTORS: SectorConfig[] = [
       { name: 'declared_value',    label: 'Declared Value (USD)',     field_type: 'number', is_required: false, sort_order: 9, group: 'Cargo Details' },
       { name: 'customs_required',  label: 'Customs Declaration Required', field_type: 'boolean', is_required: false, sort_order: 10, group: 'Compliance' },
       { name: 'incoterms',         label: 'Incoterms',                field_type: 'select', is_required: false, sort_order: 11, group: 'Compliance', options: ['EXW','FCA','CPT','CIP','DAP','DPU','DDP','FAS','FOB','CFR','CIF'] },
+      { name: 'hs_code',           label: 'HS / Tariff Code',         field_type: 'text',   is_required: false, sort_order: 12, group: 'Compliance', placeholder: 'e.g. 8517.12' },
+      { name: 'special_handling',  label: 'Special Handling Instructions', field_type: 'textarea', is_required: false, sort_order: 13, group: 'Cargo Details' },
     ],
   },
 
@@ -365,6 +374,8 @@ export const SECTORS: SectorConfig[] = [
       { name: 'policy_start',         label: 'Policy Inception Date',     field_type: 'date',   is_required: false, sort_order: 7, group: 'Policy' },
       { name: 'policy_expiry',        label: 'Policy Expiry Date',        field_type: 'date',   is_required: false, sort_order: 8, group: 'Policy' },
       { name: 'no_claim_years',       label: 'No-Claim Bonus Years',      field_type: 'number', is_required: false, sort_order: 9, group: 'History' },
+      { name: 'vehicle_registration', label: 'Vehicle Registration Number', field_type: 'text', is_required: false, sort_order: 10, group: 'Policy', placeholder: 'For Motor policies' },
+      { name: 'deductible_excess',    label: 'Deductible / Excess Amount', field_type: 'number', is_required: false, sort_order: 11, group: 'Policy' },
     ],
     ticketFields: [
       { name: 'claim_type',           label: 'Claim Type',                field_type: 'select', is_required: true,  sort_order: 1, group: 'Claim', options: ['Death Claim', 'Health / Hospitalisation', 'Motor Accident', 'Property Damage', 'Theft', 'Travel Disruption', 'Liability', 'Other'] },
@@ -386,7 +397,8 @@ export const SECTORS: SectorConfig[] = [
       { name: 'claim_status',      label: 'Claim Status',             field_type: 'select', is_required: false, sort_order: 8, group: 'Claim Details', options: ['No Claim', 'Draft', 'Submitted', 'Under Review', 'Approved', 'Paid', 'Rejected', 'Disputed'] },
       { name: 'agent_broker',      label: 'Agent / Broker Name',      field_type: 'text',   is_required: false, sort_order: 9, group: 'Policy Details' },
       { name: 'nominee',           label: 'Nominee / Beneficiary',    field_type: 'text',   is_required: false, sort_order: 10, group: 'Policy Details' },
-      { name: 'date_of_birth',     label: 'Date of Birth',            field_type: 'date',   is_required: false, sort_order: 11, group: 'Identity' },
+      { name: 'nominee_relationship', label: 'Beneficiary Relationship', field_type: 'text', is_required: false, sort_order: 11, group: 'Policy Details', placeholder: 'e.g. Spouse, Child, Parent' },
+      { name: 'date_of_birth',     label: 'Date of Birth',            field_type: 'date',   is_required: false, sort_order: 12, group: 'Identity' },
     ],
   },
 
@@ -449,6 +461,9 @@ export const SECTORS: SectorConfig[] = [
       { name: 'scholarship_status',label: 'Scholarship / Aid Status', field_type: 'select', is_required: false, sort_order: 9, group: 'Finance', options: ['None', 'Applied', 'Awarded', 'Partial', 'Full', 'Discontinued'] },
       { name: 'fee_status',        label: 'Fee Payment Status',       field_type: 'select', is_required: false, sort_order: 10, group: 'Finance', options: ['Paid', 'Partial', 'Pending', 'Overdue', 'Waived'] },
       { name: 'hostel_required',   label: 'Hostel / Accommodation',   field_type: 'boolean',is_required: false, sort_order: 11, group: 'Logistics' },
+      { name: 'emergency_contact', label: 'Emergency Contact Number', field_type: 'phone', is_required: false, sort_order: 12, group: 'Guardian Details' },
+      { name: 'gpa_grade',         label: 'GPA / Grade Average',      field_type: 'text',   is_required: false, sort_order: 13, group: 'Academic Details', placeholder: 'e.g. 3.7 / 4.0' },
+      { name: 'previous_institution', label: 'Previous Institution',  field_type: 'text',   is_required: false, sort_order: 14, group: 'Academic Details', placeholder: 'For transfer students' },
     ],
   },
 
@@ -510,6 +525,8 @@ export const SECTORS: SectorConfig[] = [
       { name: 'payment_method',    label: 'Payment Method',           field_type: 'select', is_required: false, sort_order: 8, group: 'Payment', options: ['Credit Card', 'Debit Card', 'UPI / Wallet', 'Net Banking', 'COD', 'BNPL', 'Crypto', 'Other'] },
       { name: 'coupon_code',       label: 'Coupon / Promo Code',      field_type: 'text',   is_required: false, sort_order: 9, group: 'Order Details' },
       { name: 'seller_id',         label: 'Seller / Vendor ID',       field_type: 'text',   is_required: false, sort_order: 10, group: 'Marketplace', placeholder: 'If marketplace order' },
+      { name: 'marketing_consent', label: 'Marketing Opt-in',         field_type: 'boolean', is_required: false, sort_order: 11, group: 'Preferences' },
+      { name: 'loyalty_points',    label: 'Loyalty Points Balance',   field_type: 'number', is_required: false, sort_order: 12, group: 'Preferences' },
     ],
   },
 

@@ -7,12 +7,14 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Plus, Trash2, Edit2, Check, X, GripVertical,
-  AlertCircle, Loader2, Tag, ToggleLeft, ToggleRight,
+  AlertCircle, Loader2, Tag, ToggleLeft, ToggleRight, RotateCcw,
 } from 'lucide-react';
 import { api } from '../services/api';
+import { useAuthStore } from '../store/auth.store';
+import { SECTORS } from '@crm/shared';
 
 type FieldType = 'text' | 'email' | 'phone' | 'number' | 'date' | 'select' | 'textarea' | 'boolean';
-type Entity    = 'contact' | 'ticket' | 'deal';
+type Entity    = 'contact' | 'company' | 'ticket' | 'deal';
 
 interface FieldDef {
   id:          string;
@@ -38,43 +40,9 @@ const FIELD_TYPES: { value: FieldType; label: string }[] = [
 
 const ENTITIES: { value: Entity; label: string; color: string }[] = [
   { value: 'contact', label: 'Contacts',  color: '#29ABE2' },
+  { value: 'company', label: 'Companies', color: '#8b5cf6' },
   { value: 'ticket',  label: 'Tickets',   color: '#f59e0b' },
   { value: 'deal',    label: 'Deals',     color: '#10b981' },
-];
-
-const SECTOR_PRESETS: { label: string; fields: { name: string; label: string; field_type: FieldType; entity: Entity }[] }[] = [
-  {
-    label: 'Banking / SBP',
-    fields: [
-      { name: 'sbp_complaint_ref',  label: 'SBP Complaint Reference',  field_type: 'text',  entity: 'ticket'  },
-      { name: 'account_number',     label: 'Account Number',            field_type: 'text',  entity: 'contact' },
-      { name: 'branch_code',        label: 'Branch Code',               field_type: 'text',  entity: 'contact' },
-    ],
-  },
-  {
-    label: 'Telecom / PTA',
-    fields: [
-      { name: 'pta_complaint_ref',  label: 'PTA Complaint Reference',   field_type: 'text',  entity: 'ticket'  },
-      { name: 'cnic',               label: 'CNIC Number',               field_type: 'text',  entity: 'contact' },
-      { name: 'sim_number',         label: 'SIM / MSISDN',              field_type: 'text',  entity: 'contact' },
-    ],
-  },
-  {
-    label: 'Insurance / SECP',
-    fields: [
-      { name: 'secp_case_ref',      label: 'SECP Case Reference',       field_type: 'text',  entity: 'ticket'  },
-      { name: 'policy_number',      label: 'Policy Number',             field_type: 'text',  entity: 'contact' },
-      { name: 'claim_number',       label: 'Claim Number',              field_type: 'text',  entity: 'ticket'  },
-    ],
-  },
-  {
-    label: 'Utilities / NEPRA-OGRA',
-    fields: [
-      { name: 'nepra_ref',          label: 'NEPRA/OGRA Reference',      field_type: 'text',  entity: 'ticket'  },
-      { name: 'meter_number',       label: 'Meter Number',              field_type: 'text',  entity: 'contact' },
-      { name: 'consumer_number',    label: 'Consumer Number',           field_type: 'text',  entity: 'contact' },
-    ],
-  },
 ];
 
 const blank = (): Omit<FieldDef, 'id' | 'sort_order'> => ({
@@ -92,17 +60,19 @@ function nameFromLabel(label: string): string {
 
 export function CustomFieldsPage() {
   const qc = useQueryClient();
+  const { tenant } = useAuthStore();
+  const sectorCfg = SECTORS.find(s => s.id === (tenant as any)?.sector);
   const [activeEntity, setActiveEntity] = useState<Entity>('contact');
   const [editId,   setEditId]   = useState<string | null>(null);
   const [showNew,  setShowNew]  = useState(false);
   const [form,     setForm]     = useState(blank());
   const [optInput, setOptInput] = useState('');
-  const [presetOpen, setPresetOpen] = useState(false);
+  const [confirmRestore, setConfirmRestore] = useState(false);
 
   const { data: allFields = [], isLoading } = useQuery<FieldDef[]>({
     queryKey: ['custom-field-defs'],
     queryFn: async () => {
-      const entities: Entity[] = ['contact', 'ticket', 'deal'];
+      const entities: Entity[] = ['contact', 'company', 'ticket', 'deal'];
       const results = await Promise.all(
         entities.map(e =>
           api.get(`/api/v1/sector/fields?entity=${e}`)
@@ -131,9 +101,9 @@ export function CustomFieldsPage() {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['custom-field-defs'] }); qc.invalidateQueries({ queryKey: ['sector-fields'] }); },
   });
 
-  const bulkCreateMut = useMutation({
-    mutationFn: (fields: any[]) => Promise.all(fields.map(f => api.post('/api/v1/sector/fields', f))),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['custom-field-defs'] }); qc.invalidateQueries({ queryKey: ['sector-fields'] }); setPresetOpen(false); },
+  const restoreDefaultsMut = useMutation({
+    mutationFn: () => api.post('/api/v1/sector/fields/restore-defaults'),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['custom-field-defs'] }); qc.invalidateQueries({ queryKey: ['sector-fields'] }); setConfirmRestore(false); },
   });
 
   function startEdit(f: FieldDef) {
@@ -197,10 +167,24 @@ export function CustomFieldsPage() {
           <p className="text-sm text-gray-500 mt-0.5">Add sector-specific fields to contacts, tickets, and deals. These appear in forms and are stored per record.</p>
         </div>
         <div className="flex gap-2">
-          <button onClick={() => setPresetOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-2 text-sm border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-600">
-            <Tag className="w-4 h-4" /> Sector Presets
-          </button>
+          {sectorCfg && (
+            confirmRestore ? (
+              <div className="flex items-center gap-2">
+                <button onClick={() => setConfirmRestore(false)} className="px-3 py-2 text-xs border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-500">Cancel</button>
+                <button onClick={() => restoreDefaultsMut.mutate()} disabled={restoreDefaultsMut.isPending}
+                  className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-white rounded-lg bg-amber-500 hover:bg-amber-600 disabled:opacity-50">
+                  {restoreDefaultsMut.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCcw className="w-3.5 h-3.5" />}
+                  Confirm restore
+                </button>
+              </div>
+            ) : (
+              <button onClick={() => setConfirmRestore(true)}
+                title={`Reset field titles/options back to the ${sectorCfg.label} defaults. Fields you added yourself are untouched.`}
+                className="flex items-center gap-1.5 px-3 py-2 text-sm border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-600">
+                <RotateCcw className="w-4 h-4" /> Restore {sectorCfg.label} Defaults
+              </button>
+            )
+          )}
           <button onClick={() => { setShowNew(true); setEditId(null); setForm({ ...blank(), entity: activeEntity }); }}
             className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white rounded-lg"
             style={{ background: 'linear-gradient(135deg,#29ABE2,#4D8B3C)' }}>
@@ -241,10 +225,12 @@ export function CustomFieldsPage() {
           <Tag className="w-8 h-8 text-gray-300 mx-auto mb-3" />
           <p className="text-sm font-medium text-gray-500">No custom fields yet</p>
           <p className="text-xs text-gray-400 mt-1">Add fields to capture sector-specific data on {activeEntity} records.</p>
-          <button onClick={() => setPresetOpen(true)}
-            className="mt-4 text-xs text-brand-500 hover:underline font-medium">
-            Load a sector preset →
-          </button>
+          {sectorCfg && (
+            <button onClick={() => setConfirmRestore(true)}
+              className="mt-4 text-xs text-brand-500 hover:underline font-medium">
+              Load {sectorCfg.label} defaults →
+            </button>
+          )}
         </div>
       ) : (
         <div className="space-y-2">
@@ -266,17 +252,21 @@ export function CustomFieldsPage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-semibold text-gray-900">{f.label}</span>
+                      {f.field_type === 'select' && <span className="text-[10px] font-bold text-brand-600 border border-brand-200 bg-brand-50 px-1.5 py-0.5 rounded">Dropdown</span>}
                       {f.is_required && <span className="text-[10px] font-bold text-red-500 border border-red-200 bg-red-50 px-1.5 py-0.5 rounded">Required</span>}
                     </div>
                     <div className="flex items-center gap-2 mt-0.5">
                       <span className="text-xs text-gray-400 font-mono">{f.name}</span>
                       <span className="text-gray-300">·</span>
                       <span className="text-xs text-gray-400">{FIELD_TYPES.find(t => t.value === f.field_type)?.label}</span>
-                      {f.field_type === 'select' && f.options && (
-                        <><span className="text-gray-300">·</span>
-                        <span className="text-xs text-gray-400">{f.options.length} options</span></>
-                      )}
                     </div>
+                    {f.field_type === 'select' && !!f.options?.length && (
+                      <div className="flex flex-wrap gap-1 mt-1.5">
+                        {f.options.map((o, i) => (
+                          <span key={i} className="text-[11px] text-gray-600 bg-gray-100 px-1.5 py-0.5 rounded">{o}</span>
+                        ))}
+                      </div>
+                    )}
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
                     <button onClick={() => startEdit(f)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600">
@@ -294,44 +284,6 @@ export function CustomFieldsPage() {
         </div>
       )}
 
-      {/* Sector preset modal */}
-      {presetOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
-            <div className="flex items-center justify-between px-6 py-4 border-b">
-              <h2 className="text-base font-bold text-gray-900">Sector Presets</h2>
-              <button onClick={() => setPresetOpen(false)} className="text-gray-400 hover:text-gray-600"><X className="w-4 h-4" /></button>
-            </div>
-            <div className="p-6 space-y-4">
-              <p className="text-sm text-gray-500">Click a preset to add all its fields instantly. Duplicate field names are skipped automatically.</p>
-              {SECTOR_PRESETS.map(preset => (
-                <div key={preset.label} className="border border-gray-200 rounded-xl p-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <h3 className="text-sm font-semibold text-gray-900">{preset.label}</h3>
-                    <button
-                      onClick={() => bulkCreateMut.mutate(preset.fields.map((f, i) => ({ ...f, is_required: false, sort_order: (i + 1) * 10 })))}
-                      disabled={bulkCreateMut.isPending}
-                      className="text-xs px-3 py-1.5 font-medium text-white rounded-lg"
-                      style={{ background: 'linear-gradient(135deg,#29ABE2,#4D8B3C)' }}>
-                      {bulkCreateMut.isPending ? 'Adding…' : 'Add all fields'}
-                    </button>
-                  </div>
-                  <div className="space-y-1">
-                    {preset.fields.map(f => (
-                      <div key={f.name} className="flex items-center gap-2 text-xs text-gray-500">
-                        <span className="font-mono text-gray-400">{f.name}</span>
-                        <span className="text-gray-300">→</span>
-                        <span>{f.label}</span>
-                        <span className="ml-auto text-gray-400 capitalize">{f.entity}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

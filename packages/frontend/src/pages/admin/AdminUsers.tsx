@@ -53,7 +53,7 @@ function StatusPill({ active }: { active: boolean }) {
 }
 
 function RoleBadge({ role, roleName, color }: { role: string; roleName?: string; color?: string }) {
-  const label = roleName ?? role;
+  const label = roleName ?? role.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
   const bg = color ? `${color}18` : 'rgba(41,171,226,0.1)';
   const fg = color ?? '#29ABE2';
   return (
@@ -82,7 +82,7 @@ function resolveRoleName(member: Member, roles: Role[]): string {
   }
   const sr = roles.find((r: any) => r.is_system && (r as any).base_role === member.role);
   if (sr) return sr.name;
-  return member.role.charAt(0).toUpperCase() + member.role.slice(1);
+  return member.role.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
 }
 
 // ── Invite User Modal ─────────────────────────────────────────────────────────

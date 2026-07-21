@@ -29,6 +29,15 @@ class TenantService {
         logger_1.logger.info('Tenant created', { tenantId: tenant.id, slug: input.slug });
         return tenant;
     }
+    // Bust the 5-minute cache for a tenant immediately after any direct
+    // (non-service-method) write to the tenants row — e.g. super-admin
+    // settings patches — so the change takes effect on the very next
+    // request instead of silently waiting out the TTL.
+    async invalidateCache(id, slug) {
+        await this.redis.del(`tenant:${id}`);
+        if (slug)
+            await this.redis.del(`tenant:slug:${slug}`);
+    }
     async findById(id) {
         const cacheKey = `tenant:${id}`;
         const cached = await this.redis.get(cacheKey);
@@ -93,7 +102,11 @@ class TenantService {
         const tenant = await this.findById(tenantId);
         if (!tenant)
             throw new Error('Tenant not found');
-        const limits = tenant.settings.limits;
+        // Older tenants (created before per-tenant limits were persisted, or never
+        // through updatePlan()) have no settings.limits — fall back to their plan's
+        // defaults instead of crashing. Root-caused 2026-07-17: 7 of 8 remaining
+        // tenants had no settings.limits, breaking outbound voice calling for all of them.
+        const limits = tenant.settings.limits ?? shared_1.PLAN_LIMITS[tenant.plan] ?? shared_1.PLAN_LIMITS.free;
         const limit = limits[metric] ?? 0;
         if (limit === -1)
             return { allowed: true, current: 0, limit: -1 }; // unlimited

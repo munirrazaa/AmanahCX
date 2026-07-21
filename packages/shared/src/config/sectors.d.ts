@@ -23,6 +23,14 @@ export interface SectorField {
     placeholder?: string;
     group?: string;
 }
+export interface SlaDefault {
+    priority: 'urgent' | 'high' | 'medium' | 'low';
+    name: string;
+    description: string;
+    first_response_hours: number;
+    resolution_hours: number;
+    business_hours_only: boolean;
+}
 export interface SectorConfig {
     id: string;
     label: string;
@@ -33,8 +41,16 @@ export interface SectorConfig {
     contactLabel: string;
     contactLabelPlural: string;
     ticketLabel: string;
+    companyLabel: string;
+    dealLabel: string;
     departments: string[];
     fields: SectorField[];
+    companyFields: SectorField[];
+    dealFields: SectorField[];
+    ticketFields: SectorField[];
+    slaDefaults: SlaDefault[];
+    defaultModules: string[];
+    defaultFeatures: string[];
 }
 export declare const SECTORS: SectorConfig[];
 export declare const SECTOR_MAP: Record<string, SectorConfig>;

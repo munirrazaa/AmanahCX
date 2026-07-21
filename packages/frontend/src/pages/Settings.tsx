@@ -6,20 +6,27 @@ import {
   ShieldCheck, UserCheck, Eye, EyeOff, Copy, KeyRound, Webhook,
   Route, Tag, Plus, AlertCircle, Layers, ToggleLeft, ToggleRight,
   RefreshCw, Globe, FlaskConical, ChevronDown, ChevronUp,
+  User, Palette, Bell, Shield,
 } from 'lucide-react';
 import { api } from '../services/api';
-import { MilestoneSettings } from './MilestoneSettings';
+import { ProfileSettings, AppearanceSettings, NotificationSettings, SecuritySettings } from './PersonalSettings';
 import { useAuthStore } from '../store/auth.store';
 import { useIsAdmin } from '../hooks/useRole';
 
-type Tab = 'workspace' | 'tags' | 'milestones' | 'api-keys' | 'webhooks';
+// Milestones moved to the Governance hub (pages/Governance.tsx) 2026-07-21 —
+// governance-related settings now live in one consolidated place instead of
+// being split between here and two separate sidebar links.
+type Tab = 'workspace' | 'profile' | 'appearance' | 'notifications' | 'security' | 'tags' | 'api-keys' | 'webhooks';
 
 const TABS: { id: Tab; label: string; icon: any }[] = [
-  { id: 'workspace',  label: 'General',     icon: Building2 },
-  { id: 'tags',       label: 'Tags',        icon: Tag       },
-  { id: 'milestones', label: 'Milestones',  icon: Layers    },
-  { id: 'api-keys',   label: 'API Keys',    icon: KeyRound  },
-  { id: 'webhooks',   label: 'Webhooks',    icon: Webhook   },
+  { id: 'workspace',     label: 'General',       icon: Building2 },
+  { id: 'profile',       label: 'Profile',       icon: User      },
+  { id: 'appearance',    label: 'Appearance',    icon: Palette   },
+  { id: 'notifications', label: 'Notifications', icon: Bell      },
+  { id: 'security',      label: 'Security',      icon: Shield    },
+  { id: 'tags',          label: 'Tags',          icon: Tag       },
+  { id: 'api-keys',      label: 'API Keys',      icon: KeyRound  },
+  { id: 'webhooks',      label: 'Webhooks',      icon: Webhook   },
 ];
 
 function WorkspaceSettings() {
@@ -610,7 +617,7 @@ function TeamSettings() {
   );
 }
 
-// ── Routing & SLA Settings ────────────────────────────────────────────────────
+// ── Routing Settings ────────────────────────────────────────────────────────
 
 export function RoutingSettings() {
   const qc = useQueryClient();
@@ -652,7 +659,7 @@ export function RoutingSettings() {
   return (
     <div className="space-y-8 max-w-lg">
       <div>
-        <h2 className="text-base font-semibold text-gray-900">Routing & SLA</h2>
+        <h2 className="text-base font-semibold text-gray-900">Routing</h2>
         <p className="text-sm text-gray-500 mt-0.5">Configure how tickets are assigned and how surveys expire.</p>
       </div>
 
@@ -1411,11 +1418,14 @@ function WebhooksSettings() {
 }
 
 const TAB_CONTENT: Record<Tab, React.FC> = {
-  workspace:  WorkspaceSettings,
-  tags:       TagsSettings,
-  milestones: MilestoneSettings,
-  'api-keys': ApiKeysSettings,
-  webhooks:   WebhooksSettings,
+  workspace:     WorkspaceSettings,
+  profile:       ProfileSettings,
+  appearance:    AppearanceSettings,
+  notifications: NotificationSettings,
+  security:      SecuritySettings,
+  tags:          TagsSettings,
+  'api-keys':    ApiKeysSettings,
+  webhooks:      WebhooksSettings,
 };
 
 export function Settings() {

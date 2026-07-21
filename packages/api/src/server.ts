@@ -38,6 +38,7 @@ import { ticketAnalyticsRoutes } from './routes/ticket-analytics';
 import { notificationRoutes } from './routes/notifications';
 import { emailRoutes } from './routes/emails';
 import { voiceBotRoutes } from './routes/voice-bot';
+import { salesDemoRoutes } from './routes/sales-demo';
 import { invoiceRoutes } from './routes/sales/invoices';
 import { billingContactRoutes } from './routes/sales/billing-contacts';
 import { salesSettingsRoutes } from './routes/sales/sales-settings';
@@ -381,6 +382,7 @@ async function buildServer() {
   await fastify.register(notificationRoutes(db), { prefix: '/api/v1/notifications' });
   await fastify.register(emailRoutes(db, eventBus), { prefix: '/api/v1/emails' });
   await fastify.register(voiceBotRoutes(db, eventBus), { prefix: '/api/v1/voice-bot' });
+  await fastify.register(salesDemoRoutes(db), { prefix: '/api/v1/sales-demo' });
   await fastify.register(rolesRoutes(db), { prefix: '/api/v1/roles' });
   // Sales & Invoicing module routes
   await fastify.register(invoiceRoutes(db),        { prefix: '/api/v1/sales/invoices' });

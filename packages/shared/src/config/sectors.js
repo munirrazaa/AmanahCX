@@ -44,6 +44,8 @@ exports.SECTORS = [
         companyLabel: 'Bank / Financial Institution',
         dealLabel: 'Loan / Product',
         departments: ['Retail Banking', 'Loans', 'Cards', 'Customer Support', 'Compliance'],
+        defaultModules: ['crm', 'ticketing', 'sales', 'analytics'],
+        defaultFeatures: ['crm.contacts', 'crm.companies', 'crm.deals', 'crm.activities', 'ticketing.tickets', 'ticketing.sla', 'ticketing.csat', 'sales.invoices', 'sales.payments', 'sales.reports', 'analytics.reports'],
         slaDefaults: [
             { priority: 'urgent', name: 'Urgent — Fraud & Security', description: 'Fraud alerts, blocked accounts, security breaches. 24/7.', first_response_hours: 1, resolution_hours: 4, business_hours_only: false },
             { priority: 'high', name: 'High — Dispute & Card Issues', description: 'Card disputes, failed payments, loan anomalies.', first_response_hours: 2, resolution_hours: 8, business_hours_only: true },
@@ -105,6 +107,8 @@ exports.SECTORS = [
         companyLabel: 'Telecom Operator',
         dealLabel: 'Service Contract',
         departments: ['Mobile Services', 'Broadband', 'Enterprise', 'Technical Support', 'Billing'],
+        defaultModules: ['crm', 'ticketing', 'voice_bot', 'analytics'],
+        defaultFeatures: ['crm.contacts', 'crm.companies', 'crm.deals', 'crm.activities', 'ticketing.tickets', 'ticketing.sla', 'ticketing.csat', 'voice_bot.calls', 'voice_bot.config', 'analytics.reports'],
         slaDefaults: [
             { priority: 'urgent', name: 'Urgent — Network / Outage', description: 'Total service loss, network outages, major faults. 24/7.', first_response_hours: 1, resolution_hours: 4, business_hours_only: false },
             { priority: 'high', name: 'High — Service Degradation', description: 'Slow speeds, partial outage, billing dispute.', first_response_hours: 2, resolution_hours: 8, business_hours_only: true },
@@ -165,6 +169,8 @@ exports.SECTORS = [
         companyLabel: 'Transport Operator',
         dealLabel: 'Pass / Contract',
         departments: ['Passenger Services', 'Operations', 'Ticketing', 'Lost & Found', 'Accessibility'],
+        defaultModules: ['crm', 'ticketing'],
+        defaultFeatures: ['crm.contacts', 'crm.companies', 'crm.deals', 'crm.activities', 'ticketing.tickets', 'ticketing.sla', 'ticketing.csat'],
         slaDefaults: [
             { priority: 'urgent', name: 'Urgent — Safety & Security', description: 'Accidents, security threats, medical on vehicle. 24/7.', first_response_hours: 1, resolution_hours: 4, business_hours_only: false },
             { priority: 'high', name: 'High — Service Disruption', description: 'Route cancellation, major delay, accessibility failure.', first_response_hours: 2, resolution_hours: 8, business_hours_only: false },
@@ -223,6 +229,8 @@ exports.SECTORS = [
         companyLabel: 'Logistics Provider',
         dealLabel: 'Freight Contract',
         departments: ['Customer Service', 'Operations', 'Customs & Compliance', 'Warehousing', 'Last Mile'],
+        defaultModules: ['crm', 'ticketing', 'integrations', 'analytics'],
+        defaultFeatures: ['crm.contacts', 'crm.companies', 'crm.deals', 'crm.activities', 'ticketing.tickets', 'ticketing.sla', 'ticketing.csat', 'integrations.connectors', 'integrations.webhooks', 'analytics.reports'],
         slaDefaults: [
             { priority: 'urgent', name: 'Urgent — Lost / Damaged Cargo', description: 'Missing shipment, customs hold, perishables at risk. 24/7.', first_response_hours: 2, resolution_hours: 8, business_hours_only: false },
             { priority: 'high', name: 'High — Delivery Exception', description: 'Failed delivery, wrong address, delay beyond SLA.', first_response_hours: 4, resolution_hours: 24, business_hours_only: true },
@@ -284,6 +292,8 @@ exports.SECTORS = [
         companyLabel: 'Insurance Provider',
         dealLabel: 'Policy',
         departments: ['New Business', 'Claims', 'Renewals', 'Customer Support', 'Underwriting'],
+        defaultModules: ['crm', 'ticketing', 'sales', 'analytics'],
+        defaultFeatures: ['crm.contacts', 'crm.companies', 'crm.deals', 'crm.activities', 'ticketing.tickets', 'ticketing.sla', 'ticketing.csat', 'sales.invoices', 'sales.payments', 'sales.reports', 'analytics.reports'],
         slaDefaults: [
             { priority: 'urgent', name: 'Urgent — Casualty / Major Claim', description: 'Death, hospitalisation, total loss, emergency claim. 24/7.', first_response_hours: 2, resolution_hours: 24, business_hours_only: false },
             { priority: 'high', name: 'High — Active Claim Review', description: 'Claim under investigation, surveyor assigned.', first_response_hours: 4, resolution_hours: 72, business_hours_only: true },
@@ -346,6 +356,8 @@ exports.SECTORS = [
         companyLabel: 'Institution',
         dealLabel: 'Enrollment / Fee',
         departments: ['Admissions', 'Student Services', 'Finance & Fees', 'Academic Affairs', 'Alumni'],
+        defaultModules: ['crm', 'ticketing', 'sales', 'emails'],
+        defaultFeatures: ['crm.contacts', 'crm.companies', 'crm.deals', 'crm.activities', 'ticketing.tickets', 'ticketing.sla', 'ticketing.csat', 'sales.invoices', 'sales.payments', 'sales.reports', 'emails.inbox', 'emails.compose'],
         slaDefaults: [
             { priority: 'urgent', name: 'Urgent — Student Safety / Crisis', description: 'Welfare concern, harassment, emergency on campus. 24/7.', first_response_hours: 1, resolution_hours: 8, business_hours_only: false },
             { priority: 'high', name: 'High — Exam / Results Issue', description: 'Incorrect grades, missing results, appeal deadline.', first_response_hours: 4, resolution_hours: 24, business_hours_only: true },
@@ -405,6 +417,8 @@ exports.SECTORS = [
         companyLabel: 'Seller / Brand',
         dealLabel: 'Order / Account',
         departments: ['Customer Support', 'Returns & Refunds', 'Payments', 'Logistics', 'Seller Support'],
+        defaultModules: ['crm', 'ticketing', 'sales', 'integrations', 'analytics'],
+        defaultFeatures: ['crm.contacts', 'crm.companies', 'crm.deals', 'crm.activities', 'ticketing.tickets', 'ticketing.sla', 'ticketing.csat', 'sales.invoices', 'sales.payments', 'sales.reports', 'integrations.connectors', 'integrations.webhooks', 'analytics.reports'],
         slaDefaults: [
             { priority: 'urgent', name: 'Urgent — Payment / Fraud', description: 'Unauthorized charge, payment failure, account compromise.', first_response_hours: 1, resolution_hours: 4, business_hours_only: false },
             { priority: 'high', name: 'High — Non-Delivery / Damage', description: 'Order not received, product damaged, wrong item.', first_response_hours: 2, resolution_hours: 24, business_hours_only: true },
@@ -463,6 +477,8 @@ exports.SECTORS = [
         companyLabel: 'Company',
         dealLabel: 'Deal',
         departments: ['Customer Support', 'Sales', 'Operations'],
+        defaultModules: ['crm', 'ticketing'],
+        defaultFeatures: ['crm.contacts', 'crm.companies', 'crm.deals', 'crm.activities', 'ticketing.tickets', 'ticketing.sla', 'ticketing.csat'],
         slaDefaults: [
             { priority: 'urgent', name: 'Urgent', description: 'Critical issues requiring immediate attention. 24/7.', first_response_hours: 1, resolution_hours: 4, business_hours_only: false },
             { priority: 'high', name: 'High', description: 'High-priority issues — same business day.', first_response_hours: 4, resolution_hours: 8, business_hours_only: true },

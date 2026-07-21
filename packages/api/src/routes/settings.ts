@@ -38,6 +38,37 @@ export function defaultPermissions(role: string): Record<string, string> {
         activities: 'full', tickets: 'full', emails: 'full', analytics: 'view',
         voice: 'full', voicebot: 'view', integrations: 'view', settings: 'none', billing: 'none',
       };
+    case 'operations_admin':
+      // Cross-functional read-only observer (COO / Head of Contact Centre): sees
+      // everything operational, configures nothing.
+      return {
+        dashboard: 'view', contacts: 'view', companies: 'view', deals: 'view',
+        activities: 'view', tickets: 'view', emails: 'view', analytics: 'view',
+        voice: 'view', voicebot: 'view', integrations: 'none', settings: 'none', billing: 'none',
+      };
+    case 'collaborator':
+      // View + internal notes only — no ticket writes.
+      return {
+        dashboard: 'view', contacts: 'view', companies: 'view', deals: 'view',
+        activities: 'view', tickets: 'view', emails: 'view', analytics: 'none',
+        voice: 'none', voicebot: 'none', integrations: 'none', settings: 'none', billing: 'none',
+      };
+    case 'policy_admin':
+      // Governance-only — can read tickets, nothing else operational. Kept in sync
+      // with the policyAdminPerms literal used directly in the invite route below.
+      return {
+        dashboard: 'view', tickets: 'view', settings: 'none',
+        contacts: 'none', companies: 'none', deals: 'none',
+        activities: 'none', emails: 'none', voice: 'none',
+        voicebot: 'none', analytics: 'none', integrations: 'none', billing: 'none',
+      };
+    case 'viewer':
+      // Read-only access — view only, no writes anywhere.
+      return {
+        dashboard: 'view', contacts: 'view', companies: 'view', deals: 'view',
+        activities: 'view', tickets: 'view', emails: 'view', analytics: 'view',
+        voice: 'view', voicebot: 'none', integrations: 'none', settings: 'none', billing: 'none',
+      };
     case 'agent':
     default:
       return {
@@ -468,7 +499,7 @@ export function settingsRoutes(db: DatabaseClient, redis: RedisClient) {
         email:           z.string().email(),
         name:            z.string().max(100).optional(),
         // Tenant admins can assign up to manager; managers can only assign agent/viewer/policy_admin
-        role:                  z.enum(['tenant_admin', 'manager', 'agent', 'viewer', 'policy_admin']).optional(),
+        role:                  z.enum(['tenant_admin', 'manager', 'agent', 'viewer', 'policy_admin', 'operations_admin', 'collaborator']).optional(),
         custom_role_id:        z.string().uuid().optional(),
         permissions:           z.record(z.string()).optional(),
         department:            z.string().max(100).optional(),
@@ -715,7 +746,7 @@ export function settingsRoutes(db: DatabaseClient, redis: RedisClient) {
       const PatchSchema = z.object({
         name:           z.string().min(1).max(100).optional(),
         // Restrict to tenant-level roles only — super_admin cannot be self-assigned
-        role:           z.enum(['tenant_admin', 'manager', 'agent', 'viewer']).optional(),
+        role:           z.enum(['tenant_admin', 'manager', 'agent', 'viewer', 'policy_admin', 'operations_admin', 'collaborator']).optional(),
         department:     z.string().max(100).nullable().optional(),
         departmentType: z.enum(DEPT_TYPES).nullable().optional(), // Gap 8
         permissions:    z.record(z.string()).optional(),

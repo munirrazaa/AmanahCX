@@ -18,11 +18,13 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   BookOpen, Plus, Loader2, CheckCircle, Clock, AlertTriangle,
-  Edit2, Trash2, X, Shield, ExternalLink,
+  Edit2, Trash2, X, Shield, ExternalLink, Layers,
 } from 'lucide-react';
 import { api } from '../services/api';
 import { useIsTenantAdmin, useIsPolicyAdmin } from '../hooks/useRole';
 import { Link } from 'react-router-dom';
+import { TicketSla } from './TicketSla';
+import { MilestoneSettings } from './MilestoneSettings';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -340,10 +342,14 @@ function PolicyCard({
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
-export function GovernancePage() {
+function DataPrivacyPolicies() {
   const isAdmin      = useIsTenantAdmin();
   const isPolicyAdm  = useIsPolicyAdmin();
-  const canEdit      = isPolicyAdm;
+  // Backend (governance.ts isPolicyAdmin()) already treats tenant_admin as an
+  // implicit bypass for governance actions — the frontend was out of sync,
+  // hiding the edit/create controls from tenant_admin even though the API
+  // would have accepted the request. Fixed 2026-07-21.
+  const canEdit      = isPolicyAdm || isAdmin;
   const qc           = useQueryClient();
   const [showCreate, setShowCreate] = useState(false);
   const [editing, setEditing]       = useState<RetentionPolicy | undefined>(undefined);
@@ -435,6 +441,46 @@ export function GovernancePage() {
       {/* Modals */}
       {showCreate && <PolicyModal onClose={() => setShowCreate(false)} />}
       {editing    && <PolicyModal policy={editing} onClose={() => setEditing(undefined)} />}
+    </div>
+  );
+}
+
+// ── Governance Hub ──────────────────────────────────────────────────────────
+// Consolidates every governance-related area — Data & Privacy Policies, SLA
+// Policies, and Milestones — into one page with one sidebar entry, instead of
+// three scattered locations (two separate sidebar links + a tab buried inside
+// General Settings). Governance is a role (policy_admin), not a set of
+// unrelated features, so it should live in one place. Every tab keeps working
+// exactly as it did standalone — this is a navigation consolidation only, not
+// a rewrite of any of the three areas. Moved 2026-07-21.
+const GOV_TABS = [
+  { id: 'privacy',    label: 'Data & Privacy', icon: BookOpen },
+  { id: 'sla',        label: 'SLA Policies',   icon: Clock    },
+  { id: 'milestones', label: 'Milestones',     icon: Layers   },
+] as const;
+
+export function GovernanceHub() {
+  const [tab, setTab] = useState<typeof GOV_TABS[number]['id']>('privacy');
+
+  return (
+    <div className="flex h-full">
+      <div className="w-52 border-r border-gray-100 p-3 space-y-0.5 shrink-0">
+        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider px-3 mb-3">Governance</p>
+        {GOV_TABS.map(({ id, label, icon: Icon }) => (
+          <button key={id} onClick={() => setTab(id)}
+            className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors text-left ${
+              tab === id ? 'bg-brand-50 text-brand-700 font-medium' : 'text-gray-600 hover:bg-gray-50'
+            }`}>
+            <Icon className="w-4 h-4 shrink-0" />
+            {label}
+          </button>
+        ))}
+      </div>
+      <div className="flex-1 overflow-y-auto">
+        {tab === 'privacy'    && <DataPrivacyPolicies />}
+        {tab === 'sla'        && <TicketSla />}
+        {tab === 'milestones' && <MilestoneSettings />}
+      </div>
     </div>
   );
 }

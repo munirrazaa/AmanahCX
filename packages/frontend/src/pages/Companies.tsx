@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { api } from '../services/api';
 import { formatCurrency, formatNumber } from '../utils/format';
+import { SectorFieldsForm } from '../components/SectorFieldsForm';
 
 const TYPE_ICONS: Record<string, string> = {
   call: '📞', email: '📧', meeting: '🤝', task: '✅',
@@ -69,6 +70,12 @@ export function Companies() {
   const [form, setForm] = useState({
     name: '', domain: '', industry: '', size: '', country: '', city: '', website: '', phone: '',
   });
+  const [customFields, setCustomFields] = useState<Record<string, any>>({});
+
+  const { data: companyFieldDefs = [] } = useQuery({
+    queryKey: ['sector-fields-company'],
+    queryFn: () => api.get('/api/v1/sector/fields?entity=company').then(r => r.data.data ?? []),
+  });
 
   const { data, isLoading } = useQuery({
     queryKey: ['companies', search, page],
@@ -104,12 +111,14 @@ export function Companies() {
   const closeCreate = () => {
     setShowCreate(false);
     setForm({ name: '', domain: '', industry: '', size: '', country: '', city: '', website: '', phone: '' });
+    setCustomFields({});
     createMutation.reset();
   };
 
   const [showEdit, setShowEdit] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [editForm, setEditForm] = useState({ name: '', domain: '', industry: '', size: '', country: '', city: '', website: '', phone: '' });
+  const [editCustomFields, setEditCustomFields] = useState<Record<string, any>>({});
   const [expandedDealId, setExpandedDealId] = useState<string | null>(null);
 
   const updateMutation = useMutation({
@@ -142,16 +151,18 @@ export function Companies() {
       website:  selected.website ?? '',
       phone:    selected.phone ?? '',
     });
+    setEditCustomFields(selected.custom_fields ?? {});
     updateMutation.reset();
     setShowEdit(true);
   };
 
   const handleUpdate = () => {
     if (!selected) return;
-    const body = Object.fromEntries(Object.entries(editForm).filter(([, v]) => v !== ''));
+    const body: any = Object.fromEntries(Object.entries(editForm).filter(([, v]) => v !== ''));
     if (body.website && !/^https?:\/\//i.test(body.website as string)) {
       body.website = `https://${body.website}`;
     }
+    if (Object.keys(editCustomFields).length) body.customFields = editCustomFields;
     updateMutation.mutate({ id: selected.id, body });
   };
 
@@ -476,6 +487,16 @@ export function Companies() {
                   ))}
                 </select>
               </div>
+              {companyFieldDefs.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Additional Details</p>
+                  <SectorFieldsForm
+                    fields={companyFieldDefs}
+                    values={editCustomFields}
+                    onChange={(name, value) => setEditCustomFields(f => ({ ...f, [name]: value }))}
+                  />
+                </div>
+              )}
               {updateMutation.isError && (
                 <p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">
                   {(updateMutation.error as any)?.response?.data?.error?.message ?? 'Failed to update company'}
@@ -560,6 +581,16 @@ export function Companies() {
                   ))}
                 </select>
               </div>
+              {companyFieldDefs.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Additional Details</p>
+                  <SectorFieldsForm
+                    fields={companyFieldDefs}
+                    values={customFields}
+                    onChange={(name, value) => setCustomFields(f => ({ ...f, [name]: value }))}
+                  />
+                </div>
+              )}
             </div>
             {createMutation.isError && (
               <div className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2 mt-2">
@@ -574,10 +605,11 @@ export function Companies() {
                 className="flex-1 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50">Cancel</button>
               <button
                 onClick={() => {
-                  const body = Object.fromEntries(Object.entries(form).filter(([, v]) => v !== ''));
+                  const body: any = Object.fromEntries(Object.entries(form).filter(([, v]) => v !== ''));
                   if (body.website && !/^https?:\/\//i.test(body.website as string)) {
                     body.website = `https://${body.website}`;
                   }
+                  if (Object.keys(customFields).length) body.customFields = customFields;
                   createMutation.mutate(body);
                 }}
                 disabled={!form.name || createMutation.isPending}

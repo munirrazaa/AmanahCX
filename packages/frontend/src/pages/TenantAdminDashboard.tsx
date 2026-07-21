@@ -170,9 +170,17 @@ export function TenantAdminDashboard() {
               <QuickAction icon={Shield}     label="Manage Roles"           desc="Create roles & set permissions"         color="#8b5cf6" onClick={() => navigate('/roles')} />
               <QuickAction icon={Building2}  label="Manage Departments"     desc="Create & assign department heads"       color="#f59e0b" onClick={() => navigate('/departments')} />
               <QuickAction icon={Layers}     label="Enable Modules"         desc="Turn features on or off"                color="#06b6d4" onClick={() => navigate('/admin/modules')} />
-              <QuickAction icon={Zap}        label="Connect Integrations"   desc="Email, SMS, payments, APIs"             color="#29ABE2" onClick={() => navigate('/integrations')} />
-              <QuickAction icon={Mail}       label="Email Configuration"    desc="SMTP, SendGrid, Microsoft 365"          color="#57A93C" onClick={() => navigate('/integrations')} />
-              <QuickAction icon={Clock}      label="Routing & SLA"          desc="Ticket assignment & SLA policies"       color="#f59e0b" onClick={() => navigate('/admin/routing')} />
+              {/* Both route to /integrations, which itself already redirects
+                  unlicensed tenants straight back to /dashboard with no
+                  explanation — a confusing silent no-op. Hide them here
+                  instead, matching the voice_bot gating pattern above. */}
+              {activeModules.includes('integrations') && (
+                <>
+                  <QuickAction icon={Zap}   label="Connect Integrations"   desc="Email, SMS, payments, APIs"             color="#29ABE2" onClick={() => navigate('/integrations')} />
+                  <QuickAction icon={Mail}  label="Email Configuration"    desc="SMTP, SendGrid, Microsoft 365"          color="#57A93C" onClick={() => navigate('/integrations')} />
+                </>
+              )}
+              <QuickAction icon={Clock}      label="Routing"                desc="Ticket assignment & routing rules"      color="#f59e0b" onClick={() => navigate('/admin/routing')} />
               <QuickAction icon={Settings}   label="Workspace Settings"     desc="Name, timezone, locale, branding"       color="#6b7280" onClick={() => navigate('/settings')} />
             </div>
           </div>
@@ -196,7 +204,9 @@ export function TenantAdminDashboard() {
               ) : (
                 <div className="flex flex-wrap gap-2">
                   {activeModules.map((m) => (
-                    <span key={m} className="text-xs font-medium px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 capitalize">{m}</span>
+                    <span key={m} className="text-xs font-medium px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700">
+                      {m === 'crm' ? 'CRM' : m.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
+                    </span>
                   ))}
                 </div>
               )}

@@ -247,9 +247,11 @@ export function Contacts() {
           ) : contacts.length === 0 ? (
             <div className="text-center py-16 text-gray-400">
               <p className="text-sm">No contacts found</p>
-              <button onClick={() => setShowCreate(true)} className="mt-2 text-xs text-brand-500 hover:underline">
-                Create your first contact
-              </button>
+              {can.writeRecords && (
+                <button onClick={() => setShowCreate(true)} className="mt-2 text-xs text-brand-500 hover:underline">
+                  Create your first {isSuperAdmin ? 'contact' : sectorConfig.contactLabel.toLowerCase()}
+                </button>
+              )}
             </div>
           ) : (
             contacts.map((c: any) => (

@@ -27,6 +27,7 @@
     "mammoth": "^1.12.0",
     "mercurius": "^14.0.0",
     "nodemailer": "^6.9.0",
+    "openai": "^4.104.0",
     "pdf-parse": "^2.4.5",
     "pizzip": "^3.2.0",
     "zod": "^3.22.0"

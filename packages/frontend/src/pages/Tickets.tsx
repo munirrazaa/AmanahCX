@@ -1706,7 +1706,7 @@ export function Tickets() {
   const isManagerRole = useIsManager();
   const { user } = useAuthStore();
   const qc  = useQueryClient();
-  const deptLabel = user?.department ? `${user.department} Tickets` : 'Tickets';
+  const deptLabel = (user?.department && user?.role !== 'operations_admin') ? `${user.department} Tickets` : 'Tickets';
 
   const [searchParams] = useSearchParams();
   // Dashboard stat cards deep-link here as /tickets?status=open or

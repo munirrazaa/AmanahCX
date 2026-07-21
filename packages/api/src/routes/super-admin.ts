@@ -2263,5 +2263,57 @@ export function superAdminRoutes(db: DatabaseClient, tenantService: TenantServic
       });
       return reply.send({ success: true, data: rows });
     });
+
+    // ── Push to Production (redeploy) ──────────────────────────────────────
+    // Re-runs the LATEST code already committed to `main` on the configured
+    // targets (Vercel + Railway deploy hooks) — this never pushes new code;
+    // it only re-triggers a deploy of whatever is already live-approved.
+    // See DEPLOY_HOOK_VERCEL_URL / DEPLOY_HOOK_RAILWAY_URL in .env.
+
+    // GET /super-admin/platform/redeploy-status — which targets are configured
+    fastify.get('/platform/redeploy-status', { preHandler: requirePlatformPermission('platform:push') }, async (_req, reply) => {
+      return reply.send({
+        success: true,
+        data: {
+          vercel:  !!process.env.DEPLOY_HOOK_VERCEL_URL,
+          railway: !!process.env.DEPLOY_HOOK_RAILWAY_URL,
+        },
+      });
+    });
+
+    // POST /super-admin/platform/redeploy
+    fastify.post('/platform/redeploy', { preHandler: requirePlatformPermission('platform:push') }, async (req, reply) => {
+      const targets: { name: string; url?: string }[] = [
+        { name: 'vercel',  url: process.env.DEPLOY_HOOK_VERCEL_URL },
+        { name: 'railway', url: process.env.DEPLOY_HOOK_RAILWAY_URL },
+      ].filter((t) => t.url);
+
+      if (targets.length === 0) {
+        return reply.code(503).send({
+          success: false,
+          error: { code: 'NOT_CONFIGURED', message: 'No deploy hooks configured yet — set DEPLOY_HOOK_VERCEL_URL and/or DEPLOY_HOOK_RAILWAY_URL.' },
+        });
+      }
+
+      const results: Record<string, { ok: boolean; message: string }> = {};
+      for (const t of targets) {
+        try {
+          const res = await fetch(t.url!, { method: 'POST' });
+          results[t.name] = { ok: res.ok, message: res.ok ? 'Redeploy triggered' : `Hook responded ${res.status}` };
+        } catch (err: any) {
+          results[t.name] = { ok: false, message: err?.message ?? 'Request failed' };
+        }
+      }
+
+      await db.withSuperAdmin(async (client) => {
+        await client.query(
+          `INSERT INTO platform_deploy_log (triggered_by, targets, results) VALUES ($1, $2, $3)`,
+          [req.user.sub, targets.map((t) => t.name), JSON.stringify(results)],
+        );
+      });
+
+      const allOk = Object.values(results).every((r) => r.ok);
+      return reply.code(allOk ? 200 : 207).send({ success: allOk, data: results });
+    });
   };
 }
