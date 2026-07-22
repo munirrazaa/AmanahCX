@@ -443,6 +443,16 @@ export function settingsRoutes(db: DatabaseClient, redis: RedisClient) {
         );
       });
 
+      // The tenant object (incl. settings) is Redis-cached for 5 minutes by
+      // tenantService — without busting it here, a just-toggled module wouldn't
+      // actually appear/disappear from navigation until the cache expired.
+      // Found 2026-07-22 as part of the same root cause behind the module
+      // re-enable bug: this write path never invalidated the cache at all.
+      await Promise.all([
+        redis.del(`tenant:${req.tenant.id}`),
+        redis.del(`tenant:slug:${req.tenant.slug}`),
+      ]);
+
       return reply.send({ success: true, data: { enabledModules: updatedEnabled, licensedModules } });
     });
 
@@ -464,10 +474,16 @@ export function settingsRoutes(db: DatabaseClient, redis: RedisClient) {
           ? ['crm', 'ticketing', 'emails', 'analytics']
           : _am;
       // Map of module key → top-level permission key(s) in the permissions object
-      // This tells us which permissions control each module so we can enforce 'none'
+      // This tells us which permissions control each module so we can enforce 'none'.
+      // The module is licensed as a single unit ('voice_bot' — matching active_modules
+      // and MODULE_CATALOG everywhere else) but controls two separate permission
+      // fields (plain voice calls + the bot specifically). Was two separate module
+      // keys, 'voice' and 'voicebot', neither of which ever matched the real
+      // licensing key — so this safety net force-reset both permissions to 'none'
+      // for every invited/updated user regardless of actual licensing. Found and
+      // fixed 2026-07-22 alongside the related module re-enable bug.
       const MODULE_PERMISSION_KEYS: Record<string, string[]> = {
-        voice:        ['voice'],
-        voicebot:     ['voicebot'],
+        voice_bot:    ['voice', 'voicebot'],
         ticketing:    ['tickets'],
         emails:       ['emails'],
         integrations: ['integrations'],

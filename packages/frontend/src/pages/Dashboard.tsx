@@ -1344,7 +1344,7 @@ export function Dashboard() {
     ? [
         { label: 'Manage Users',   to: '/settings',       icon: Users,  color: C.cyan   },
         { label: 'Roles',          to: '/roles',          icon: Shield, color: C.purple },
-        { label: 'Voice Bot',      to: '/voice-bot',      icon: Bot,    color: C.purple, requiresModule: 'voice' },
+        { label: 'Voice Bot',      to: '/voice-bot',      icon: Bot,    color: C.purple, requiresModule: 'voice_bot' },
         { label: 'Email Logs',     to: '/emails',         icon: Mail,   color: C.green  },
       ]
     : isViewer || isOperationsAdmin || isPolicyAdmin || isCollaborator
@@ -1352,14 +1352,14 @@ export function Dashboard() {
     : isManager
     ? [
         { label: 'New Ticket',     to: '/tickets',         icon: Ticket,      color: C.orange, requiresModule: 'ticketing' },
-        { label: 'Voice Calls',    to: '/voice',           icon: PhoneCall,   color: C.cyan,   requiresModule: 'voice' },
-        { label: 'Bot Calls',      to: '/voice-bot',       icon: Bot,         color: C.purple, requiresModule: 'voice' },
+        { label: 'Voice Calls',    to: '/voice',           icon: PhoneCall,   color: C.cyan,   requiresModule: 'voice_bot' },
+        { label: 'Bot Calls',      to: '/voice-bot',       icon: Bot,         color: C.purple, requiresModule: 'voice_bot' },
         { label: 'Ticket Reports', to: '/ticket-reports',  icon: BarChart2,   color: C.gold,   requiresModule: 'ticketing' },
       ]
     : [
         { label: 'New Ticket',  to: '/tickets',            icon: Ticket,      color: C.orange, requiresModule: 'ticketing' },
-        { label: 'Voice Calls', to: '/voice',              icon: PhoneCall,   color: C.cyan,   requiresModule: 'voice' },
-        { label: 'Bot Calls',   to: '/voice-bot',          icon: Bot,         color: C.purple, requiresModule: 'voice' },
+        { label: 'Voice Calls', to: '/voice',              icon: PhoneCall,   color: C.cyan,   requiresModule: 'voice_bot' },
+        { label: 'Bot Calls',   to: '/voice-bot',          icon: Bot,         color: C.purple, requiresModule: 'voice_bot' },
         { label: 'New Invoice', to: '/sales/invoices/new', icon: TrendingUp,  color: C.green,  requiresModule: 'sales' },
       ];
 

@@ -8,6 +8,12 @@ logs/
 dist/
 build/
 .turbo/
+# Stray compiled output left in a src/ dir shadows the real .ts source at
+# runtime (tsx watch silently prefers the .js) — found 2026-07-22 after it
+# masked a live code fix in modules/voice-module/src for several minutes.
+modules/*/src/*.js
+modules/*/src/*.js.map
+modules/*/src/*.d.ts
 invoice/
 
 # Sensitive / local tooling — never push

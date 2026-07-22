@@ -13,7 +13,13 @@ import type { PlatformModule, ModuleContext } from '@crm/shared';
 import { logger } from '@crm/core/config/logger';
 
 export class VoicePlatformModule implements PlatformModule {
-  readonly id = 'voice';
+  // Must match the licensing/entitlement key used everywhere else in the
+  // system (super-admin licensing, MODULE_CATALOG, ticket channel values,
+  // frontend feature flags) — was 'voice', which never matched any tenant's
+  // active_modules value ('voice_bot'), so this module could never actually
+  // be found once looked up by its licensed key. Confirmed 2026-07-22: this
+  // is why re-enabling the module after disabling it never restored access.
+  readonly id = 'voice_bot';
   readonly label = 'Voice';
   readonly icon = 'Phone';
   readonly requiredPlan = 'starter' as const;

@@ -73,8 +73,20 @@ export function modulesRoute(moduleRegistry: ModuleRegistry) {
       const tenant = req.tenant;
       const user   = req.user as any;
 
-      const activeModuleIds: string[] =
+      const licensedModuleIds: string[] =
         (tenant as any).active_modules ?? tenant.activeModules ?? ['crm'];
+
+      // A module must be BOTH licensed (super admin's ceiling, active_modules) AND
+      // enabled by the tenant admin (settings.enabled_modules) to actually appear.
+      // Previously this route only checked the licensed ceiling — toggling a module
+      // off/on in Settings → Modules wrote to settings.enabled_modules but had no
+      // effect here at all, so a licensed-but-toggled-off module never disappeared,
+      // and (combined with the id mismatch fixed alongside this) toggling back on
+      // never restored a module either. Found and fixed 2026-07-22.
+      const enabledModuleIds: string[] | undefined = (tenant as any).settings?.enabled_modules;
+      const activeModuleIds = enabledModuleIds
+        ? licensedModuleIds.filter((m) => m === 'crm' || enabledModuleIds.includes(m)) // 'crm' is always-on, can't be toggled off
+        : licensedModuleIds; // tenant admin never customized — default to everything licensed
 
       const entitledFeatures: string[] = (tenant as any).entitled_features ?? [];
 
@@ -90,7 +102,7 @@ export function modulesRoute(moduleRegistry: ModuleRegistry) {
         const superAdminModules = allModules
           .filter((mod) => mod.id !== 'ticketing')
           .map((mod) => {
-            if (mod.id !== 'voice') return mod;
+            if (mod.id !== 'voice_bot') return mod;
             return {
               ...mod,
               navItems: mod.navItems.filter((item: any) => item.permissionKey !== 'voicebot:read'),
