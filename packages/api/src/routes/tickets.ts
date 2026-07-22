@@ -147,6 +147,79 @@ const RcaSchema = z.object({
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
+/**
+ * Visibility guard for every /:id-scoped ticket route (GET, PATCH, and every
+ * /:id/action endpoint). Mirrors the exact visibility rules already used by
+ * the list endpoint above — a ticket is visible if it's assigned to someone
+ * in the caller's reporting scope, created by the caller, or (for
+ * agents/managers) an unassigned open ticket in a queue they belong to.
+ * tenant_admin/operations_admin keep their existing tenant-wide observer
+ * access (unaffected — they were never part of this gap).
+ *
+ * Found 2026-07-21: the list correctly scoped visibility, but individual
+ * ticket routes only checked tenant_id, letting any agent view/edit any
+ * other agent's ticket in a different department by direct ID. This closes
+ * that gap at the route level instead of duplicating the check per-handler.
+ *
+ * Returns false (and sends a 404, matching the existing tenant-mismatch
+ * behaviour so a blocked ticket's existence isn't leaked) if the caller may
+ * not access this ticket. Callers must `return` immediately when this
+ * returns false.
+ */
+async function assertTicketVisible(
+  db: DatabaseClient,
+  req: { params: unknown; tenant: { id: string }; user: { sub: string; role: string } },
+  reply: { code: (n: number) => { send: (body: unknown) => void } },
+): Promise<boolean> {
+  const { id } = req.params as { id?: string };
+  if (!id) return true; // no ticket id on this route — nothing to check
+
+  const role = req.user.role;
+  const userId = req.user.sub;
+  const isFullObserver = role === 'super_admin' || role === 'tenant_admin' || role === 'operations_admin';
+
+  const visibleIds = isFullObserver ? null : await db.withTenant(req.tenant.id, (client) =>
+    getVisibleUserIds(client, userId, role),
+  );
+
+  const [row] = await db.withTenant(req.tenant.id, async (client) => {
+    if (visibleIds === null) {
+      const r = await client.query(`SELECT 1 FROM tickets WHERE id = $1`, [id]);
+      return r.rows;
+    }
+    const agentQueueClause = role === 'agent'
+      ? ` OR (t.assignee_id IS NULL AND t.status = 'open' AND t.queue_id IN` +
+        `      (SELECT queue_id FROM queue_members WHERE user_id = $4))`
+      : '';
+    const managerQueueClause = role === 'manager'
+      ? ` OR (t.assignee_id IS NULL AND t.status = 'open' AND (t.queue_id IS NULL OR t.queue_id IN` +
+        `      (SELECT queue_id FROM queue_members WHERE user_id = ANY($1::uuid[]))))`
+      : '';
+    // $4 is only referenced in the agent branch's SQL text — Postgres requires the
+    // bound-parameter count to exactly match placeholders actually present, so only
+    // include it when the query text uses it (agent role).
+    const params: unknown[] = role === 'agent'
+      ? [visibleIds, userId, id, userId]
+      : [visibleIds, userId, id];
+    const r = await client.query(
+      `SELECT 1 FROM tickets t
+       WHERE t.id = $3
+         AND (t.assignee_id = ANY($1::uuid[])
+              OR (t.created_by = $2
+                  AND (t.assignee_id IS NULL OR t.assignee_id != ALL($1::uuid[])))
+              ${agentQueueClause}${managerQueueClause})`,
+      params,
+    );
+    return r.rows;
+  });
+
+  if (!row) {
+    reply.code(404).send({ success: false, error: { code: 'NOT_FOUND', message: 'Ticket not found' } });
+    return false;
+  }
+  return true;
+}
+
 /** Generate next ticket number: TKT-00042 */
 async function nextTicketNumber(db: DatabaseClient, tenantId: string): Promise<string> {
   const [row] = await db.withSuperAdmin(async (client) => {
@@ -1334,6 +1407,7 @@ export function ticketRoutes(db: DatabaseClient, eventBus: EventBus) {
 
     // ── Hard delete ticket (tenant_admin / super_admin, closed tickets only) ─
     fastify.delete('/:id', { preHandler: requireRole('super_admin', 'tenant_admin') }, async (req, reply) => {
+      if (!(await assertTicketVisible(db, req, reply))) return;
       const { id } = req.params as { id: string };
       const [ticket] = await db.withTenant(req.tenant.id, async (client) => {
         const r = await client.query(`SELECT id, status, ticket_number FROM tickets WHERE id = $1 AND tenant_id = $2`, [id, req.tenant.id]);
@@ -1486,6 +1560,7 @@ export function ticketRoutes(db: DatabaseClient, eventBus: EventBus) {
 
     // ── Get single ticket ─────────────────────────────────────────────────
     fastify.get('/:id', { preHandler: requireScope('tickets:read') }, async (req, reply) => {
+      if (!(await assertTicketVisible(db, req, reply))) return;
       const { id } = req.params as { id: string };
 
       const [ticket, comments, escalations, voiceBotCall] = await db.withTenant(req.tenant.id, async (client) => {
@@ -1565,6 +1640,7 @@ export function ticketRoutes(db: DatabaseClient, eventBus: EventBus) {
 
     // ── Update ticket ─────────────────────────────────────────────────────
     fastify.patch('/:id', { preHandler: requireScope('tickets:write') }, async (req, reply) => {
+      if (!(await assertTicketVisible(db, req, reply))) return;
       const { id } = req.params as { id: string };
       const body  = UpdateTicketSchema.parse(req.body);
       const userId = req.user.sub;
@@ -1735,6 +1811,7 @@ export function ticketRoutes(db: DatabaseClient, eventBus: EventBus) {
      *   - Ticket shows "Reassigned by <manager> to <new agent>" in audit trail
      */
     fastify.post('/:id/assign', { preHandler: requireScope('tickets:write') }, async (req, reply) => {
+      if (!(await assertTicketVisible(db, req, reply))) return;
       const { id } = req.params as { id: string };
       const body   = z.object({
         assigneeId: z.string().uuid(),
@@ -1840,6 +1917,7 @@ ${note ? `<p><strong>Reason:</strong> ${note}</p>` : ''}
     // ── Accept ticket (agent confirms they will work on it) ───────────────
     // This starts the SLA resolution timer.
     fastify.post('/:id/accept', { preHandler: requireScope('tickets:write') }, async (req, reply) => {
+      if (!(await assertTicketVisible(db, req, reply))) return;
       const { id }   = req.params as { id: string };
       const tenantId = req.tenant.id;
       const userId   = req.user.sub;
@@ -1928,6 +2006,7 @@ ${note ? `<p><strong>Reason:</strong> ${note}</p>` : ''}
     // Manual counterpart to the auto-conversion on accept. Idempotent — returns
     // the existing linked deal if one was already created.
     fastify.post('/:id/convert-to-deal', { preHandler: requireScope('deals:write') }, async (req, reply) => {
+      if (!(await assertTicketVisible(db, req, reply))) return;
       const { id }   = req.params as { id: string };
       const tenantId = req.tenant.id;
       const userId   = req.user.sub;
@@ -1954,6 +2033,7 @@ ${note ? `<p><strong>Reason:</strong> ${note}</p>` : ''}
 
     // ── Resolve ticket ────────────────────────────────────────────────────
     fastify.post('/:id/resolve', { preHandler: requireScope('tickets:write') }, async (req, reply) => {
+      if (!(await assertTicketVisible(db, req, reply))) return;
       const { id }   = req.params as { id: string };
       const tenantId = req.tenant.id;
       const { note } = z.object({ note: z.string().optional() }).parse(req.body ?? {});
@@ -2012,6 +2092,7 @@ ${note ? `<p><strong>Reason:</strong> ${note}</p>` : ''}
     // PATCH /:id/milestones
     // body: { steps: [{id, label, completed, completed_at}] }
     fastify.patch('/:id/milestones', { preHandler: requireScope('tickets:write') }, async (req, reply) => {
+      if (!(await assertTicketVisible(db, req, reply))) return;
       const { id }   = req.params as { id: string };
       const tenantId = req.tenant.id;
       const userId   = req.user.sub;
@@ -2069,6 +2150,7 @@ ${note ? `<p><strong>Reason:</strong> ${note}</p>` : ''}
     // ── Claim ticket (agent self-assign from unassigned queue) ───────────
     // D-R1: agents can claim any unassigned open ticket in a queue they belong to
     fastify.post('/:id/claim', { preHandler: requireScope('tickets:write') }, async (req, reply) => {
+      if (!(await assertTicketVisible(db, req, reply))) return;
       const { id }   = req.params as { id: string };
       const tenantId = req.tenant.id;
       const userId   = req.user.sub;
@@ -2123,6 +2205,7 @@ ${note ? `<p><strong>Reason:</strong> ${note}</p>` : ''}
 
     // ── Close ticket ──────────────────────────────────────────────────────
     fastify.post('/:id/close', { preHandler: requireScope('tickets:write') }, async (req, reply) => {
+      if (!(await assertTicketVisible(db, req, reply))) return;
       const { id }   = req.params as { id: string };
       const tenantId = req.tenant.id;
       const userId   = req.user.sub;
@@ -2204,6 +2287,7 @@ ${note ? `<p><strong>Reason:</strong> ${note}</p>` : ''}
     // Agent → sets status to 'cancel_requested' (supervisor/manager must approve)
     // Manager/Supervisor → sets status to 'cancelled' directly
     fastify.post('/:id/cancel', { preHandler: requireScope('tickets:write') }, async (req, reply) => {
+      if (!(await assertTicketVisible(db, req, reply))) return;
       const { id }   = req.params as { id: string };
       const tenantId = req.tenant.id;
       const userId   = req.user.sub;
@@ -2267,6 +2351,7 @@ ${note ? `<p><strong>Reason:</strong> ${note}</p>` : ''}
 
     // ── G-P3: Agent Escalation (manual escalate to manager) ──────────────
     fastify.post('/:id/escalate', { preHandler: requireScope('tickets:write') }, async (req, reply) => {
+      if (!(await assertTicketVisible(db, req, reply))) return;
       const { id }   = req.params as { id: string };
       const tenantId = req.tenant.id;
       const userId   = req.user.sub;
@@ -2324,6 +2409,7 @@ ${note ? `<p><strong>Reason:</strong> ${note}</p>` : ''}
 
     // ── G-P3: Acknowledge escalation (manager clears the escalation flag) ──
     fastify.post('/:id/acknowledge-escalation', { preHandler: requireScope('tickets:write') }, async (req, reply) => {
+      if (!(await assertTicketVisible(db, req, reply))) return;
       const { id }   = req.params as { id: string };
       const tenantId = req.tenant.id;
       const userId   = req.user.sub;
@@ -2363,6 +2449,7 @@ ${note ? `<p><strong>Reason:</strong> ${note}</p>` : ''}
 
     // ── G-F4: Reopen a resolved/pending_closure ticket ────────────────────
     fastify.post('/:id/reopen', { preHandler: requireScope('tickets:write') }, async (req, reply) => {
+      if (!(await assertTicketVisible(db, req, reply))) return;
       const { id }   = req.params as { id: string };
       const tenantId = req.tenant.id;
       const userId   = req.user.sub;
@@ -2463,6 +2550,7 @@ ${note ? `<p><strong>Reason:</strong> ${note}</p>` : ''}
 
     // ── RCA — Root Cause Analysis ─────────────────────────────────────────
     fastify.post('/:id/rca', { preHandler: requireScope('tickets:write') }, async (req, reply) => {
+      if (!(await assertTicketVisible(db, req, reply))) return;
       const { id }   = req.params as { id: string };
       const tenantId = req.tenant.id;
       const userId   = req.user.sub;
@@ -2505,6 +2593,7 @@ ${note ? `<p><strong>Reason:</strong> ${note}</p>` : ''}
 
     // ── RCA — Get ─────────────────────────────────────────────────────────
     fastify.get('/:id/rca', { preHandler: requireScope('tickets:read') }, async (req, reply) => {
+      if (!(await assertTicketVisible(db, req, reply))) return;
       const { id }   = req.params as { id: string };
       const tenantId = req.tenant.id;
 
@@ -2526,6 +2615,7 @@ ${note ? `<p><strong>Reason:</strong> ${note}</p>` : ''}
 
     // ── Audit log — tamper-proof trail ────────────────────────────────────
     fastify.get('/:id/audit-log', { preHandler: requireScope('tickets:read') }, async (req, reply) => {
+      if (!(await assertTicketVisible(db, req, reply))) return;
       const { id }   = req.params as { id: string };
       const tenantId = req.tenant.id;
       const { page = 1, pageSize = 50 } = req.query as any;
@@ -2555,6 +2645,7 @@ ${note ? `<p><strong>Reason:</strong> ${note}</p>` : ''}
     //   ?type=reply|remark|note  — filter by comment type
     //   ?page=1&pageSize=50
     fastify.get('/:id/comments', { preHandler: requireScope('tickets:read') }, async (req, reply) => {
+      if (!(await assertTicketVisible(db, req, reply))) return;
       const { id }       = req.params as { id: string };
       const tenantId     = req.tenant.id;
       const { since, type, page = '1', pageSize = '50' } = req.query as {
@@ -2610,6 +2701,7 @@ ${note ? `<p><strong>Reason:</strong> ${note}</p>` : ''}
 
     // ── Add comment / internal note ───────────────────────────────────────
     fastify.post('/:id/comments', { preHandler: requireScope('tickets:write') }, async (req, reply) => {
+      if (!(await assertTicketVisible(db, req, reply))) return;
       const { id }   = req.params as { id: string };
       const body     = AddCommentSchema.parse(req.body);
       const tenantId = req.tenant.id;
@@ -2739,6 +2831,7 @@ ${note ? `<p><strong>Reason:</strong> ${note}</p>` : ''}
     // a customer callback. Always stored as is_internal=true. Does not change
     // ticket ownership or trigger SLA stamps.
     fastify.post('/:id/notes', { preHandler: requireScope('tickets:read') }, async (req, reply) => {
+      if (!(await assertTicketVisible(db, req, reply))) return;
       const { id }   = req.params as { id: string };
       const { body: noteBody } = req.body as { body: string };
       if (!noteBody?.trim()) {
@@ -2958,6 +3051,7 @@ ${note ? `<p><strong>Reason:</strong> ${note}</p>` : ''}
     // POST /api/v1/tickets/:id/merge  — merges :id INTO targetId
     // The source ticket is closed and marked merged; comments + audit log copied to target.
     fastify.post('/:id/merge', { preHandler: [requireScope('tickets:write'), requireRole('manager','tenant_admin','super_admin')] }, async (req, reply) => {
+      if (!(await assertTicketVisible(db, req, reply))) return;
       const { id }   = req.params as { id: string };
       const tenantId = req.tenant.id;
       const userId   = req.user.sub;
