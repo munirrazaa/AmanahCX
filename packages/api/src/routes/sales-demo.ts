@@ -183,9 +183,10 @@ function apiBase(): string {
 
 export function salesDemoRoutes(db: DatabaseClient) {
   return async function (fastify: FastifyInstance) {
-    // Demo is a sales tool, not a tenant feature — restrict to admins so it
-    // can never surface for an ordinary agent/rep login.
-    fastify.addHook('preHandler', requireRole('tenant_admin', 'super_admin'));
+    // Demo is a sales tool, run by AmanahCX's own team, not a tenant
+    // feature — restrict to super_admin so it never surfaces for a
+    // client's own tenant_admin/agent logins.
+    fastify.addHook('preHandler', requireRole('super_admin'));
 
     fastify.get('/scenarios', async (_req, reply) => {
       return reply.send({ success: true, data: DEMO_SCENARIOS });

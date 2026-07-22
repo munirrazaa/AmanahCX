@@ -29,6 +29,7 @@ const ListQuerySchema = z.object({
   search: z.string().optional(),
   status: z.string().optional(),
   ownerId: z.string().optional(),
+  companyId: z.string().optional(),
   source: z.string().optional(),
   sortBy: z.enum(['first_name', 'created_at', 'last_contacted_at', 'score']).default('created_at'),
   sortOrder: z.enum(['asc', 'desc']).default('desc'),
@@ -486,13 +487,13 @@ export function contactRoutes(db: DatabaseClient, eventBus: EventBus) {
           `SELECT 'activity'   AS type, id, type AS subtype, subject,                  created_at, owner_id,   metadata::text AS metadata
            FROM activities WHERE contact_id = $1
            UNION ALL
-           SELECT 'voice_call' AS type, id, direction AS subtype, outcome AS subject,  started_at AS created_at, agent_id AS owner_id, transcript AS metadata
+           SELECT 'voice_call' AS type, id, direction AS subtype, outcome AS subject,  started_at AS created_at, agent_id AS owner_id, transcript::text AS metadata
            FROM voice_calls WHERE contact_id = $1
            UNION ALL
-           SELECT 'ticket'     AS type, id, status AS subtype, subject,                created_at, assigned_to AS owner_id, NULL
+           SELECT 'ticket'     AS type, id, status AS subtype, subject,                created_at, assignee_id AS owner_id, NULL
            FROM tickets WHERE contact_id = $1
            UNION ALL
-           SELECT 'deal'       AS type, id, stage_name AS subtype, name AS subject,    created_at, owner_id,   NULL
+           SELECT 'deal'       AS type, id, stage_id::text AS subtype, name AS subject, created_at, owner_id,   NULL
            FROM deals WHERE contact_id = $1
            ORDER BY created_at DESC
            LIMIT 100`,
@@ -664,6 +665,7 @@ function buildListQuery(query: any, offset: number, scopeClause = ''): string {
   const searchClause  = query.search  ? `AND (c.first_name || ' ' || COALESCE(c.last_name,'') || ' ' || COALESCE(c.email,'') || ' ' || COALESCE(c.phone,'') || ' ' || COALESCE(c.mobile,'') || ' ' || COALESCE(c.nic_number,'')) ILIKE $${idx++}` : '';
   const statusClause  = query.status  ? `AND c.status = $${idx++}` : '';
   const ownerClause   = query.ownerId ? `AND c.owner_id = $${idx++}` : '';
+  const companyClause = query.companyId ? `AND c.company_id = $${idx++}` : '';
   const limitClause   = `LIMIT $${idx++} OFFSET $${idx}`;
   return `
     SELECT c.*, comp.name as company_name, u.name as owner_name
@@ -675,6 +677,7 @@ function buildListQuery(query: any, offset: number, scopeClause = ''): string {
     ${searchClause}
     ${statusClause}
     ${ownerClause}
+    ${companyClause}
     ORDER BY c.${query.sortBy} ${query.sortOrder}
     ${limitClause}
   `;
@@ -685,14 +688,16 @@ function buildCountQuery(query: any, scopeClause = ''): string {
   const searchClause  = query.search  ? `AND (first_name || ' ' || COALESCE(last_name,'') || ' ' || COALESCE(email,'') || ' ' || COALESCE(phone,'') || ' ' || COALESCE(nic_number,'')) ILIKE $${idx++}` : '';
   const statusClause  = query.status  ? `AND status = $${idx++}` : '';
   const ownerClause   = query.ownerId ? `AND owner_id = $${idx++}` : '';
-  return `SELECT COUNT(*) FROM contacts WHERE tenant_id = $1 ${scopeClause} ${searchClause} ${statusClause} ${ownerClause}`;
+  const companyClause = query.companyId ? `AND company_id = $${idx++}` : '';
+  return `SELECT COUNT(*) FROM contacts WHERE tenant_id = $1 ${scopeClause} ${searchClause} ${statusClause} ${ownerClause} ${companyClause}`;
 }
 
 function buildQueryParams(query: any, tenantId: string, ...extra: unknown[]): unknown[] {
   const params: unknown[] = [tenantId];
-  if (query.search)  params.push(`%${query.search}%`);
-  if (query.status)  params.push(query.status);
-  if (query.ownerId) params.push(query.ownerId);
+  if (query.search)    params.push(`%${query.search}%`);
+  if (query.status)    params.push(query.status);
+  if (query.ownerId)   params.push(query.ownerId);
+  if (query.companyId) params.push(query.companyId);
   params.push(...extra);
   return params;
 }

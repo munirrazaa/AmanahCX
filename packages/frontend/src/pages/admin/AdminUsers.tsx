@@ -220,13 +220,22 @@ function InviteModal({ roles, onClose, onSuccess }: { roles: Role[]; onClose: ()
               const selectedDept = departments.find(d => d.id === form.department_id);
               const isCreatingAgent = form.role_key === 'system:agent';
               const isCreatingManager = form.role_key === 'system:manager';
-              const deptManagers = allMembers.filter((m: any) => {
+              const deptManagersInDept = allMembers.filter((m: any) => {
                 if (m.role !== 'manager') return false;
                 if (form.department_id && selectedDept && m.department?.toLowerCase() !== selectedDept.name?.toLowerCase()) return false;
-                if (isCreatingAgent) return !!m.manager_id;
-                if (isCreatingManager) return !m.manager_id;
                 return true;
               });
+              // Agents should prefer reporting to a line manager (one who themselves reports
+              // up to a department head) if this department has that two-tier structure —
+              // but fall back to the department head directly when it doesn't, rather than
+              // showing no options at all (a department with only one manager tier is valid).
+              const deptManagers = isCreatingAgent
+                ? (deptManagersInDept.some((m: any) => !!m.manager_id)
+                    ? deptManagersInDept.filter((m: any) => !!m.manager_id)
+                    : deptManagersInDept)
+                : isCreatingManager
+                ? deptManagersInDept.filter((m: any) => !m.manager_id)
+                : deptManagersInDept;
               const fallbackLabel = isCreatingAgent ? 'Line Manager' : isCreatingManager ? 'Department Manager' : 'Manager';
               const label = deptManagers.length > 0 ? resolveRoleName(deptManagers[0], roles) : fallbackLabel;
               return (
@@ -316,14 +325,21 @@ function EditRoleModal({ member, roles, onClose, onSuccess }: {
   const selectedDept = departments.find(d => d.id === departmentId);
   const isEditingAgent = roleKey === 'system:agent';
   const isEditingManager = roleKey === 'system:manager';
-  const deptManagers = allMembers.filter((m: any) => {
+  const deptManagersInDept = allMembers.filter((m: any) => {
     if (m.id === member.id) return false;
     if (m.role !== 'manager') return false;
     if (departmentId && selectedDept && m.department?.toLowerCase() !== selectedDept.name?.toLowerCase()) return false;
-    if (isEditingAgent) return !!m.manager_id;
-    if (isEditingManager) return !m.manager_id;
     return true;
   });
+  // Same fallback as the invite form: prefer a line-manager tier if this department has
+  // one, otherwise fall back to the department head directly rather than showing nothing.
+  const deptManagers = isEditingAgent
+    ? (deptManagersInDept.some((m: any) => !!m.manager_id)
+        ? deptManagersInDept.filter((m: any) => !!m.manager_id)
+        : deptManagersInDept)
+    : isEditingManager
+    ? deptManagersInDept.filter((m: any) => !m.manager_id)
+    : deptManagersInDept;
   const managerLabel = isEditingAgent ? 'Line Manager' : isEditingManager ? 'Department Manager' : 'Manager';
 
   const mut = useMutation({

@@ -14,7 +14,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Bot, Send, RotateCcw, Volume2, Ticket, User, Tag, AlertTriangle } from 'lucide-react';
 import { api } from '../services/api';
-import { useIsAdmin } from '../hooks/useRole';
+import { useIsSuperAdmin } from '../hooks/useRole';
 
 interface DemoScenario {
   id: string;
@@ -53,7 +53,7 @@ function eventIcon(type: DemoEvent['type']) {
 }
 
 export function SalesDemo() {
-  const isAdmin = useIsAdmin();
+  const isAdmin = useIsSuperAdmin();
   const [scenarios, setScenarios] = useState<DemoScenario[]>([]);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);

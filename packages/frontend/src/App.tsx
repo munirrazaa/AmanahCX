@@ -33,6 +33,7 @@ import { TicketQueues }     from './pages/TicketQueues';
 import { Wallboard }        from './pages/Wallboard';
 import { Emails }           from './pages/Emails';
 import { VoiceBotConfig }  from './pages/VoiceBotConfig';
+import { SalesDemo }       from './pages/SalesDemo';
 import { VoiceBotCalls }   from './pages/VoiceBotCalls';
 import { VoiceBotTickets } from './pages/VoiceBotTickets';
 import { ContactDetail }   from './pages/ContactDetail';
@@ -733,6 +734,7 @@ function AppLayout() {
               the bot is administrative work, and the calls/tickets APIs
               already allow tenant_admin (no op() redirect here). */}
           <Route path="/voice-bot"         element={<VoiceBotConfig />} />
+          <Route path="/sales-demo"        element={<SalesDemo />} />
           <Route path="/voice-bot/calls"   element={<VoiceBotCalls />} />
           <Route path="/voice-bot/tickets" element={<VoiceBotTickets />} />
           <Route path="/contacts/:id"      element={op(<ContactDetail />)} />
