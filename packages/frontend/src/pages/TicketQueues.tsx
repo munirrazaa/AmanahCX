@@ -527,7 +527,7 @@ export function TicketQueues() {
             </p>
           </div>
         </div>
-        {can.manageWorkspace && (
+        {can.manageQueues && (
           <button
             onClick={() => setShowCreate(true)}
             className="flex items-center gap-1.5 px-4 py-2 bg-brand-600 text-white rounded-xl text-sm font-medium hover:bg-brand-700"
@@ -561,7 +561,7 @@ export function TicketQueues() {
             <QueueRow
               key={q.id}
               queue={q}
-              canManage={can.manageWorkspace}
+              canManage={can.manageQueues}
               onEdit={() => setEditing(q)}
               onDelete={() => { if (confirm(`Delete queue "${q.name}"?`)) deleteMutation.mutate(q.id); }}
             />

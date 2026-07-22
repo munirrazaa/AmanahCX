@@ -101,6 +101,13 @@ export function useCan() {
     /** Create / revoke API keys and webhooks */
     manageIntegrations: rank >= ROLE_RANK.manager,
     manageSla: user?.role === 'policy_admin' || rank >= ROLE_RANK.manager,
+    /** Create / edit ticket queues — was gated to manageWorkspace (tenant_admin),
+     *  but tenant_admin has read-only observer access to everything ticket-related
+     *  (see server.ts's OBSERVER_ONLY hook), so the one role that could see the
+     *  "New Queue" button could never actually use it. The backend already allows
+     *  manager+ (requireScope('tickets:write'), no tenant_admin block for managers)
+     *  — same pattern as the SLA-policies exemption above. Found 2026-07-22. */
+    manageQueues: rank >= ROLE_RANK.manager,
     /** View analytics and reports (policy_admin's permission set has analytics: 'none') */
     viewAnalytics: rank >= ROLE_RANK.agent && user?.role !== 'policy_admin',
     /** Manage all workspaces on the platform */
