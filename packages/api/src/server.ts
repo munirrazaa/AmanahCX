@@ -332,9 +332,18 @@ async function buildServer() {
       '/api/v1/voice',
       '/api/v1/billing',
     ];
+    // Narrow exception: hard-deleting a contact is deliberately admin-tier only
+    // (see the route's own comment), but tenant_admin is otherwise fully blocked
+    // from /api/v1/contacts/* below — the two decisions cancelled each other out
+    // and made this action unreachable by any role. Same exemption pattern as
+    // the SLA-policies carve-out elsewhere in this same hook. Found 2026-07-22.
+    const isContactHardDelete =
+      req.method === 'DELETE' && /^\/api\/v1\/contacts\/[0-9a-f-]+$/i.test(req.url);
+
     if (
       req.url.startsWith('/api/v1/') &&
       !req.url.startsWith('/api/v1/voice-bot') &&
+      !isContactHardDelete &&
       (req.user as any)?.role === 'tenant_admin' &&
       TENANT_ADMIN_BLOCKED_PREFIXES.some((p) => req.url.startsWith(p))
     ) {
