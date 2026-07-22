@@ -134,9 +134,22 @@ export function companyRoutes(db: DatabaseClient, eventBus: EventBus) {
       return reply.send({ success: true, data: company });
     });
 
+    // Deleting a company unlinks (doesn't delete) any contacts, deals, activities,
+    // tickets, or opportunities that referenced it — matching how Zendesk/HubSpot
+    // handle this (unlike Salesforce's cascade-delete). Previously this crashed
+    // with a raw 500 whenever any linked record existed, since the foreign-key
+    // safety check correctly blocked the delete but nothing here caught it or
+    // unlinked first. Found and fixed 2026-07-22.
     fastify.delete('/:id', { preHandler: requireScope('contacts:write') }, async (req, reply) => {
       const { id } = req.params as { id: string };
       const deleted = await db.withTenant(req.tenant.id, async (client) => {
+        await client.query('UPDATE contacts SET company_id = NULL WHERE company_id = $1', [id]);
+        await client.query('UPDATE deals SET company_id = NULL WHERE company_id = $1', [id]);
+        await client.query('UPDATE activities SET company_id = NULL WHERE company_id = $1', [id]);
+        await client.query('UPDATE tickets SET company_id = NULL WHERE company_id = $1', [id]);
+        // sales_opportunities.company_id already has ON DELETE SET NULL at the
+        // schema level (migration 018) — Postgres handles that one automatically,
+        // no manual unlink needed here.
         const result = await client.query('DELETE FROM companies WHERE id = $1', [id]);
         return result.rowCount ?? 0;
       });
